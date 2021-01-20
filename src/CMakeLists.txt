@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.9)
+cmake_minimum_required(VERSION 3.17)
 
 project(libossia CXX)
 
@@ -12,8 +12,6 @@ cmake_policy(SET CMP0020 NEW)
 cmake_policy(SET CMP0042 NEW)
 cmake_policy(SET CMP0063 NEW)
 
-include(cotire)
-
 if(APPLE)
   set(CMAKE_INSTALL_NAME_DIR @rpath)
   set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
@@ -21,14 +19,22 @@ if(APPLE)
 endif()
 
 if(OSSIA_QT)
-  find_package(Qt5 5.6 QUIET COMPONENTS Core OPTIONAL_COMPONENTS Gui Qml Quick)
+  find_package(Qt5 5.6 QUIET ${OSSIA_QT_REQUIRED} COMPONENTS Core OPTIONAL_COMPONENTS Gui Qml)
+
+  if(OSSIA_QML_DEVICE)
+    find_package(Qt5 5.6 QUIET ${OSSIA_QT_REQUIRED} COMPONENTS Quick)
+  endif()
+
   if(NOT "${Qt5Core_FOUND}")
     set(OSSIA_QT OFF)
   endif()
-  if("${Qt5Quick_FOUND}")
+  if("${Qt5Qml_FOUND}")
     set(OSSIA_QML ON)
   else()
     set(OSSIA_QML OFF)
+  endif()
+  if(NOT "${Qt5Quick_FOUND}")
+    set(OSSIA_QML_DEVICE OFF)
   endif()
   if(NOT DEFINED OSSIA_QML_DEVICE)
     set(OSSIA_QML_DEVICE 1)
@@ -92,8 +98,9 @@ message(STATUS "OSSIA - C: ${OSSIA_C}")
 message(STATUS "OSSIA - CPP: ${OSSIA_CPP}")
 message(STATUS "Jack_INCLUDE_DIR : ${Jack_INCLUDE_DIR}")
 
-set_property(TARGET ossia PROPERTY COTIRE_CXX_PREFIX_HEADER_INIT "${CMAKE_CURRENT_SOURCE_DIR}/ossia/prefix.hpp")
-if(NOT OSSIA_SANITIZE AND NOT OSSIA_DISABLE_COTIRE AND NOT DISABLE_COTIRE )
-  cotire(ossia)
+if(OSSIA_PCH)
+  target_precompile_headers(ossia PRIVATE
+    "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/ossia/prefix.hpp>"
+  )
 endif()
 

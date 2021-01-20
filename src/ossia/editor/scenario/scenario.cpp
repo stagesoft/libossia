@@ -15,6 +15,7 @@ scenario::scenario() : m_sg{*this}
   // create the start TimeSync
   node = std::make_shared<ossia::nodes::scenario>();
   add_time_sync(std::make_shared<time_sync>());
+  this->m_nodes.front()->set_start(true);
 }
 
 scenario::~scenario()
@@ -25,19 +26,6 @@ scenario::~scenario()
   }
 }
 
-bool scenario::is_root_sync(ossia::time_sync& sync) const
-{
-  auto bool_expr
-      = sync.get_expression().target<ossia::expressions::expression_bool>();
-
-  auto res = !bool_expr || !bool_expr->evaluate() || &sync == m_nodes[0].get();
-  for (const auto& ev : sync.get_time_events())
-  {
-    res &= ev->previous_time_intervals().empty();
-  }
-  return res;
-}
-
 void scenario::start()
 {
   m_runningIntervals.container.reserve(m_intervals.size());
@@ -46,12 +34,14 @@ void scenario::start()
   m_overticks.container.reserve(m_nodes.size());
   m_itv_end_map.container.reserve(m_intervals.size());
   m_endNodes.container.reserve(m_nodes.size());
-  for (auto& node : m_nodes)
+  m_retry_syncs.container.reserve(8);
+  m_rootNodes = get_roots();
+
+  for (auto node : m_rootNodes)
   {
-    if (is_root_sync(*node))
-      m_waitingNodes.insert(node.get());
+    m_waitingNodes.insert(node);
   }
-  m_rootNodes = m_sg.get_roots();
+
 
   // start each TimeInterval if possible
   for (const auto& timeInterval : m_intervals)
@@ -94,7 +84,8 @@ void scenario::start()
     {
       m_runningIntervals.insert(&cst);
       cst.start();
-      cst.tick_current(0_tv);
+      const auto tok = ossia::token_request{};
+      cst.tick_current(0_tv, tok);
     }
     // the interval is in the future
     else if (
@@ -140,7 +131,7 @@ void scenario::stop()
   m_maxReachedEvents.clear();
   m_overticks.clear();
   m_itv_end_map.clear();
-  m_lastDate = time_value{};
+  m_lastDate = ossia::Infinite;
 }
 
 void scenario::pause()
@@ -168,10 +159,24 @@ void scenario::add_time_interval(std::shared_ptr<time_interval> itv)
   // store the TimeInterval if it is not already stored
   if (!contains(m_intervals, itv))
   {
+    time_sync* end_root{};
+
+    if(m_lastDate != ossia::Infinite)
+    {
+      auto& t = itv->get_end_event().get_time_sync();
+      if (t.is_start())
+        end_root = &t;
+    }
     m_sg.add_edge(itv.get());
     if(node->muted())
       itv->mute(true);
     m_intervals.push_back(std::move(itv));
+
+    if(end_root)
+    {
+      m_waitingNodes.erase(end_root);
+      m_rootNodes = get_roots();
+    }
   }
 }
 
@@ -180,6 +185,16 @@ void scenario::remove_time_interval(const std::shared_ptr<time_interval>& itv)
   if (itv)
   {
     m_sg.remove_edge(itv.get());
+
+    if(m_lastDate != ossia::Infinite)
+    {
+      auto& t = itv->get_end_event().get_time_sync();
+      if (t.is_start())
+      {
+        m_waitingNodes.insert(&t);
+      }
+      m_rootNodes = get_roots();
+    }
     auto it = ossia::find(m_runningIntervals, itv.get());
     if (it != m_runningIntervals.end())
       m_runningIntervals.erase(it);
@@ -193,10 +208,20 @@ void scenario::add_time_sync(std::shared_ptr<time_sync> timeSync)
   // store a TimeSync if it is not already stored
   if (!contains(m_nodes, timeSync))
   {
-    m_sg.add_vertice(timeSync.get());
+    auto& t = *timeSync;
+    m_sg.add_vertice(&t);
     if(node->muted())
-      timeSync->mute(true);
+      t.mute(true);
     m_nodes.push_back(std::move(timeSync));
+
+    if(m_lastDate != ossia::Infinite)
+    {
+      if (t.is_start())
+      {
+        m_waitingNodes.insert(&t);
+        m_rootNodes = get_roots();
+      }
+    }
   }
 }
 
@@ -211,6 +236,7 @@ void scenario::remove_time_sync(const std::shared_ptr<time_sync>& timeSync)
       m_rootNodes.erase(it);
     m_overticks.erase(timeSync.get());
     m_endNodes.erase(timeSync.get());
+    m_retry_syncs.erase(timeSync.get());
 
     remove_one(m_nodes, timeSync);
   }

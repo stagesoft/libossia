@@ -133,63 +133,80 @@ struct OSSIA_EXPORT graph_util
         });
   }
 
+  /// Init : what happens just before a node is going to be executed
+  static void init_outlet(outlet& out, execution_state&)
+  {
+    out.visit(clear_data{});
+
+    out.pre_process();
+  }
+
+  static void init_inlet(inlet& in, execution_state& e)
+  {
+    bool must_copy = in.sources.empty();
+
+    for (const graph_edge* edge : in.sources)
+    {
+      must_copy
+          |= ossia::apply_con(init_must_copy_visitor{*edge}, edge->con);
+    }
+
+    if (must_copy)
+      pull_from_parameter(in, e);
+
+    for (auto edge : in.sources)
+    {
+      ossia::apply_con(init_node_visitor{in, *edge, e}, edge->con);
+    }
+
+    in.pre_process();
+  }
+
   static void init_node(graph_node& n, execution_state& e)
   {
     // Clear the outputs of the node
-    for (const outlet_ptr& out : n.outputs())
-    {
-      if (out->data)
-        eggs::variants::apply(clear_data{}, out->data);
-    }
+    n.for_each_outlet([&] (auto& port) { init_outlet(port, e); });
 
     // Copy from environment and previous ports to inputs
-    for (const inlet_ptr& in : n.inputs())
+    n.for_each_inlet([&] (auto& port) { init_inlet(port, e); });
+  }
+
+  /// Teardown : what happens just after a node has executed
+  static void teardown_outlet(outlet& out, execution_state& e)
+  {
+    out.post_process();
+    bool must_copy = out.targets.empty();
+
+    // If some following glutton nodes aren't enabled, then we copy to the
+    // env.
+    for (const auto& tgt : out.targets)
     {
-      bool must_copy = in->sources.empty();
-
-      for (const graph_edge* edge : in->sources)
-      {
-        must_copy
-            |= ossia::apply_con(init_must_copy_visitor{*edge}, edge->con);
-      }
-
-      if (must_copy)
-        pull_from_parameter(*in, e);
-
-      for (auto edge : in->sources)
-      {
-        ossia::apply_con(init_node_visitor{*in, *edge, e}, edge->con);
-      }
+      must_copy |= ossia::apply_con(env_writer{out, *tgt}, tgt->con);
     }
+
+    // if there are two outgoing glutton connections, one active, the other
+    // inactive then we want to copy through cable for the first one, and
+    // through env for the second one
+    if (must_copy)
+      out.write(e);
+  }
+
+  static void teardown_inlet(inlet& in, execution_state&)
+  {
+    in.post_process();
+    in.visit(clear_data{});
   }
 
   static void teardown_node(const graph_node& n, execution_state& e)
   {
-    for (const inlet_ptr& in : n.inputs())
-    {
-      if (in->data)
-        eggs::variants::apply(clear_data{}, in->data);
-    }
-
     // Copy from output ports to environment
-    for (const outlet_ptr& out : n.outputs())
-    {
-      bool must_copy = out->targets.empty();
+    // Clear the outputs of the node
+    n.for_each_outlet([&] (auto& port) { teardown_outlet(port, e); });
 
-      // If some following glutton nodes aren't enabled, then we copy to the
-      // env.
-      for (const auto& tgt : out->targets)
-      {
-        must_copy |= ossia::apply_con(env_writer{*out, *tgt}, tgt->con);
-      }
-
-      // if there are two outgoing glutton connections, one active, the other
-      // inactive then we want to copy through cable for the first one, and
-      // through env for the second one
-      if (must_copy)
-        out->write(e);
-    }
+    // Copy from environment and previous ports to inputs
+    n.for_each_inlet([&] (auto& port) { teardown_inlet(port, e); });
   }
+
   /*
     static void disable_strict_nodes_bfs(const graph_t& graph)
     {
@@ -206,14 +223,17 @@ struct OSSIA_EXPORT graph_util
       };
     }
   */
+
   static bool disable_strict_nodes(const graph_node* node)
   {
     if (node->muted())
       return true;
-    for (const auto& in : node->inputs())
+
+    auto test_disable_inlet = [&] (const ossia::inlet& inlet)
     {
-      for (const auto& edge : in->sources)
+      for (const auto& edge : inlet.sources)
       {
+        assert(edge);
         assert(edge->out_node);
 
         if (immediate_strict_connection* sc
@@ -227,8 +247,8 @@ struct OSSIA_EXPORT graph_util
           }
         }
         else if (
-            delayed_strict_connection* delay
-            = edge->con.target<delayed_strict_connection>())
+                 delayed_strict_connection* delay
+                 = edge->con.target<delayed_strict_connection>())
         {
           const auto n = ossia::apply(data_size{}, delay->buffer);
           if (n == 0 || delay->pos >= n)
@@ -237,11 +257,12 @@ struct OSSIA_EXPORT graph_util
           }
         }
       }
-    }
+      return false;
+    };
 
-    for (const auto& out : node->outputs())
+    auto test_disable_outlet = [&] (const ossia::outlet& outlet)
     {
-      for (const auto& edge : out->targets)
+      for (const auto& edge : outlet.targets)
       {
         assert(edge->in_node);
 
@@ -255,7 +276,13 @@ struct OSSIA_EXPORT graph_util
           }
         }
       }
-    }
+      return false;
+    };
+
+    if(node->any_of_inlet(test_disable_inlet))
+      return true;
+    if(node->any_of_outlet(test_disable_outlet))
+      return true;
 
     return false;
   }
@@ -313,22 +340,7 @@ struct OSSIA_EXPORT graph_util
     {
       first_node.run(request, {e});
     }
-    /*
-        auto all_normal = ossia::all_of(first_node.requested_tokens,
-                                       [] (const ossia::token_request& tk) {
-       return tk.speed == 1.;}); if(all_normal)
-        {
-          for(const auto& request : first_node.requested_tokens)
-          {
-            first_node.run(request, e);
-            first_node.set_prev_date(request.date);
-          }
-        }
-        else
-        {
-          run_scaled(first_node, e);
-        }
-    */
+
     first_node.set_executed(true);
     teardown_node(first_node, e);
   }
@@ -362,14 +374,14 @@ struct OSSIA_EXPORT graph_util
   // These methods are only accessed by ossia::graph
   static bool can_execute(graph_node& node, const execution_state&)
   {
-    return ossia::all_of(node.inputs(), [](const auto& inlet) {
+    return node.all_of_inlet([](const auto& inlet) {
       // A port can execute if : - it has source ports and all its source ports
       // have executed
 
       // if there was a strict connection, this node would have been disabled
       // so we can just do the following check.
       bool previous_nodes_executed = ossia::all_of(
-          inlet->sources, [&](graph_edge* edge) {
+          inlet.sources, [&](graph_edge* edge) {
             return edge->out_node->executed()
                    || (!edge->out_node->enabled() /* && bool(inlet->address) */
                        /* TODO check that it's in scope */);
@@ -377,8 +389,7 @@ struct OSSIA_EXPORT graph_util
 
       // it does not have source ports ; we have to check for variables :
       // find if address available in local / global scope
-      return !inlet->sources.empty() ? previous_nodes_executed : true // TODO
-          ;
+      return !inlet.sources.empty() ? previous_nodes_executed : true; // TODO
     });
   }
 
@@ -389,11 +400,9 @@ struct OSSIA_EXPORT graph_util
       ossia::graph_node& n = *node.first;
       n.set_executed(false);
       n.disable();
-      for (const outlet_ptr& out : node.first->outputs())
-      {
-        if (out->data)
-          eggs::variants::apply(clear_data{}, out->data);
-      }
+
+      // TODO why is this necessary - outputs are cleared anyways ?!
+      n.for_each_outlet([] (auto& out) { out.visit(clear_data{}); });
     }
   }
 
@@ -402,29 +411,22 @@ struct OSSIA_EXPORT graph_util
       ossia::graph_node& source, ossia::graph_node& sink,
       const DevicesT& devices)
   {
-    bool ok = false;
-    for (const ossia::outlet_ptr& outlet : source.outputs())
-    {
-      for (const ossia::inlet_ptr& inlet : sink.inputs())
-      {
+    return source.any_of_outlet([&] (auto& outlet) {
+      return sink.any_of_inlet([&] (auto& inlet) {
+        bool ok = false;
         apply_to_destination(
-            outlet->address, devices,
+            outlet.address, devices,
             [&](ossia::net::parameter_base* p1, bool) {
               apply_to_destination(
-                  inlet->address, devices,
+                  inlet.address, devices,
                   [&](ossia::net::parameter_base* p2, bool) {
                     if (p1 == p2)
                       ok = true;
                   }, do_nothing_for_nodes{});
             }, do_nothing_for_nodes{});
-
-        if (ok)
-          break;
-      }
-      if (ok)
-        break;
-    }
-    return ok;
+        return ok;
+      });
+    });
   }
 };
 
@@ -493,18 +495,16 @@ struct OSSIA_EXPORT graph_base : graph_interface
 
   void remove_node(const node_ptr& n) final override
   {
-    for (auto& port : n->inputs())
-    {
-      auto s = port->sources;
+    n->for_each_inlet([&] (auto& port) {
+      auto s = port.sources;
       for (auto edge : s)
         disconnect(edge);
-    }
-    for (auto& port : n->outputs())
-    {
-      auto s = port->targets;
+    });
+    n->for_each_outlet([&] (auto& port) {
+      auto s = port.targets;
       for (auto edge : s)
         disconnect(edge);
-    }
+    });
 
     auto it = m_nodes.find(n);
     if (it != m_nodes.end())

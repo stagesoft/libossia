@@ -322,8 +322,9 @@ void parameter_base::set_range()
         }
         param->set_domain(make_domain(senum));
       }
-      else if (   ( m_range[0].a_type == A_FLOAT || m_range[0].a_type == A_LONG )
-                  && ( m_range[1].a_type == A_FLOAT || m_range[1].a_type == A_LONG ) )
+      else if (  m_range_size > 1
+               && ( m_range[0].a_type == A_FLOAT || m_range[0].a_type == A_LONG )
+               && ( m_range[1].a_type == A_FLOAT || m_range[1].a_type == A_LONG ) )
       {
         float fmin = atom_getfloat(m_range);
         float fmax = atom_getfloat(m_range+1);
@@ -780,7 +781,7 @@ void parameter_base::get_rate(parameter_base*x, std::vector<t_matcher*> nodes)
 }
 
 template<std::size_t N>
-ossia::optional<std::array<float, N>> to_array(t_atom* argv)
+std::optional<std::array<float, N>> to_array(t_atom* argv)
 {
   std::array<float, N> arr;
   for(std::size_t i = 0; i < N; i++)
@@ -794,7 +795,7 @@ ossia::optional<std::array<float, N>> to_array(t_atom* argv)
         arr[i] = (float)atom_getlong(&argv[i]);
         break;
       default:
-        return ossia::none;
+        return std::nullopt;
     }
   }
   return arr;
@@ -811,7 +812,7 @@ void convert_or_push(parameter_base* x, ossia::value&& v, bool set_flag = false)
     auto param = node->get_parameter();
     auto xparam = (parameter_base*)m->get_parent();
 
-    if ( xparam->m_ounit != ossia::none )
+    if ( xparam->m_ounit != std::nullopt )
     {
       const auto& src_unit = *xparam->m_ounit;
       const auto& dst_unit = param->get_unit();
@@ -1035,7 +1036,7 @@ void parameter_base::push_one(parameter_base* x, t_symbol* s, int argc, t_atom* 
 
       ossia::value vv;
       parameter_base* xparam = (parameter_base*)parent;
-      if ( xparam->m_ounit != ossia::none )
+      if ( xparam->m_ounit != std::nullopt )
       {
         auto src_unit = *xparam->m_ounit;
         auto dst_unit = param->get_unit();

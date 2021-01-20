@@ -2,6 +2,7 @@
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 #include <ossia/editor/scenario/time_interval.hpp>
 #include <ossia/editor/scenario/time_sync.hpp>
+#include <ossia/detail/algorithms.hpp>
 
 namespace ossia
 {
@@ -9,10 +10,12 @@ namespace ossia
 time_sync::time_sync()
   : m_expression(expressions::make_expression_true())
   , m_status{status::NOT_DONE}
+  , m_start{}
   , m_observe{}
   , m_evaluating{}
   , m_muted{}
   , m_autotrigger{}
+  , m_is_being_triggered{}
 {
 }
 
@@ -80,6 +83,19 @@ bool time_sync::is_evaluating() const noexcept
   return m_evaluating;
 }
 
+void time_sync::start_trigger_request() noexcept
+{
+  if(!trigger_request)
+  {
+    trigger_request = true;
+  }
+}
+
+void time_sync::end_trigger_request() noexcept
+{
+  trigger_request = false;
+}
+
 bool time_sync::is_autotrigger() const noexcept
 {
   return m_autotrigger;
@@ -88,6 +104,16 @@ bool time_sync::is_autotrigger() const noexcept
 void time_sync::set_autotrigger(bool a) noexcept
 {
   m_autotrigger = a;
+}
+
+bool time_sync::is_start() const noexcept
+{
+  return m_start;
+}
+
+void time_sync::set_start(bool a) noexcept
+{
+  m_start = a;
 }
 
 bool time_sync::is_observing_expression() const noexcept
@@ -124,7 +150,7 @@ void time_sync::observe_expression(
       if (wasObserving && m_callback)
       {
         expressions::remove_callback(*m_expression, *m_callback);
-        m_callback = ossia::none;
+        m_callback = std::nullopt;
       }
     }
   }
@@ -161,6 +187,23 @@ void time_sync::mute(bool m)
     m_muted = m;
     for(const auto& e : get_time_events())
       e->mute(m);
+  }
+}
+
+void time_sync::set_is_being_triggered(bool v) noexcept
+{
+  if(m_is_being_triggered != v)
+  {
+    m_is_being_triggered = v;
+    if (v)
+    {
+      entered_triggering.send();
+    }
+  }
+  if(!v)
+  {
+    m_trigger_date = Infinite;
+    trigger_request = false;
   }
 }
 }

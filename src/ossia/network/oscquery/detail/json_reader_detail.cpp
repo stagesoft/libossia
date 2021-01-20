@@ -585,8 +585,8 @@ static void create_or_update_parameter_type(
 
   // Try to read all the attributes that could give us the concrete type.
   complex_type val_type;                                 // Implementation type
-  optional<ossia::unit_t> unit = ossia::none;            // Unit
-  optional<ossia::extended_type> ext_type = ossia::none; // Extended type
+  std::optional<ossia::unit_t> unit = std::nullopt;            // Unit
+  std::optional<ossia::extended_type> ext_type = std::nullopt; // Extended type
 
   // Look for the typetag
   auto type_it = obj.FindMember(detail::attribute_typetag());
@@ -714,8 +714,8 @@ void json_parser_impl::readParameter(
 
   // Try to read all the attributes that could give us the concrete type.
   complex_type val_type;                                 // Implementation type
-  optional<ossia::unit_t> unit = ossia::none;            // Unit
-  optional<ossia::extended_type> ext_type = ossia::none; // Extended type
+  std::optional<ossia::unit_t> unit = std::nullopt;            // Unit
+  std::optional<ossia::extended_type> ext_type = std::nullopt; // Extended type
 
   // TODO maybe read all the attributes and store their iterators, then do
   // them in the order we want ?
@@ -724,8 +724,10 @@ void json_parser_impl::readParameter(
 
   // Look for the typetag
   const auto type_it = obj.FindMember(detail::attribute_typetag());
+  bool has_typetag = false;
   if (type_it != obj.MemberEnd())
   {
+    has_typetag = true;
     typetag = get_string_view(type_it->value);
     val_type = get_type_from_osc_typetag(typetag);
   }
@@ -760,7 +762,7 @@ void json_parser_impl::readParameter(
   }
 
   // If any of these exist, we can create a parameter
-  if (val_type || unit || ext_type)
+  if (has_typetag || unit || ext_type)
   {
     ossia::net::parameter_base* addr = nullptr;
     if (unit) // The unit enforces the value type
@@ -769,16 +771,21 @@ void json_parser_impl::readParameter(
       addr->set_unit(*unit);
       ossia::net::set_extended_type(node, ext_type);
     }
+    // FIXME necessary for R color handling... berk handle that better
+    else if (has_typetag)
+    {
+      addr = setup_parameter(val_type, node);
+    }
     else if (ext_type)
     {
       addr = node.create_parameter(underlying_type(*ext_type, obj, typetag, value_it, default_value_it));
       ossia::net::set_extended_type(node, ext_type);
     }
-    else if (val_type)
+    if(!addr && ext_type)
     {
-      addr = setup_parameter(val_type, node);
+      addr = node.create_parameter(underlying_type(*ext_type, obj, typetag, value_it, default_value_it));
+      ossia::net::set_extended_type(node, ext_type);
     }
-
     // We have a type. Now we read the value according to it.
     if (value_it != obj.MemberEnd())
     {
@@ -1090,7 +1097,7 @@ void json_parser::parse_parameter_value(
 }
 
 // Given a string "/foo/bar/baz", return {"/foo/bar", "baz"}
-static optional<std::pair<std::string, std::string>>
+static std::optional<std::pair<std::string, std::string>>
 splitParentChild(ossia::string_view s)
 {
   auto last_slash_pos = s.rfind('/');
@@ -1100,7 +1107,7 @@ splitParentChild(ossia::string_view s)
         std::string{s.substr(0, last_slash_pos)},
         std::string{s.substr(last_slash_pos + 1)});
   }
-  return ossia::none;
+  return std::nullopt;
 }
 
 void json_parser::parse_path_added(

@@ -62,7 +62,8 @@ struct jack_client
 
   ~jack_client()
   {
-    jack_client_close(client);
+    if(client)
+      jack_client_close(client);
   }
   operator jack_client_t*() const noexcept { return client; }
 
@@ -76,7 +77,7 @@ public:
     : m_client{clt}
     , stopped{true}
   {
-    if (!m_client)
+    if (!m_client || !(*m_client))
     {
       std::cerr << "JACK server not running?" << std::endl;
       throw std::runtime_error("Audio error: no JACK server");
@@ -122,6 +123,8 @@ public:
     std::cerr << "=== stream start ===\n";
 
     int err = jack_activate(client);
+    this->effective_sample_rate = jack_get_sample_rate(client);
+    this->effective_buffer_size = jack_get_buffer_size(client);
     if (err != 0)
     {
       jack_deactivate(client);
@@ -185,10 +188,13 @@ public:
     proto.setup_tree((int)input_ports.size(), (int)output_ports.size());
 
     stop_processing = false;
+    stopped = false;
   }
+
   void stop() override
   {
     std::cerr << "=== STOPPED PROCESS ==" << std::endl;
+     set_tick([](auto&&...) {}); // TODO this prevents having audio in the background...
     if (this->protocol)
       this->protocol.load()->engine = nullptr;
     stop_processing = true;
@@ -219,48 +225,38 @@ private:
   static int process(jack_nframes_t nframes, void* arg)
   {
     auto& self = *static_cast<jack_engine*>(arg);
+    self.load_audio_tick();
+
+    self.processing = true;
+
     const auto inputs = self.input_ports.size();
     const auto outputs = self.output_ports.size();
     auto proto = self.protocol.load();
-    if (self.stop_processing)
+    if (self.stop_processing || !proto || !self.audio_tick.allocated())
     {
+      self.processing = false;
       return clearBuffers(self, nframes, outputs);
     }
 
-    if (proto)
+    auto float_input = (float**)alloca(sizeof(float*) * inputs);
+    auto float_output = (float**)alloca(sizeof(float*) * outputs);
+    for (std::size_t i = 0; i < inputs; i++)
     {
-      self.processing = true;
-      auto float_input = (float**)alloca(sizeof(float*) * inputs);
-      auto float_output = (float**)alloca(sizeof(float*) * outputs);
-      for (std::size_t i = 0; i < inputs; i++)
-      {
-        float_input[i] = (jack_default_audio_sample_t*)jack_port_get_buffer(
-            self.input_ports[i], nframes);
-      }
-      for (std::size_t i = 0; i < outputs; i++)
-      {
-        float_output[i] = (jack_default_audio_sample_t*)jack_port_get_buffer(
-            self.output_ports[i], nframes);
-      }
+      float_input[i] = (jack_default_audio_sample_t*)jack_port_get_buffer(
+                         self.input_ports[i], nframes);
+    }
+    for (std::size_t i = 0; i < outputs; i++)
+    {
+      float_output[i] = (jack_default_audio_sample_t*)jack_port_get_buffer(
+                          self.output_ports[i], nframes);
+    }
 
-      proto->process_generic(
+    proto->process_generic(
           *proto, float_input, float_output, (int)inputs, (int)outputs,
           nframes);
-      proto->audio_tick(nframes, 0);
+    self.audio_tick(nframes, 0);
 
-      // Run a tick
-      if (proto->replace_tick)
-      {
-        proto->audio_tick = std::move(proto->ui_tick);
-        proto->ui_tick = {};
-        proto->replace_tick = false;
-      }
-      self.processing = false;
-    }
-    else
-    {
-      return clearBuffers(self, nframes, outputs);
-    }
+    self.processing = false;
     return 0;
   }
 

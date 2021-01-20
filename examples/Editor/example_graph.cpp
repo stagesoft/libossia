@@ -64,10 +64,10 @@ struct root_scenario
 
 
 template<typename T>
-ossia::optional<T> pop_value(const ossia::inlet_ptr& p) {
+std::optional<T> pop_value(const ossia::inlet_ptr& p) {
   if(p)
   {
-    auto ip = p->data.target<ossia::value_port>();
+    auto ip = p->target<ossia::value_port>();
     if(ip)
     {
       if(!ip->get_data().empty())
@@ -79,26 +79,26 @@ ossia::optional<T> pop_value(const ossia::inlet_ptr& p) {
       }
     }
   }
-  return ossia::none;
+  return std::nullopt;
 }
 
 void push_value(const ossia::outlet_ptr& p, ossia::value val) {
   if(p)
   {
-    if(auto op = p->data.target<ossia::value_port>())
+    if(auto op = p->target<ossia::value_port>())
       op->write_value(std::move(val), 0);
   }
 }
 
 struct my_node final : ossia::graph_node {
     my_node() {
-      inputs().push_back(ossia::make_inlet<ossia::value_port>());
-      outputs().push_back(ossia::make_outlet<ossia::value_port>());
+      m_inlets.push_back(new ossia::value_inlet);
+      m_outlets.push_back(new ossia::value_outlet);
     }
 
-    void run(ossia::token_request t, ossia::exec_state_facade) noexcept override {
-      if(auto a_float = pop_value<float>(this->inputs()[0])) {
-        push_value(this->outputs()[0], 100 + 50 * std::cos(*a_float) * std::sin(10. * t.position));
+    void run(const ossia::token_request& t, ossia::exec_state_facade) noexcept override {
+      if(auto a_float = pop_value<float>(this->root_inputs()[0])) {
+        push_value(this->root_outputs()[0], 100 + 50 * std::cos(*a_float) * std::sin(10. * t.position()));
       }
     }
 };
@@ -134,13 +134,13 @@ int main()
   // Create nodes
   auto g = std::make_shared<graph>();
   auto node1 = std::make_shared<my_node>();
-  node1->inputs()[0]->address = foo;
-  node1->outputs()[0]->address = foo;
+  node1->root_inputs()[0]->address = foo;
+  node1->root_outputs()[0]->address = foo;
   g->add_node(node1);
 
   auto node2 = std::make_shared<my_node>();
-  node2->inputs()[0]->address = foo;
-  node2->outputs()[0]->address = bar;
+  node2->root_inputs()[0]->address = foo;
+  node2->root_outputs()[0]->address = bar;
   g->add_node(node2);
 
   // Create a 5 second score

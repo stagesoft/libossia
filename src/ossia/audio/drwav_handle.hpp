@@ -4,34 +4,89 @@
 
 namespace ossia
 {
+
+#if defined(_MSC_VER)
+#pragma pack(push, 1)
+#endif
+struct
+    #if defined(__GNUC__) || defined(__clang__)
+    __attribute__((packed))
+    #endif
+acid_chunk
+{
+  // https://github.com/erikd/libsndfile/blob/master/src/wav.c#L1427
+  int32_t file_type{};
+  int16_t root_note{};
+  int16_t fill_0{};
+  float fill_1{};
+  int32_t num_beats{};
+  int16_t meter_denom{};
+  int16_t meter_num{};
+  float tempo{};
+};
+#if defined(_MSC_VER)
+#pragma pack()
+#endif
+
+
 struct drwav_handle final {
 public:
+  static const constexpr drwav_allocation_callbacks drwav_allocs{
+    nullptr,
+    [ ] (size_t sz, void* pUserData) { return malloc(sz); },
+    [ ] (void* p, size_t sz, void* pUserData) { return realloc(p, sz); },
+    [ ] (void* p, void* pUserData) { return free(p); }
+  };
   drwav_handle() noexcept = default;
   drwav_handle(const void* data, size_t dataSize) noexcept
-    : impl{drwav_open_memory(data, dataSize)}
+    : impl{new drwav}
   {
-
+    drwav_init_memory_ex(impl, data, dataSize, on_chunk, this, 0, &drwav_allocs);
   }
 
-  drwav_handle(drwav_handle&& other) noexcept:
-    impl{other.impl}
+  drwav_handle(drwav_handle&& other) noexcept
+    : impl{other.impl}
+    , m_acid{other.m_acid}
   {
     other.impl = nullptr;
+    other.m_acid = {};
   }
 
   drwav_handle(const drwav_handle& other) noexcept
   {
-    if(other.impl->memoryStream.data)
+    if(other.impl && other.impl->memoryStream.data)
     {
-      impl = drwav_open_memory(other.impl->memoryStream.data, other.impl->memoryStream.dataSize);
+      impl = new drwav;
+      drwav_init_memory_ex(impl, other.impl->memoryStream.data, other.impl->memoryStream.dataSize, on_chunk, this, 0, &drwav_allocs);
     }
+  }
+
+  static drwav_uint64 on_chunk(
+      void* pChunkUserData,
+      drwav_read_proc onRead,
+      drwav_seek_proc onSeek,
+      void* pReadSeekUserData,
+      const drwav_chunk_header* pChunkHeader,
+      drwav_container container,
+      const drwav_fmt* pFMT) noexcept
+  {
+    drwav_handle& self = *(drwav_handle*)pChunkUserData;
+    auto& cc = pChunkHeader->id.fourcc;
+    static const constexpr drwav_uint8 acid[4] = {'a', 'c', 'i', 'd'};
+    if (std::equal(cc, cc + 4, acid, acid + 4))
+    {
+      onRead(pReadSeekUserData, &self.m_acid, sizeof(acid_chunk));
+      return sizeof(acid_chunk);
+    }
+    return 0;
   }
 
   drwav_handle& operator=(drwav_handle&& other) noexcept
   {
     if(impl)
     {
-      drwav_close(impl);
+      drwav_uninit(impl);
+      delete impl;
       impl = nullptr;
     }
 
@@ -44,13 +99,15 @@ public:
   {
     if(impl)
     {
-      drwav_close(impl);
+      drwav_uninit(impl);
+      delete impl;
       impl = nullptr;
     }
 
     if(other.impl->memoryStream.data)
     {
-      impl = drwav_open_memory(other.impl->memoryStream.data, other.impl->memoryStream.dataSize);
+      impl = new drwav;
+      drwav_init_memory_ex(impl, other.impl->memoryStream.data, other.impl->memoryStream.dataSize, on_chunk, this, 0, &drwav_allocs);
     }
     return *this;
   }
@@ -59,7 +116,8 @@ public:
   {
     if(impl)
     {
-      drwav_close(impl);
+      drwav_uninit(impl);
+      delete impl;
     }
   }
 
@@ -67,9 +125,13 @@ public:
   auto open_memory(const void* data, size_t dataSize) noexcept
   {
     if(impl)
-      drwav_close(impl);
+    {
+      drwav_uninit(impl);
+      delete impl;
+    }
 
-    impl = drwav_open_memory(data, dataSize);
+    impl = new drwav;
+    drwav_init_memory_ex(impl, data, dataSize, on_chunk, this, 0, &drwav_allocs);
   }
 
   auto seek_to_pcm_frame(drwav_uint64 targetFrameIndex) noexcept
@@ -93,8 +155,11 @@ public:
   auto sampleRate() const noexcept { return impl->sampleRate; }
   auto totalPCMFrameCount() const noexcept { return impl->totalPCMFrameCount; }
 
-private:
+  ::drwav* wav() const noexcept { return impl; }
 
+  acid_chunk acid() const noexcept { return m_acid; }
+private:
   ::drwav* impl{};
+  acid_chunk m_acid{};
 };
 }

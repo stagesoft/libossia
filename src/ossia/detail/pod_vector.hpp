@@ -14,9 +14,15 @@ struct pod_allocator
   using value_type = T;
 
   template <typename... Args>
-  pod_allocator(Args&&...)
+  pod_allocator(Args&&...) noexcept
   {
   }
+
+  pod_allocator() noexcept = default;
+  pod_allocator(const pod_allocator&) noexcept = default;
+  pod_allocator(pod_allocator&&) noexcept = default;
+  pod_allocator& operator=(const pod_allocator&) noexcept = default;
+  pod_allocator& operator=(pod_allocator&&) noexcept = default;
 
   static inline T* allocate(std::size_t num) noexcept
   {
@@ -43,9 +49,15 @@ struct pod_allocator
 {
   using value_type = T;
 
+  pod_allocator() noexcept = default;
+  pod_allocator(const pod_allocator&) noexcept = default;
+  pod_allocator(pod_allocator&&) noexcept = default;
+  pod_allocator& operator=(const pod_allocator&) noexcept = default;
+  pod_allocator& operator=(pod_allocator&&) noexcept = default;
+
   static inline T* allocate(std::size_t num) noexcept
   {
-    static_assert(std::is_pod_v<T>, "can only be used with POD types");
+    static_assert(std::is_standard_layout_v<T> && std::is_trivial_v<T>, "can only be used with POD types");
     static_assert(
         alignof(T) <= alignof(std::max_align_t),
         "type must not have specific alignment requirements");

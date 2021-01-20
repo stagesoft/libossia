@@ -131,7 +131,7 @@ bool rate_limiting_protocol::push_raw(const full_parameter_data& address)
 bool rate_limiting_protocol::observe(
     ossia::net::parameter_base& address, bool enable)
 {
-  return m_protocol->observe_quietly(address, enable);
+  return m_protocol->observe(address, enable);
 }
 
 bool rate_limiting_protocol::update(ossia::net::node_base& node)
@@ -144,7 +144,7 @@ void rate_limiting_protocol::set_logger(const network_logger& l)
   m_protocol->set_logger(l);
 }
 
-const network_logger&rate_limiting_protocol::get_logger() const
+const network_logger&rate_limiting_protocol::get_logger() const noexcept
 {
   return m_protocol->get_logger();
 }

@@ -1,5 +1,6 @@
 #pragma once
-#include <ossia/dataflow/data.hpp>
+#include <ossia/dataflow/dataflow_fwd.hpp>
+#include <ossia/dataflow/value_vector.hpp>
 #include <ossia/detail/flat_map.hpp>
 #include <ossia/detail/hash_map.hpp>
 #include <ossia/detail/mutex.hpp>
@@ -9,10 +10,24 @@
 #include <ossia/network/midi/midi_device.hpp>
 #include <ossia/network/midi/midi_protocol.hpp>
 
+#if defined(OSSIA_SMALL_VECTOR)
+#include <rtmidi17/message.hpp>
+#endif
+
+#include <cstdint>
+#if SIZE_MAX == 0xFFFFFFFF // 32-bit
+#include <ossia/dataflow/audio_port.hpp>
+#include <ossia/dataflow/value_port.hpp>
+#include <ossia/dataflow/midi_port.hpp>
+#endif
+
 #include <smallfun.hpp>
 namespace ossia
 {
 class message_queue;
+class audio_parameter;
+struct typed_value;
+struct timed_value;
 struct local_pull_visitor;
 struct global_pull_visitor;
 struct state_exec_visitor;
@@ -96,11 +111,20 @@ struct OSSIA_EXPORT execution_state : public Nano::Observer
   void copy_from_global(ossia::net::parameter_base& addr, inlet& in);
   void copy_from_global_node(ossia::net::node_base& addr, inlet& in);
 
-  void insert(const ossia::destination& dest, const data_type& v);
-  void insert(const ossia::destination& dest, data_type&& v);
+  // void insert(const ossia::destination& dest, const data_type& v);
+  // void insert(const ossia::destination& dest, data_type&& v);
+
+  //void insert(const ossia::destination& dest, const ossia::audio_port& v);
+  //void insert(const ossia::destination& dest, ossia::audio_port&& v);
+  //void insert(const ossia::destination& dest, const ossia::midi_port& v);
+  //void insert(const ossia::destination& dest, ossia::midi_port&& v);
+  //void insert(const ossia::destination& dest, const ossia::value_port& v);
+  //void insert(const ossia::destination& dest, ossia::value_port&& v);
+  void insert(ossia::net::parameter_base& dest, const ossia::value_port& v);
+  void insert(ossia::net::parameter_base& dest, ossia::value_port&& v);
   void insert(ossia::net::parameter_base& dest, const typed_value& v);
   void insert(ossia::net::parameter_base& dest, typed_value&& v);
-  void insert(ossia::net::parameter_base& dest, const audio_port& v);
+  void insert(ossia::audio_parameter& dest, const audio_port& v);
   void insert(ossia::net::parameter_base& dest, const midi_port& v);
   void insert(const ossia::state& v);
 
@@ -108,6 +132,8 @@ struct OSSIA_EXPORT execution_state : public Nano::Observer
 
   int sampleRate{44100};
   int bufferSize{64};
+  double modelToSamplesRatio{1.};
+  double samplesToModelRatio{1.};
   int64_t samples_since_start{};
   double start_date{}; // in ns, for vst
   double cur_date{};
@@ -119,7 +145,7 @@ struct OSSIA_EXPORT execution_state : public Nano::Observer
   ossia::fast_hash_map<
       ossia::net::parameter_base*, value_vector<std::pair<typed_value, int>>>
       m_valueState;
-  ossia::fast_hash_map<ossia::net::parameter_base*, audio_port> m_audioState;
+  ossia::fast_hash_map<ossia::audio_parameter*, audio_port> m_audioState;
   ossia::fast_hash_map<
       ossia::net::parameter_base*, value_vector<rtmidi::message>>
       m_midiState;

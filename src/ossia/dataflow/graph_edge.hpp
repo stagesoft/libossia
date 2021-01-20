@@ -7,19 +7,19 @@ namespace ossia
 struct init_delay_line
 {
   delay_line_type& delay_line;
-  void operator()(const audio_port&)
+  void operator()(const audio_port&) const noexcept
   {
     delay_line = audio_delay_line{};
   }
-  void operator()(const value_port&)
+  void operator()(const value_port&) const noexcept
   {
     delay_line = value_delay_line{};
   }
-  void operator()(const midi_port&)
+  void operator()(const midi_port&) const noexcept
   {
     delay_line = midi_delay_line{};
   }
-  void operator()()
+  void operator()() const noexcept
   {
   }
 };
@@ -30,11 +30,11 @@ struct OSSIA_EXPORT graph_edge
   graph_edge(
       connection c, outlet_ptr pout, inlet_ptr pin, node_ptr pout_node,
       node_ptr pin_node) noexcept;
-
+/*
   graph_edge(
       connection c, std::size_t pout, std::size_t pin, node_ptr pout_node,
       node_ptr pin_node) noexcept;
-
+*/
   void init() noexcept;
 
   ~graph_edge();
@@ -52,31 +52,5 @@ template <typename... Args>
 auto make_edge(Args&&... args)
 {
   return std::make_shared<ossia::graph_edge>(std::forward<Args>(args)...);
-}
-
-template <typename... Args>
-auto make_strict_edge(Args&&... args)
-{
-  return std::make_shared<ossia::graph_edge>(
-      ossia::immediate_strict_connection{}, std::forward<Args>(args)...);
-}
-template <typename... Args>
-auto make_glutton_edge(Args&&... args)
-{
-  return std::make_shared<ossia::graph_edge>(
-      ossia::immediate_glutton_connection{}, std::forward<Args>(args)...);
-}
-
-template <typename... Args>
-auto make_delayed_strict_edge(Args&&... args)
-{
-  return std::make_shared<ossia::graph_edge>(
-      ossia::delayed_strict_connection{}, std::forward<Args>(args)...);
-}
-template <typename... Args>
-auto make_delayed_glutton_edge(Args&&... args)
-{
-  return std::make_shared<ossia::graph_edge>(
-      ossia::delayed_glutton_connection{}, std::forward<Args>(args)...);
 }
 }

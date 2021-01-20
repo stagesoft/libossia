@@ -15,6 +15,7 @@ set(API_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/detail/flat_set.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/detail/flat_multimap.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/detail/flat_multiset.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/detail/flicks.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/detail/for_each.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/detail/hash.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/detail/hash_map.hpp"
@@ -253,6 +254,8 @@ set(OSSIA_EDITOR_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/ossia/editor/expression/expression_pulse.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/ossia/editor/loop/loop.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/ossia/editor/scenario/detail/scenario_execution.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/ossia/editor/scenario/detail/scenario_sync_execution.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/ossia/editor/scenario/detail/scenario_sync_musical_execution.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/ossia/editor/scenario/detail/scenario_offset.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/ossia/editor/scenario/scenario.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/ossia/editor/scenario/time_interval.cpp"
@@ -408,11 +411,16 @@ set(OSSIA_LEAPMOTION_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/ossia/network/leapmotion/leapmotion_device.cpp")
 
 set(OSSIA_JOYSTICK_HEADERS
-
   "${CMAKE_CURRENT_SOURCE_DIR}/ossia/network/joystick/joystick_protocol.hpp")
 
 set(OSSIA_JOYSTICK_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/ossia/network/joystick/joystick_protocol.cpp")
+
+set(OSSIA_LIBMAPPER_HEADERS
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/network/libmapper/libmapper_protocol.hpp")
+
+set(OSSIA_LIBMAPPER_SRCS
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/network/libmapper/libmapper_protocol.cpp")
 
 set(OSSIA_WIIMOTE_HEADERS
   "${CMAKE_CURRENT_SOURCE_DIR}/ossia/network/wiimote/wiimote_parameter.hpp"
@@ -540,6 +548,7 @@ set(OSSIA_DATAFLOW_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/audio/audio_parameter.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/audio/audio_protocol.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/audio/portaudio_protocol.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/audio/pulseaudio_protocol.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/audio/jack_protocol.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/audio/sdl_protocol.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/audio/dummy_protocol.hpp"
@@ -547,6 +556,11 @@ set(OSSIA_DATAFLOW_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/dataflow.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/connection.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/data.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/value_vector.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/value_port.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/audio_port.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/audio_stretch_mode.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/midi_port.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/data_copy.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/dataflow_fwd.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/execution_state.hpp"
@@ -554,12 +568,20 @@ set(OSSIA_DATAFLOW_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/graph_node.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/node_process.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/port.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/control_inlets.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/timed_value.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/typed_value.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/node_chain_process.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/fx_node.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/token_request.hpp"
 
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/faust/faust_node.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/faust/faust_utils.hpp"
+
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/timestretch/r8b_stretcher.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/timestretch/raw_stretcher.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/timestretch/repitch_stretcher.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/timestretch/rubberband_stretcher.hpp"
 
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/automation.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/gain.hpp"
@@ -574,11 +596,14 @@ set(OSSIA_DATAFLOW_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/midi.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/percentage.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/rand_float.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/simple_mapper.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/sine.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/sound.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/spline.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/state.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/step.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/sound_mmap.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/sound_ref.hpp"
 
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/safe_nodes/node.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/safe_nodes/port.hpp"
@@ -600,10 +625,12 @@ set(OSSIA_DATAFLOW_HEADERS
 set(OSSIA_DATAFLOW_SRCS
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/audio/audio_parameter.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/audio/audio_protocol.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/data.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/port.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/graph_node.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/execution_state.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/nodes/state.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/control_inlets.cpp"
 
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/dataflow/graph/graph.cpp"
 )

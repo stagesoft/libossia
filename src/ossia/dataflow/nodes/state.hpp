@@ -13,10 +13,11 @@ public:
 
   ~state_writer() override;
 
-  void run(ossia::token_request, ossia::exec_state_facade e) noexcept override;
+  void run(const ossia::token_request&, ossia::exec_state_facade e) noexcept override;
   std::string label() const noexcept override;
 
   ossia::state data;
+  std::vector<ossia::control_message> controls;
 
 };
 }

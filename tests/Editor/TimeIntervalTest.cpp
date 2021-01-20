@@ -10,14 +10,8 @@
 
 using namespace ossia;
 
-void interval_callback(double position, ossia::time_value date)
-{
-  ;
-}
-
 void event_callback(time_event::status newStatus)
 {
-  ;
 }
 
 /*! test life cycle and accessors functions */
@@ -29,13 +23,13 @@ TEST_CASE ("test_basic", "test_basic")
   auto end_node = std::make_shared<time_sync>();
   auto end_event = *(end_node->emplace(end_node->get_time_events().begin(), &event_callback));
 
-  auto interval = time_interval::create(ossia::time_interval::exec_callback{[] (auto&&... args) { interval_callback(args...); }}, *start_event, *end_event, 1000._tv);
+  auto interval = time_interval::create(ossia::time_interval::exec_callback{[] (auto&&... args) {  }}, *start_event, *end_event, 1000._tv);
   ossia::clock c{*interval};
   REQUIRE(interval != nullptr);
 
   REQUIRE(c.get_granularity() == 1._tv);
   REQUIRE(interval->get_offset() == 0._tv);
-  REQUIRE(interval->get_speed() == 1._tv);
+  REQUIRE(interval->get_internal_speed() == 1.);
   REQUIRE(interval->get_nominal_duration() == 1000._tv);
   REQUIRE(interval->get_min_duration() == 0._tv);
   REQUIRE(interval->get_max_duration() == Infinite);
@@ -43,20 +37,19 @@ TEST_CASE ("test_basic", "test_basic")
   using namespace std::literals;
 
   c.set_granularity(50ms);
-  interval->set_speed(2._tv);
+  interval->set_speed(2.);
   interval->set_nominal_duration(2000._tv);
   interval->set_min_duration(1000._tv);
   interval->set_max_duration(3000._tv);
   interval->offset(500._tv);
 
   REQUIRE(c.get_granularity() == 50000._tv);
-  REQUIRE(interval->get_speed() == 2._tv);
+  REQUIRE(interval->get_internal_speed() == 2.);
   REQUIRE(interval->get_nominal_duration() == 2000._tv);
   REQUIRE(interval->get_min_duration() == 1000._tv);
   REQUIRE(interval->get_max_duration() == 3000._tv);
   REQUIRE(interval->get_offset() == 500._tv);
 
-  REQUIRE(interval->get_position() == 0.25);
   REQUIRE(c.running() == false);
   REQUIRE(interval->get_date() == 500._tv);
 
@@ -75,7 +68,7 @@ TEST_CASE ("test_edition", "test_edition")
   auto end_node = std::make_shared<time_sync>();
   auto end_event = *(end_node->emplace(end_node->get_time_events().begin(), &event_callback));
 
-  auto interval = time_interval::create(ossia::time_interval::exec_callback{[] (auto&&... args) { interval_callback(args...); }}, *start_event, *end_event, 1000._tv);
+  auto interval = time_interval::create(ossia::time_interval::exec_callback{[] (auto&&... args) { }}, *start_event, *end_event, 1000._tv);
   auto scenar = std::make_unique<scenario>();
 
   auto scenar_ptr = scenar.get();

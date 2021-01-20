@@ -14,14 +14,14 @@ case "$TRAVIS_OS_NAME" in
       docker pull iscore/iscore-rpi-sdk:latest
       set -e
     else
-      wget -nv https://cmake.org/files/v3.14/cmake-3.14.4-Linux-x86_64.tar.gz -O cmake-linux.tgz &
+      wget -nv https://cmake.org/files/v3.16/cmake-3.16.4-Linux-x86_64.tar.gz -O cmake-linux.tgz &
 
-      echo 'deb http://apt.llvm.org/xenial/ llvm-toolchain-xenial-8 main' | sudo tee /etc/apt/sources.list.d/llvm.list
+      echo 'deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-9 main' | sudo tee /etc/apt/sources.list.d/llvm.list
       sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 1397BC53640DB551 15CF4D18AF4F7421
       sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
-      sudo add-apt-repository --yes ppa:beineri/opt-qt-5.12.3-xenial
+      sudo add-apt-repository --yes ppa:beineri/opt-qt-5.14.1-bionic
       sudo apt-get update -qq
-      sudo apt-get install -qq --yes --force-yes g++-9 binutils ninja-build qt512-meta-minimal libasound2-dev clang-8 lld-8 portaudio19-dev mesa-common-dev libgl1-mesa-dev
+      sudo apt-get install -qq --yes --force-yes g++-9 binutils ninja-build qt514-meta-minimal libasound2-dev clang-9 lld-9 portaudio19-dev mesa-common-dev libgl1-mesa-dev
 
       wait wget || true
 
@@ -32,9 +32,18 @@ case "$TRAVIS_OS_NAME" in
     if [[ "$BUILD_TYPE" == "Coverage" ]]; then
       gem install coveralls-lcov
 
-      sudo apt-get install -qq python3 python3-pip 
+      sudo apt-get install -qq python3 python3-pip
       sudo pip3 install --upgrade wheel setuptools
       sudo pip3 install git+https://github.com/rpgillespie6/fastcov.git
+
+      # For some reason gcov seems to be not available anymore...
+      wget -nv https://github.com/OSSIA/sdk/releases/download/sdk14/gcov
+      file ./gcov
+      chmod +x ./gcov
+      sudo cp ./gcov /usr/bin/gcov
+      sudo cp ./gcov /usr/bin/gcov-9
+
+      gcov-9 --version
     fi
 
     shopt -s nocasematch # case insensitive comparison in Bash
@@ -73,7 +82,6 @@ case "$TRAVIS_OS_NAME" in
           sudo apt-get install -qq python python-dev python-pip
           sudo pip install twine wheel
         else
-          sudo add-apt-repository --yes ppa:jonathonf/python-3.6
           sudo apt-get update -qq
           sudo apt-get install -qq python3 python3-dev python3-pip
           sudo pip3 install twine wheel

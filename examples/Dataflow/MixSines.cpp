@@ -1,5 +1,6 @@
 #include <ossia/dataflow/graph/graph_static.hpp>
 #include <ossia/dataflow/graph/tick_methods.hpp>
+#include <ossia/dataflow/graph_edge_helpers.hpp>
 #include <ossia/audio/audio_protocol.hpp>
 #include <ossia/dataflow/nodes/rand_float.hpp>
 #include <ossia/dataflow/nodes/sine.hpp>
@@ -25,7 +26,10 @@ struct tick_all_nodes_bench
       ossia::time_value new_t{e.samples_since_start};
 
       for(auto& node : g.get_nodes())
-        node->request(ossia::token_request{old_t, new_t});
+      {
+        using namespace ossia;
+        node->request(ossia::simple_token_request{old_t, new_t});
+      }
 
       g.state(e);
       e.commit();
@@ -49,7 +53,7 @@ int main(int argc, char** argv)
 
   auto gain = std::make_shared<ossia::nodes::gain>();
   g.add_node(gain);
-  gain->outputs()[0]->address = &audio.get_main_out();
+  gain->root_outputs()[0]->address = &audio.get_main_out();
 
   for(int i = 0; i < nodes; i++)
   {
@@ -64,7 +68,7 @@ int main(int argc, char** argv)
   e.register_device(&audio.device);
 
   g.state(e);
-  audio.protocol.set_tick(tick_all_nodes{e, g});
+  audio.engine->set_tick(tick_all_nodes{e, g});
 
   std::this_thread::sleep_for(10s);
 }

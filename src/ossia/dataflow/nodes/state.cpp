@@ -14,9 +14,11 @@ state_writer::state_writer(ossia::state&& other) : data{std::move(other)}
 state_writer::~state_writer() = default;
 
 void state_writer::run(
-    ossia::token_request, ossia::exec_state_facade e) noexcept
+    const ossia::token_request&, ossia::exec_state_facade e) noexcept
 {
   data.launch();
+  for(auto& ctrl: controls)
+    ctrl.launch();
   //e.insert(data);
 }
 std::string ossia::nodes::state_writer::label() const noexcept
