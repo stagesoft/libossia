@@ -1,3 +1,9 @@
+libossia (1.2.2-1) buster; urgency=medium
+
+  * Update package to upstream v1.2.2 from git
+
+ -- Ion Reguera <ion@stagelab.com>  Wed, 20 Jan 2021 18:45:47 +0100
+
 libossia (1.0.4-1) buster; urgency=low
 
   * Initial pre-release.
