@@ -90,7 +90,7 @@ void osc_protocol::update_sender()
 void osc_protocol::update_receiver()
 {
   m_receiver = std::make_unique<osc::receiver>(
-      m_local_port, [=](const oscpack::ReceivedMessage& m,
+      m_local_port, [this](const oscpack::ReceivedMessage& m,
                         const oscpack::IpEndpointName& ip) {
         this->on_received_message(m, ip);
       });
@@ -194,7 +194,7 @@ bool osc_protocol::push_bundle(
       if (val.valid())
       {
         str << oscpack::BeginMessageN(addr.get_node().osc_address());
-        val.apply(osc_outbound_visitor{str});
+        val.apply(osc_outbound_visitor{{str}});
         str << oscpack::EndMessage();
       }
     }
@@ -228,7 +228,7 @@ bool osc_protocol::push_raw_bundle(
       if (val.valid())
       {
         str << oscpack::BeginMessageN(addr.address);
-        val.apply(osc_outbound_visitor{str});
+        val.apply(osc_outbound_visitor{{str}});
         str << oscpack::EndMessage();
       }
     }

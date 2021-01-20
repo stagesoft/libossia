@@ -43,19 +43,29 @@ void* view::create(t_symbol* name, long argc, t_atom* argv)
 
   if (x)
   {
+    critical_enter(0);
+    auto& pat_desc = ossia_max::get_patcher_descriptor(x->m_patcher);
+    if( !pat_desc.model && !pat_desc.view)
+    {
+      pat_desc.view = x;
+    }
+    else
+    {
+      error("You can put only one [ossia.model] or [ossia.view] per patcher");
+      object_free(x);
+      critical_exit(0);
+      return nullptr;
+    }
+    device_base::on_device_created.connect<&view::on_device_created>(x);
+    device_base::on_device_removing.connect<&view::on_device_removing>(x);
+
+    x->m_otype = object_class::view;
+
     // make outlets
     x->m_dumpout = outlet_new(x, NULL); // anything outlet to dump view state
 
     // parse arguments
     long attrstart = attr_args_offset(argc, argv);
-    x->m_otype = object_class::view;
-
-    if(find_peer(x))
-    {
-      error("You can put only one [ossia.model] or [ossia.view] per patcher");
-      view::destroy(x);
-      return nullptr;
-    }
 
     // check name argument
     x->m_name = _sym_nothing;
@@ -68,139 +78,52 @@ void* view::create(t_symbol* name, long argc, t_atom* argv)
       }
     }
 
-    if(x->m_name != _sym_nothing)
-    {
-      ossia_check_and_register(x);
-    }
-
     // process attr args, if any
     attr_args_process(x, argc - attrstart, argv + attrstart);
-  }
 
-  ossia_max::instance().views.push_back(x);
+    defer_low(x, (method) object_base::loadbang, nullptr, 0, nullptr);
+
+    ossia_max::instance().views.push_back(x);
+    critical_exit(0);
+  }
 
   return (x);
 }
 
 void view::destroy(view* x)
 {
+  critical_enter(0);
+  device_base::on_device_created.disconnect<&view::on_device_created>(x);
+  device_base::on_device_removing.disconnect<&view::on_device_removing>(x);
+
   x->m_dead = true;
   x->unregister();
-  object_dequarantining<view>(x);
   ossia_max::instance().views.remove_all(x);
-  object_free(x->m_clock);
-
-  if(x->m_dumpout) outlet_delete(x->m_dumpout);
+  if(x->m_clock)
+    object_free(x->m_clock);
+  if(x->m_dumpout)
+    outlet_delete(x->m_dumpout);
   x->~view();
+  critical_exit(0);
 }
 
-bool view::register_node(const std::vector<std::shared_ptr<t_matcher>>& nodes)
+void view::do_registration()
 {
-  bool res = do_registration(nodes);
+  m_registered = true;
 
-  if (res)
-  {
-    object_dequarantining<view>(this);
-    std::vector<object_base*> children_view = find_children_to_register(
-        &m_object, get_patcher(&m_object), gensym("ossia.view"));
+  m_matchers = find_or_create_matchers();
 
-    for (auto child : children_view)
-    {
-      if (child->m_otype == object_class::view)
-      {
-        ossia::max::view* view = (ossia::max::view*)child;
-        view->register_node(m_matchers);
-      }
-      else if (child->m_otype == object_class::remote)
-      {
-        ossia::max::remote* remote = (ossia::max::remote*)child;
-        remote->register_node(m_matchers);
-      }
-    }
-  }
-  else
-    object_quarantining<ossia::max::view>(this);
-
-  return res;
-}
-
-bool view::do_registration(const std::vector<std::shared_ptr<t_matcher>>& matchers)
-{
-  // we should unregister here because we may have add a node between the
-  // registered node and the remote
-  const auto& nr_views = ossia_max::instance().nr_views.reference();
-  if(!ossia::contains(nr_views, this))
-    unregister();
-
-  for (auto& m : matchers)
-  {
-    auto _node = m->get_node();
-    std::string name = m_name->s_name;
-
-    if (m_addr_scope == ossia::net::address_scope::absolute)
-    {
-      // get root node
-      _node = &_node->get_device().get_root_node();
-      // and remove starting '/'
-      name = name.substr(1);
-    }
-
-    m_parent_node = _node;
-
-    std::vector<ossia::net::node_base*> nodes{};
-
-    if (m_addr_scope == ossia::net::address_scope::global)
-      nodes = ossia::max::find_global_nodes(name);
-    else
-      nodes = ossia::net::find_nodes(*_node, name);
-
-    m_matchers.reserve(m_matchers.size() + nodes.size());
-
-    for (auto n : nodes)
-    {
-      // we may have found a node with the same name
-      // but with a parameter, in that case it's an ø.param
-      // then forget it
-      if (!n->get_parameter())
-        m_matchers.emplace_back(std::make_shared<t_matcher>(n, this));
-    }
-  }
-
+  m_selection_path.reset();
   fill_selection();
-
-  return (!m_matchers.empty() || m_is_pattern);
 }
 
-void view::register_children(view* x)
+void view::unregister()
 {
-  std::vector<object_base*> children_view = find_children_to_register(
-      &x->m_object, get_patcher(&x->m_object), gensym("ossia.view"));
-
-  for (auto child : children_view)
-  {
-    if (child->m_otype == object_class::view)
-    {
-      ossia::max::view* view = (ossia::max::view*)child;
-
-      if (view == x)
-        continue;
-
-      ossia_register(view);
-    }
-    else if (child->m_otype == object_class::remote)
-    {
-      ossia::max::remote* remote = (ossia::max::remote*)child;
-      ossia_register(remote);
-    }
-  }
-}
-
-bool view::unregister()
-{
+  m_node_selection.clear();
   m_matchers.clear();
 
   std::vector<object_base*> children_view = find_children_to_register(
-      &m_object, get_patcher(&m_object), gensym("ossia.view"));
+      &m_object, m_patcher, gensym("ossia.view"));
 
   for (auto child : children_view)
   {
@@ -220,16 +143,42 @@ bool view::unregister()
     }
   }
 
-  object_quarantining<view>(this);
+  ossia_max::instance().nr_views.push_back(this);
 
-  register_children(this);
-
-  return true;
+  m_registered = false;
 }
 
-ossia::safe_set<view*>& view::quarantine()
+void view::on_node_created_callback(ossia::net::node_base& node)
 {
-    return ossia_max::instance().view_quarantine;
+  auto oscaddr = ossia::net::address_string_from_node(node);
+
+  if ( ossia::traversal::match(get_path(), node) )
+  {
+    m_matchers.emplace_back(std::make_shared<matcher>(&node,this));
+    fill_selection();
+  }
+}
+
+void view::on_device_removing(device_base* obj)
+{
+  auto dev = obj->m_device.get();
+  if(m_devices.contains(dev))
+  {
+    dev->on_node_created.disconnect<&view::on_node_created_callback>(this);
+    m_devices.remove_all(dev);
+  }
+}
+
+void view::on_device_created(device_base* obj)
+{
+  auto dev = obj->m_device.get();
+  if(!m_devices.contains(dev))
+  {
+    // no need to connect to on_node_removing because ossia::max::matcher
+    // already connect to it
+    dev->on_node_created.connect<&view::on_node_created_callback>(this);
+    m_devices.push_back(dev);
+  }
 }
 
 } // max namespace

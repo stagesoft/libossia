@@ -1,48 +1,15 @@
-if(OSSIA_UNITY3D)
-    if(${CMAKE_SIZEOF_VOID_P} MATCHES "4")
-        set(OSSIA_UNITY_PLUGIN_FOLDER "x86")
-    else()
-        set(OSSIA_UNITY_PLUGIN_FOLDER "x86_64")
-    endif()
+target_include_directories(ossia PUBLIC $<INSTALL_INTERFACE:include>)
 
-    if(APPLE)
-        set_target_properties(ossia PROPERTIES
-            PREFIX ""
-            SUFFIX ".bundle"
-            )
-        install(
-            TARGETS ossia
-            LIBRARY DESTINATION ossia-unity/Assets/Plugins/
-            )
-    elseif(WIN32)
-        install(
-            TARGETS ossia
-            RUNTIME DESTINATION ossia-unity/Assets/Plugins/${OSSIA_UNITY_PLUGIN_FOLDER}
-            )
-    else() # Linux
-        install(
-            TARGETS ossia
-            LIBRARY DESTINATION ossia-unity/Assets/Plugins/${OSSIA_UNITY_PLUGIN_FOLDER}
-            )
-    endif()
-
-    file(GLOB_RECURSE UNITY3D_FILES RELATIVE ${CMAKE_CURRENT_LIST_DIR} "ossia-unity3d/*.cs")
-
-    install(
-        FILES ${UNITY3D_FILES}
-        DESTINATION ossia-unity/Assets/ossia
-    )
-
-    install(
-        FILES ossia-unity3d/README.md
-        DESTINATION ossia-unity/Assets/
-    )
-
-    install(
-        FILES "${CMAKE_CURRENT_LIST_DIR}/../LICENSE"
-        DESTINATION ossia-unity/Assets
-    )
-endif()
+set(3RDPARTY_INSTALL_PATTERN
+  FILES_MATCHING
+  PATTERN "*.h"
+  PATTERN "*.hpp"
+  PATTERN "*.tpp"
+  PATTERN "*.ipp"
+  PATTERN "license*"
+  PATTERN "License*"
+  PATTERN "LICENSE*"
+)
 
 if(OSSIA_QML)
     install(
@@ -53,24 +20,24 @@ if(OSSIA_QML)
         )
     install(
         FILES
-        ${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/qmldir
-        ${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/Node.qml
-        ${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/Binding.qml
-        ${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/Callback.qml
-        ${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/MidiSink.qml
-        ${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/MidiSource.qml
-        ${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/OSC.qml
-        ${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/Property.qml
-        ${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/OSCQueryClient.qml
-        ${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/OSCQueryServer.qml
-        ${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/Reader.qml
-        ${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/Writer.qml
-        ${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE
+        "${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/qmldir"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/Node.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/Binding.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/Callback.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/MidiSink.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/MidiSource.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/OSC.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/Property.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/OSCQueryClient.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/OSCQueryServer.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/Reader.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt/Ossia/Writer.qml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE"
         DESTINATION Ossia)
 endif()
 
 
-if(NOT OSSIA_QML_ONLY AND NOT OSSIA_UNITY3D_ONLY)
+if(NOT OSSIA_QML_ONLY)
 # Default case, C / C++ library
 # Install
 install(TARGETS ossia
@@ -82,7 +49,6 @@ install(TARGETS ossia
 
 # Install headers
 function(install_headers_rec theHeaders)
-
     foreach(file ${theHeaders})
         get_filename_component( dir ${file} DIRECTORY)
         string(REPLACE "${CMAKE_CURRENT_SOURCE_DIR}" "" dir_clean "${dir}")
@@ -91,7 +57,6 @@ function(install_headers_rec theHeaders)
           DESTINATION "include/${dir_clean}"
           COMPONENT Devel)
     endforeach()
-
 endfunction()
 
 if(NOT OSSIA_CPP_ONLY)
@@ -142,127 +107,173 @@ if(OSSIA_QT)
 endif()
 # Install export header
 install(FILES
-        ${CMAKE_CURRENT_BINARY_DIR}/ossia_export.h
-        ${CMAKE_CURRENT_BINARY_DIR}/ossia-config.hpp
+        "${CMAKE_CURRENT_BINARY_DIR}/ossia_export.h"
+        "${CMAKE_CURRENT_BINARY_DIR}/ossia-config.hpp"
         DESTINATION include/
         COMPONENT Devel)
 
 # Install used libraries headers
-if(NOT OSSIA_CPP_ONLY)
-install(DIRECTORY ${OSSIA_3RDPARTY_FOLDER}/RtMidi17/rtmidi17
-        DESTINATION include
-        COMPONENT Devel)
-
-install(DIRECTORY ${OSSIA_3RDPARTY_FOLDER}/variant/include/
+if(NOT OSSIA_CPP_ONLY AND NOT OSSIA_C_ONLY)
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/RtMidi17/include/rtmidi17"
         DESTINATION include
         COMPONENT Devel
-        MESSAGE_NEVER)
+        ${3RDPARTY_INSTALL_PATTERN}
+)
 
-install(DIRECTORY ${OSSIA_3RDPARTY_FOLDER}/nano-signal-slot/include/
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/variant/include/"
         DESTINATION include
         COMPONENT Devel
-        MESSAGE_NEVER)
+        MESSAGE_NEVER
+        ${3RDPARTY_INSTALL_PATTERN}
+)
 
-install(DIRECTORY ${OSSIA_3RDPARTY_FOLDER}/flat/include/
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/nano-signal-slot/include/"
         DESTINATION include
         COMPONENT Devel
-        MESSAGE_NEVER)
+        MESSAGE_NEVER
+        ${3RDPARTY_INSTALL_PATTERN}
+)
 
-install(DIRECTORY ${OSSIA_3RDPARTY_FOLDER}/multi_index/include/
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/flat/include/"
         DESTINATION include
         COMPONENT Devel
-        MESSAGE_NEVER)
+        MESSAGE_NEVER
+        ${3RDPARTY_INSTALL_PATTERN}
+)
 
-install(DIRECTORY ${OSSIA_3RDPARTY_FOLDER}/spdlog/include/
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/multi_index/include/"
         DESTINATION include
         COMPONENT Devel
-        MESSAGE_NEVER)
+        MESSAGE_NEVER
+        ${3RDPARTY_INSTALL_PATTERN}
+)
 
-install(DIRECTORY ${OSSIA_3RDPARTY_FOLDER}/asio/asio/include/
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/spdlog/include/"
         DESTINATION include
         COMPONENT Devel
-        MESSAGE_NEVER)
+        MESSAGE_NEVER
+        ${3RDPARTY_INSTALL_PATTERN}
+)
 
-install(DIRECTORY ${OSSIA_3RDPARTY_FOLDER}/rapidjson/include/
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/asio/asio/include/"
         DESTINATION include
         COMPONENT Devel
-        MESSAGE_NEVER)
+        MESSAGE_NEVER
+        ${3RDPARTY_INSTALL_PATTERN}
+)
 
-install(DIRECTORY ${OSSIA_3RDPARTY_FOLDER}/chobo-shl/include/
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/rapidjson/include/"
         DESTINATION include
         COMPONENT Devel
-        MESSAGE_NEVER)
+        MESSAGE_NEVER
+        ${3RDPARTY_INSTALL_PATTERN}
+)
 
-install(DIRECTORY ${OSSIA_3RDPARTY_FOLDER}/brigand/include/brigand
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/chobo-shl/include/"
         DESTINATION include
         COMPONENT Devel
-        MESSAGE_NEVER)
+        MESSAGE_NEVER
+        ${3RDPARTY_INSTALL_PATTERN}
+)
 
-install(DIRECTORY ${OSSIA_3RDPARTY_FOLDER}/fmt/include/fmt
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/brigand/include/brigand"
         DESTINATION include
         COMPONENT Devel
-        MESSAGE_NEVER)
+        MESSAGE_NEVER
+        ${3RDPARTY_INSTALL_PATTERN}
+)
 
-install(DIRECTORY ${OSSIA_3RDPARTY_FOLDER}/websocketpp/websocketpp
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/fmt/include/fmt"
         DESTINATION include
         COMPONENT Devel
-        MESSAGE_NEVER)
+        MESSAGE_NEVER
+        ${3RDPARTY_INSTALL_PATTERN}
+)
 
-install(FILES ${OSSIA_3RDPARTY_FOLDER}/SmallFunction/smallfun/include/smallfun.hpp
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/websocketpp/websocketpp"
+        DESTINATION include
+        COMPONENT Devel
+        MESSAGE_NEVER
+        ${3RDPARTY_INSTALL_PATTERN}
+)
+
+install(FILES "${OSSIA_3RDPARTY_FOLDER}/SmallFunction/smallfun/include/smallfun.hpp"
         DESTINATION include/
-        COMPONENT Devel)
+        COMPONENT Devel
+)
 
-install(FILES
-          ${OSSIA_3RDPARTY_FOLDER}/dr_libs/dr_wav.h
-          ${OSSIA_3RDPARTY_FOLDER}/dr_libs/dr_flac.h
-          ${OSSIA_3RDPARTY_FOLDER}/dr_libs/dr_mp3.h
+if(EXISTS "${OSSIA_3RDPARTY_FOLDER}/dr_libs/dr_wav.h")
+  install(FILES
+            "${OSSIA_3RDPARTY_FOLDER}/dr_libs/dr_wav.h"
+            "${OSSIA_3RDPARTY_FOLDER}/dr_libs/dr_flac.h"
+            "${OSSIA_3RDPARTY_FOLDER}/dr_libs/dr_mp3.h"
+          DESTINATION include/
+          COMPONENT Devel)
+endif()
+
+install(FILES "${OSSIA_3RDPARTY_FOLDER}/flat_hash_map/flat_hash_map.hpp"
         DESTINATION include/
-        COMPONENT Devel)
+        COMPONENT Devel
+)
 
-install(FILES ${OSSIA_3RDPARTY_FOLDER}/flat_hash_map/flat_hash_map.hpp
-        DESTINATION include/
-        COMPONENT Devel)
-
-install(DIRECTORY ${OSSIA_3RDPARTY_FOLDER}/flat/include/flat
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/flat/include/flat"
         DESTINATION include
         COMPONENT Devel
-        MESSAGE_NEVER)
+        MESSAGE_NEVER
+        ${3RDPARTY_INSTALL_PATTERN}
+)
 
-install(DIRECTORY ${OSSIA_3RDPARTY_FOLDER}/hopscotch-map/include/tsl
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/hopscotch-map/include/tsl"
         DESTINATION include
         COMPONENT Devel
-        MESSAGE_NEVER)
+        MESSAGE_NEVER
+        ${3RDPARTY_INSTALL_PATTERN}
+)
 
-install(FILES
-     ${OSSIA_3RDPARTY_FOLDER}/verdigris/src/wobjectdefs.h
-     ${OSSIA_3RDPARTY_FOLDER}/verdigris/src/wobjectimpl.h
-        DESTINATION include/
-        COMPONENT Devel)
+install(
+  FILES
+     "${OSSIA_3RDPARTY_FOLDER}/verdigris/src/wobjectdefs.h"
+     "${OSSIA_3RDPARTY_FOLDER}/verdigris/src/wobjectimpl.h"
+  DESTINATION include/
+  COMPONENT Devel
+)
 
 install(
     FILES
-      ${OSSIA_3RDPARTY_FOLDER}/readerwriterqueue/readerwriterqueue.h
-      ${OSSIA_3RDPARTY_FOLDER}/readerwriterqueue/atomicops.h
+      "${OSSIA_3RDPARTY_FOLDER}/readerwriterqueue/readerwriterqueue.h"
+      "${OSSIA_3RDPARTY_FOLDER}/readerwriterqueue/atomicops.h"
     DESTINATION include/
-    COMPONENT Devel)
+    COMPONENT Devel
+)
 
 install(
       FILES
-        ${OSSIA_3RDPARTY_FOLDER}/concurrentqueue/concurrentqueue.h
-        ${OSSIA_3RDPARTY_FOLDER}/concurrentqueue/blockingconcurrentqueue.h
+        "${OSSIA_3RDPARTY_FOLDER}/concurrentqueue/concurrentqueue.h"
+        "${OSSIA_3RDPARTY_FOLDER}/concurrentqueue/blockingconcurrentqueue.h"
       DESTINATION include/
-      COMPONENT Devel)
+      COMPONENT Devel
+)
 
-install(DIRECTORY ${OSSIA_3RDPARTY_FOLDER}/GSL/include/gsl
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/GSL/include/gsl"
         DESTINATION include
         COMPONENT Devel
-        MESSAGE_NEVER)
+        MESSAGE_NEVER
+)
+
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/rubberband/rubberband"
+        DESTINATION include
+        COMPONENT Devel
+        MESSAGE_NEVER
+        ${3RDPARTY_INSTALL_PATTERN}
+)
 
 if(NOT WIN32 AND OSSIA_MUST_INSTALL_BOOST)
-  install(DIRECTORY ${OSSIA_3RDPARTY_FOLDER}/${BOOST_VERSION}/boost
+  install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/${BOOST_VERSION}/boost"
           DESTINATION include
           COMPONENT Devel
-          MESSAGE_NEVER)
+          MESSAGE_NEVER
+          ${3RDPARTY_INSTALL_PATTERN}
+)
 endif()
 endif()
 

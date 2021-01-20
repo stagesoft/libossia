@@ -98,6 +98,12 @@ oscquery_mirror_protocol::oscquery_mirror_protocol(
     m_httpHost.erase(m_httpHost.begin(), m_httpHost.begin() + 5);
 }
 
+
+void oscquery_mirror_protocol::stop()
+{
+  cleanup_connections();
+}
+
 void oscquery_mirror_protocol::cleanup_connections()
 {
   try
@@ -204,7 +210,7 @@ void oscquery_mirror_protocol::query_stop()
 
 oscquery_mirror_protocol::~oscquery_mirror_protocol()
 {
-  cleanup_connections();
+  stop();
 }
 
 bool oscquery_mirror_protocol::pull(net::parameter_base& address)
@@ -377,12 +383,12 @@ bool oscquery_mirror_protocol::observe_quietly(
 
 bool oscquery_mirror_protocol::update(net::node_base& b)
 {
-  auto fut = update_future(b);
+  auto fut = update_async(b);
   auto status = fut.wait_for(std::chrono::seconds(3));
   return status == std::future_status::ready;
 }
 
-std::future<void> oscquery_mirror_protocol::update_future(net::node_base& b)
+std::future<void> oscquery_mirror_protocol::update_async(net::node_base& b)
 {
   m_namespacePromise = std::promise<void>{};
   auto fut = m_namespacePromise.get_future();
@@ -533,11 +539,11 @@ void oscquery_mirror_protocol::init()
 {
   m_oscServer = std::make_unique<osc::receiver>(
       m_osc_port,
-      [=](const oscpack::ReceivedMessage& m,
+      [this](const oscpack::ReceivedMessage& m,
           const oscpack::IpEndpointName& ip) { this->on_OSCMessage(m, ip); });
 
   m_websocketClient = std::make_unique<websocket_client>(
-      [=](connection_handler hdl, websocketpp::frame::opcode::value op,
+      [this](connection_handler hdl, websocketpp::frame::opcode::value op,
           std::string& msg) {
         switch (op)
         {
@@ -559,7 +565,7 @@ void oscquery_mirror_protocol::init()
 
   m_hasWS = true;
   std::atomic_bool started{false};
-  m_wsThread = std::thread([=,&started] {
+  m_wsThread = std::thread([this,&started] {
     try
     {
       started = true;
@@ -600,7 +606,7 @@ void oscquery_mirror_protocol::init()
 void oscquery_mirror_protocol::start_http()
 {
   m_http->worker = std::make_shared<asio::io_service::work>(m_http->context);
-  m_http->thread = std::thread([=] { m_http->context.run(); });
+  m_http->thread = std::thread([this] { m_http->context.run(); });
 }
 
 void oscquery_mirror_protocol::request_add_node(
@@ -712,11 +718,11 @@ bool oscquery_mirror_protocol::on_WSMessage(
         case message_type::Value:
         {
           // TODO instead just put full path in reply ?
-          auto p = m_getWSPromises.peek();
-          if (p)
+          get_ws_promise p;
+          if (m_getWSPromises.try_dequeue(p))
           {
             auto node
-                = ossia::net::find_node(m_device->get_root_node(), p->address);
+                = ossia::net::find_node(m_device->get_root_node(), p.address);
 
             const rapidjson::Value* obj_value = data.get();
             if(obj_value->IsObject())
@@ -739,17 +745,16 @@ bool oscquery_mirror_protocol::on_WSMessage(
               else
               {
                 m_device->on_unhandled_message(
-                    p->address, detail::ReadValue(*obj_value));
+                    p.address, detail::ReadValue(*obj_value));
               }
             }
             else
             {
               m_device->on_unhandled_message(
-                  p->address, oscquery::detail::ReadValue(*obj_value));
+                  p.address, oscquery::detail::ReadValue(*obj_value));
             }
 
-            p->promise.set_value();
-            m_getWSPromises.pop();
+            p.promise.set_value();
           }
 
           else // if update from critical param
@@ -880,7 +885,7 @@ bool oscquery_mirror_protocol::on_BinaryWSMessage(
     const std::string& message)
 {
   auto handler
-      = [=](const oscpack::ReceivedMessage& m,
+      = [this](const oscpack::ReceivedMessage& m,
             const oscpack::IpEndpointName& ip) { this->on_OSCMessage(m, ip); };
   osc::listener<decltype(handler)> h{handler};
   // TODO use proper ip / port

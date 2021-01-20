@@ -7,7 +7,7 @@
 #include <ossia/network/dataspace/dataspace_fwd.hpp>
 #include <ossia/network/domain/domain_fwd.hpp>
 #include <ossia/network/value/destination.hpp>
-
+#include <ossia/detail/std_fwd.hpp>
 #include <nano_signal_slot.hpp>
 #include <ossia_export.h>
 
@@ -15,26 +15,11 @@
 #include <functional>
 #include <memory>
 #include <vector>
+OSSIA_STD_BEGIN_NAMESPACE
+template <typename T>
+class future;
+OSSIA_STD_END_NAMESPACE
 
-namespace std
-{
-#if defined(__EMSCRIPTEN__)
-inline namespace __2
-{
-template <typename T>
-class future;
-}
-#elif defined(_LIBCPP_VERSION)
-inline namespace __1
-{
-template <typename T>
-class future;
-}
-#else
-template <typename T>
-class future;
-#endif
-}
 /*
 extern template class ossia::callback_container<ossia::value_callback>;
 extern template class std::future<void>;
@@ -59,11 +44,11 @@ struct full_parameter_data;
 class OSSIA_EXPORT parameter_base : public callback_container<value_callback>
 {
 public:
-  parameter_base(ossia::net::node_base& n) : m_node{n}
+  explicit parameter_base(ossia::net::node_base& n) : m_node{n}
   {
   }
-  parameter_base(const parameter_base&) = delete;
-  parameter_base(parameter_base&&) = delete;
+  explicit parameter_base(const parameter_base&) = delete;
+  explicit parameter_base(parameter_base&&) = delete;
   parameter_base& operator=(const parameter_base&) = delete;
   parameter_base& operator=(parameter_base&&) = delete;
 
@@ -141,8 +126,8 @@ public:
   std::vector<ossia::value>
   value(const std::vector<ossia::destination_index>&) const;
 
-  virtual parameter_base& set_value(const ossia::value&) = 0;
-  virtual parameter_base& set_value(ossia::value&&) = 0;
+  virtual ossia::value set_value(const ossia::value&) = 0;
+  virtual ossia::value set_value(ossia::value&&) = 0;
 
   //! Reimplement to provide a way that does not call the observers.
   virtual void set_value_quiet(const ossia::value& v)

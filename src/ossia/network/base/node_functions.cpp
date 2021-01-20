@@ -16,6 +16,8 @@
 #include <utility>
 #include <vector>
 
+#include <rapidfuzz/fuzz.hpp>
+
 namespace ossia
 {
 namespace net
@@ -184,11 +186,11 @@ find_or_create_node(node_base& dev, string_view parameter_base, bool reading)
   }
 }
 
-std::vector<node_base*> find_nodes(node_base& dev, string_view pattern)
+std::vector<node_base*> find_nodes(node_base& root, string_view pattern)
 {
   if (!ossia::traversal::is_pattern(pattern))
   {
-    auto node = ossia::net::find_node(dev, pattern);
+    auto node = ossia::net::find_node(root, pattern);
     if (node)
       return {node};
     else
@@ -196,13 +198,13 @@ std::vector<node_base*> find_nodes(node_base& dev, string_view pattern)
   }
   else if (auto path = traversal::make_path(pattern))
   {
-    std::vector<node_base*> nodes{&dev};
+    std::vector<node_base*> nodes{&root};
     traversal::apply(*path, nodes);
     return nodes;
   }
   else
   {
-    auto node = ossia::net::find_node(dev, pattern);
+    auto node = ossia::net::find_node(root, pattern);
     if (node)
       return {node};
     else
@@ -470,18 +472,26 @@ void expand_ranges(std::string& str)
 
     for (auto it = positions.rbegin(); it != positions.rend(); ++it)
     {
-      std::string rep{"{"};
-      rep.reserve(3 * std::abs((it->last - it->first)));
-      for (int64_t v = it->first; v <= it->last; v++)
+      if(it->last == it->first)
       {
-        rep += std::to_string(v);
-        rep += ',';
+        str.replace(it->start, it->length, std::to_string(it->first));
       }
-
-      if (rep.back() == ',')
+      else
       {
-        rep.back() = '}';
-        str.replace(it->start, it->length, rep);
+        std::string rep;
+        rep.reserve(3 * std::abs((it->last - it->first)) + 2);
+        rep.push_back('{');
+        for (int64_t v = it->first; v <= it->last; v++)
+        {
+          rep += std::to_string(v);
+          rep += ',';
+        }
+
+        if (rep.back() == ',')
+        {
+          rep.back() = '}';
+          str.replace(it->start, it->length, rep);
+        }
       }
     }
   }
@@ -507,29 +517,29 @@ std::string canonicalize_str(std::string str)
 
     for (auto it = rit; it != rend; ++it)
     {
-      auto str = it->str();
-      str = str.substr(1, str.size() - 2);
+      auto theStr = it->str();
+      theStr = theStr.substr(1, theStr.size() - 2);
       std::bitset<128> bits;
 
-      for (int i = 0, N = str.size(); i < N;)
+      for (int i = 0, N = theStr.size(); i < N;)
       {
         if ((N - i) > 2)
         {
-          if (str[i + 1] == '-' && (int)str[i + 2] > (int)str[i])
+          if (theStr[i + 1] == '-' && (int)theStr[i + 2] > (int)theStr[i])
           {
-            for (int ch = (int)str[i]; ch <= (int)str[i + 2]; ++ch)
+            for (int ch = (int)theStr[i]; ch <= (int)theStr[i + 2]; ++ch)
               bits[ch] = true;
             i += 2;
           }
           else
           {
-            bits[(int)str[i]] = true;
+            bits[(int)theStr[i]] = true;
             i++;
           }
         }
         else
         {
-          bits[(int)str[i]] = true;
+          bits[(int)theStr[i]] = true;
           i++;
         }
       }
@@ -609,7 +619,8 @@ ossia::net::address_scope get_address_scope(ossia::string_view addr)
   return type;
 }
 
-std::vector<ossia::net::node_base*> list_all_child(ossia::net::node_base* node)
+std::vector<ossia::net::node_base*> list_all_children(ossia::net::node_base* node,
+                                                      unsigned int depth)
 {
   std::vector<ossia::net::node_base*> children = node->children_copy();
   std::vector<ossia::net::node_base*> list;
@@ -630,14 +641,58 @@ std::vector<ossia::net::node_base*> list_all_child(ossia::net::node_base* node)
     return ossia::net::get_priority(*n1) > ossia::net::get_priority(*n2);
   });
 
+  int next_depth = -1;
+  if(depth > 0)
+    next_depth = depth - 1;
+
   for (auto it = children.begin(); it != children.end(); it++)
   {
     list.push_back(*it);
-    auto nested_list = list_all_child(*it);
-    list.insert(list.end(), nested_list.begin(), nested_list.end());
+    if(next_depth != 0)
+    {
+      auto nested_list = list_all_children(*it, next_depth);
+      list.insert(list.end(), nested_list.begin(), nested_list.end());
+    }
   }
 
   return list;
+}
+
+/**
+ * @brief fuzzysearch: search for nodes that match the pattern string
+ * @param nodes: vector of nodes from where to start
+ * @param pattern: strings to search
+ * @return a vector of fuzzysearch_result sorted in descending score order
+ */
+void fuzzysearch(std::vector<ossia::net::node_base*> nodes,
+                 const std::vector<std::string>& patterns,
+                 std::vector<fuzzysearch_result>& results)
+{
+  results.clear();
+
+  for(const auto& node : nodes)
+  {
+    auto children = list_all_children(node);
+
+    results.reserve(results.size() + children.size());
+
+    for(const auto& n : children)
+    {
+      std::string oscaddress = ossia::net::osc_parameter_string_with_device(*n);
+      double percent = 1.0;
+      for(const auto& pattern : patterns)
+      {
+        percent *= rapidfuzz::fuzz::partial_ratio(oscaddress, pattern) / 100.;
+      }
+      results.push_back({percent * 100., oscaddress, n});
+    }
+
+    // TODO in the future, when we'll use C++20
+    // ranges::sort(results, std::greater{}, &fuzzysearch_result::score);
+    ossia::sort(results, [](const fuzzysearch_result& left, const fuzzysearch_result& right){
+      return left.score > right.score;
+    });
+  }
 }
 
 std::vector<parameter_base*> find_or_create_parameter(
@@ -648,8 +703,9 @@ std::vector<parameter_base*> find_or_create_parameter(
   // or create a new node with that name and a parameter
 
   std::vector<std::string> names;
+  bool pattern_matching = is_brace_expansion(address);
 
-  if (is_brace_expansion(address))
+  if (pattern_matching)
   {
     // 1. Replace all [ ] with { } form
     auto str = canonicalize_str(address);
@@ -675,7 +731,10 @@ std::vector<parameter_base*> find_or_create_parameter(
     else
       nodes.push_back(n);
 
-    ossia::remove_one_if(names, [&](auto& s) { return s == n->get_name(); });
+    if(pattern_matching)
+      ossia::remove_one_if(names, [&](auto& s) { return s == n->get_name(); });
+    else
+      ossia::remove_one_if(names, [&](auto& s) { return s == address; });
   }
 
   for (auto s : names)

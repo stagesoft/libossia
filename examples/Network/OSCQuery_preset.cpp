@@ -11,8 +11,6 @@
 
 int main(int argc, char** argv)
 {
-  int remote_port = 9997;
-
   std::string json_example =
       R"_(
       {
@@ -79,10 +77,6 @@ int main(int argc, char** argv)
        }
       }
       )_";
-  if(argc > 1)
-  {
-    try { remote_port = boost::lexical_cast<int>(argv[1]); } catch(...) {  };
-  }
 
   ossia::net::generic_device device{"OSCQuery Example"};
 

@@ -1,4 +1,4 @@
-#define CATCH_CONFIG_MAIN
+
 #define DR_WAV_IMPLEMENTATION 1
 #include <catch.hpp>
 #include <ossia/dataflow/execution_state.hpp>
@@ -9,7 +9,7 @@ TEST_CASE ("test_sound_ref", "test_sound_ref")
 {
   using namespace ossia;
   nodes::sound_ref snd;
-  snd.set_sound(std::vector<float_vector>{ {0.1, 0.2, 0.3, 0.4} });
+  snd.set_sound(ossia::audio_array{ {0.1, 0.2, 0.3, 0.4} });
 
   execution_state e;
   e.bufferSize = 9;
@@ -23,7 +23,7 @@ TEST_CASE ("test_sound_ref", "test_sound_ref")
 
   for(auto tk : snd.requested_tokens)
   {
-    snd.run(tk, {e});
+    snd.run(tk, {&e});
   }
 
   auto op = snd.root_outputs()[0]->target<audio_port>()->samples;
@@ -100,7 +100,7 @@ TEST_CASE ("test_sound_mmap", "test_sound_mmap")
 
   for(auto tk : snd.requested_tokens)
   {
-    snd.run(tk, {e});
+    snd.run(tk, {&e});
     auto op = snd.root_outputs()[0]->target<audio_port>()->samples;
   }
 

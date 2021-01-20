@@ -6,22 +6,13 @@ namespace ossia
 namespace max
 {
 
-#pragma mark -
-#pragma mark t_model structure declaration
-
 class model : public node_base
 {
 public:
 
   using is_model = std::true_type;
 
-  bool register_node(const std::vector<std::shared_ptr<t_matcher>>& nodes);
-  bool do_registration(const std::vector<std::shared_ptr<t_matcher>>& nodes);
-  bool unregister();
-  void register_children();
-  void save_children_state();
-
-  static ossia::safe_set<model*>& quarantine();
+  void do_registration();
 
   static void* create(t_symbol*, long, t_atom*);
   static void destroy(ossia::max::model*);

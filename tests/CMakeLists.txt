@@ -1,4 +1,10 @@
 ### Setup ###
+# Don't run tests on CI when we're building specific bindings...
+if(OSSIA_CI)
+if(OSSIA_PD_ONLY OR OSSIA_MAX_ONLY OR OSSIA_PYTHON_ONLY OR OSSIA_NODEJS OR OSSIA_JAVA_ONLY OR OSSIA_UNITY3D)
+  return()
+endif()
+endif(OSSIA_CI)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 get_target_property(OSSIA_PROTOCOLS ossia OSSIA_PROTOCOLS)
@@ -10,24 +16,26 @@ function(ossia_add_test TESTNAME TESTSRCS)
       target_compile_definitions(ossia_${TESTNAME} PUBLIC  CATCH_CONFIG_NO_CPP17_UNCAUGHT_EXCEPTIONS)
     endif()
     target_include_directories(ossia_${TESTNAME} PUBLIC "${CMAKE_CURRENT_LIST_DIR}/catch")
-    target_link_libraries(ossia_${TESTNAME} PUBLIC ${OSSIA_LINK_OPTIONS} ossia)
-
-    if(OSSIA_SANITIZE)
-        sanitize_build(ossia_${TESTNAME})
-    endif()
-    use_gold(ossia_${TESTNAME})
+    target_link_libraries(ossia_${TESTNAME} PUBLIC ${OSSIA_LINK_OPTIONS} ossia PRIVATE Catch2::Catch2WithMain)
 
     add_test(NAME ossia_target_${TESTNAME} COMMAND ossia_${TESTNAME})
 endFunction()
-
 
 ### Tests ###
 ossia_add_test(PresetTest   "${CMAKE_CURRENT_SOURCE_DIR}/Preset/PresetTest.cpp")
 ossia_add_test(AddressTest  "${CMAKE_CURRENT_SOURCE_DIR}/Network/AddressTest.cpp")
 ossia_add_test(PathTest     "${CMAKE_CURRENT_SOURCE_DIR}/Network/PathTest.cpp")
 
-ossia_add_test(DeviceTest   "${CMAKE_CURRENT_SOURCE_DIR}/Network/DeviceTest.cpp")
+if(NOT OSSIA_CI)
+  # this test is too slow to run on CI
+  ossia_add_test(DeviceTest   "${CMAKE_CURRENT_SOURCE_DIR}/Network/DeviceTest.cpp")
+endif()
+
 ossia_add_test(NodeTest     "${CMAKE_CURRENT_SOURCE_DIR}/Network/NodeTest.cpp")
+
+
+ossia_add_test(ValueTest                   "${CMAKE_CURRENT_SOURCE_DIR}/Editor/ValueTest.cpp")
+ossia_add_test(DataspaceTest               "${CMAKE_CURRENT_SOURCE_DIR}/Editor/DataspaceTest.cpp")
 
 if(MSVC AND NOT OSSIA_STATIC)
   add_custom_command(TARGET ossia_PresetTest POST_BUILD
@@ -49,8 +57,9 @@ if(OSSIA_EDITOR)
     ossia_add_test(ScenarioAlgoTest            "${CMAKE_CURRENT_SOURCE_DIR}/Editor/ScenarioAlgoTest.cpp")
     ossia_add_test(ScenarioTest                "${CMAKE_CURRENT_SOURCE_DIR}/Editor/ScenarioTest.cpp")
     ossia_add_test(LoopTest                    "${CMAKE_CURRENT_SOURCE_DIR}/Editor/LoopTest.cpp")
-
+    target_link_libraries(ossia_LoopTest PRIVATE rubberband samplerate)
   endif()
+
   ossia_add_test(CurveTest                   "${CMAKE_CURRENT_SOURCE_DIR}/Editor/CurveTest.cpp")
   ossia_add_test(CurveSegmentEmptyTest       "${CMAKE_CURRENT_SOURCE_DIR}/Editor/CurveSegment/CurveSegmentEmptyTest.cpp")
   ossia_add_test(CurveSegmentLinearTest      "${CMAKE_CURRENT_SOURCE_DIR}/Editor/CurveSegment/CurveSegmentLinearTest.cpp")
@@ -67,8 +76,6 @@ if(OSSIA_EDITOR)
   ossia_add_test(TimeIntervalTest            "${CMAKE_CURRENT_SOURCE_DIR}/Editor/TimeIntervalTest.cpp")
   ossia_add_test(TimeEventTest               "${CMAKE_CURRENT_SOURCE_DIR}/Editor/TimeEventTest.cpp")
   ossia_add_test(TimeSyncTest                "${CMAKE_CURRENT_SOURCE_DIR}/Editor/TimeSyncTest.cpp")
-  ossia_add_test(ValueTest                   "${CMAKE_CURRENT_SOURCE_DIR}/Editor/ValueTest.cpp")
-  ossia_add_test(DataspaceTest               "${CMAKE_CURRENT_SOURCE_DIR}/Editor/DataspaceTest.cpp")
   ossia_add_test(DataspaceMergeTest          "${CMAKE_CURRENT_SOURCE_DIR}/Editor/DataspaceMergeTest.cpp")
 endif()
 
@@ -77,6 +84,7 @@ if(OSSIA_DATAFLOW)
   ossia_add_test(TickMethodTest              "${CMAKE_CURRENT_SOURCE_DIR}/Dataflow/TickMethodTest.cpp")
   ossia_add_test(TokenRequestTest            "${CMAKE_CURRENT_SOURCE_DIR}/Dataflow/TokenRequestTest.cpp")
   ossia_add_test(SoundTest                   "${CMAKE_CURRENT_SOURCE_DIR}/Dataflow/SoundTest.cpp")
+  target_link_libraries(ossia_SoundTest PRIVATE rubberband samplerate)
 endif()
 
 if(OSSIA_QML)
@@ -90,7 +98,6 @@ if(OSSIA_QML)
     "${CMAKE_CURRENT_SOURCE_DIR}/testdata/websocket/ws_icmc.qml"
   )
   add_custom_target(ossia_test_ui_qml SOURCES ${QMLS})
-
 
   if(OSSIA_QML_DEVICE)
     ossia_add_test(QtTest                  "${CMAKE_CURRENT_SOURCE_DIR}/Qt/QtDeviceTest.cpp")
@@ -106,17 +113,27 @@ if(OSSIA_QML)
 
   if(OSSIA_PROTOCOL_HTTP)
     ossia_add_test(HttpTest              "${CMAKE_CURRENT_SOURCE_DIR}/Network/HttpTest.cpp")
+    ossia_add_test(HttpQMLTest              "${CMAKE_CURRENT_SOURCE_DIR}/Network/HttpQMLTest.cpp")
   endif()
 endif()
 
 if(OSSIA_PROTOCOL_OSCQUERY)
   # ossia_add_test(HttpRequestTest            "${CMAKE_CURRENT_SOURCE_DIR}/Network/HttpRequestTest.cpp")
   ossia_add_test(OSCQueryTest            "${CMAKE_CURRENT_SOURCE_DIR}/Network/OSCQueryTest.cpp")
+  ossia_add_test(OSCQueryDeviceTest            "${CMAKE_CURRENT_SOURCE_DIR}/Network/OSCQueryDeviceTest.cpp")
   ossia_add_test(OSCQueryColorTest       "${CMAKE_CURRENT_SOURCE_DIR}/Network/OSCQueryColorTest.cpp")
   if(OSSIA_CPP)
     ossia_add_test(OSCQueryTreeCallbackTest  "${CMAKE_CURRENT_SOURCE_DIR}/Network/OSCQueryTreeCallbackTest.cpp")
     ossia_add_test(OSCQueryValueCallbackTest "${CMAKE_CURRENT_SOURCE_DIR}/Network/OSCQueryValueCallbackTest.cpp")
   endif()
+endif()
+
+if(OSSIA_PROTOCOL_MIDI)
+  ossia_add_test(MIDITest             "${CMAKE_CURRENT_SOURCE_DIR}/Network/MIDITest.cpp")
+endif()
+
+if(OSSIA_PROTOCOL_MINUIT)
+  ossia_add_test(MinuitTest             "${CMAKE_CURRENT_SOURCE_DIR}/Network/MinuitTest.cpp")
 endif()
 
 if(OSSIA_PROTOCOL_PHIDGETS)
@@ -136,6 +153,7 @@ endif()
 ### Benchmarks ###
 
 if(OSSIA_BENCHMARKS)
+  find_package(benchmark REQUIRED)
   function(ossia_add_bench TESTNAME TESTSRCS)
     add_executable(ossia_${TESTNAME} ${TESTSRCS})
     target_compile_options(ossia_${TESTNAME} PUBLIC ${OSSIA_COMPILE_OPTIONS})
@@ -143,37 +161,42 @@ if(OSSIA_BENCHMARKS)
       target_compile_options(ossia_${TESTNAME} PUBLIC -O3 -march=native)
     endif()
 
-    target_link_libraries(ossia_${TESTNAME} PUBLIC ${OSSIA_LINK_OPTIONS} Qt5::Core ossia)
-
-    if(OSSIA_SANITIZE)
-      sanitize_build(ossia_${TESTNAME})
-    endif()
-    use_gold(ossia_${TESTNAME})
+    target_link_libraries(ossia_${TESTNAME} PUBLIC ${OSSIA_LINK_OPTIONS} ossia benchmark::benchmark Catch2::Catch2WithMain)
 
     # add_test(NAME ossia_target_${TESTNAME} COMMAND ossia_${TESTNAME})
   endFunction()
 
-  ossia_add_test(IntervalBenchmark            "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/IntervalBenchmark.cpp")
-  ossia_add_bench(AutomationBenchmark         "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/AutomationBenchmark.cpp")
-  ossia_add_bench(AutomationFloatBenchmark    "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/AutomationFloatBenchmark.cpp")
-  ossia_add_bench(AutomationFloatDataBench    "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/AutomationFloatDataBench.cpp")
-  ossia_add_bench(MappingGluttonBenchmark     "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/MappingGluttonBenchmark.cpp")
-  ossia_add_bench(MappingStrictBenchmark      "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/MappingStrictBenchmark.cpp")
-  ossia_add_bench(MappingStrictDataBenchmark  "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/MappingStrictDataBenchmark.cpp")
-  ossia_add_bench(MappingGluttonDataBenchmark "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/MappingGluttonDataBenchmark.cpp")
-  ossia_add_bench(MappingBenchmark            "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/MappingBenchmark.cpp")
-  ossia_add_bench(MappingDataBenchmark        "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/MappingDataBenchmark.cpp")
-  ossia_add_bench(OverallBenchmark            "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/OverallBenchmark.cpp")
-  ossia_add_bench(GraphBenchmark              "${CMAKE_CURRENT_SOURCE_DIR}/Dataflow/GraphBenchmark.cpp")
-  ossia_add_bench(TBBBenchmark                "${CMAKE_CURRENT_SOURCE_DIR}/Dataflow/TestTBB.cpp")
-  ossia_add_bench(CPPTFBenchmark              "${CMAKE_CURRENT_SOURCE_DIR}/Dataflow/TestCPPTF.cpp")
+  if(OSSIA_DATAFLOW)
+    if(TARGET ${QT_PREFIX}::Core)
+      ossia_add_bench(GraphBenchmark              "${CMAKE_CURRENT_SOURCE_DIR}/Dataflow/GraphBenchmark.cpp")
+      target_link_libraries(ossia_GraphBenchmark PRIVATE ${QT_PREFIX}::Core)
+    endif()
+
+    if(TARGET TBB::TBB)
+      ossia_add_bench(TBBBenchmark                "${CMAKE_CURRENT_SOURCE_DIR}/Dataflow/TestTBB.cpp")
+      target_link_libraries(TBBBenchmark PRIVATE TBB::TBB)
+    endif()
+
+    ossia_add_test(IntervalBenchmark            "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/IntervalBenchmark.cpp")
+    ossia_add_bench(AutomationBenchmark         "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/AutomationBenchmark.cpp")
+    ossia_add_bench(AutomationFloatBenchmark    "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/AutomationFloatBenchmark.cpp")
+    ossia_add_bench(AutomationFloatDataBench    "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/AutomationFloatDataBench.cpp")
+    ossia_add_bench(MappingGluttonBenchmark     "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/MappingGluttonBenchmark.cpp")
+    ossia_add_bench(MappingStrictBenchmark      "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/MappingStrictBenchmark.cpp")
+    ossia_add_bench(MappingStrictDataBenchmark  "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/MappingStrictDataBenchmark.cpp")
+    ossia_add_bench(MappingGluttonDataBenchmark "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/MappingGluttonDataBenchmark.cpp")
+    ossia_add_bench(MappingBenchmark            "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/MappingBenchmark.cpp")
+    ossia_add_bench(MappingDataBenchmark        "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/MappingDataBenchmark.cpp")
+    ossia_add_bench(OverallBenchmark            "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/OverallBenchmark.cpp")
+    ossia_add_bench(CPPTFBenchmark              "${CMAKE_CURRENT_SOURCE_DIR}/Dataflow/TestCPPTF.cpp")
+    ossia_add_bench(MixNSines                   "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/MixNSines.cpp")
+  endif()
+
   ossia_add_bench(DeviceBenchmark             "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/DeviceBenchmark.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/Random.hpp")
   ossia_add_bench(DeviceBenchmark_Nsec_client "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/DeviceBenchmark_Nsec_client.cpp")
   ossia_add_bench(DeviceBenchmark_Nsec_server "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/DeviceBenchmark_Nsec_server.cpp")
   ossia_add_bench(DeviceBenchmark_client      "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/DeviceBenchmark_client.cpp")
-
-  ossia_add_bench(MixNSines                   "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks/MixNSines.cpp")
 endif()
 
 # A command to copy the test data.

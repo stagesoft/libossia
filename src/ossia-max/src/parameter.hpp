@@ -7,18 +7,16 @@ namespace ossia
 
 namespace max
 {
-
-class parameter : public parameter_base
+class device;
+class parameter final : public parameter_base
 {
 public:
   using is_parameter = std::true_type;
 
-  bool register_node(const std::vector<std::shared_ptr<t_matcher>>& node);
-  bool do_registration(const std::vector<std::shared_ptr<t_matcher>>& node);
+  void do_registration();
   bool unregister();
   void save_values();
-
-  static ossia::safe_set<parameter*>& quarantine();
+  void on_device_created_callback(ossia::max::device* dev);
 
   static void* create(t_symbol*, long, t_atom*);
   static void destroy(ossia::max::parameter*);
@@ -28,7 +26,6 @@ public:
   static t_max_err notify(ossia::max::parameter *x,
       t_symbol *s, t_symbol *msg, void *sender, void *data);
   static void loadbang(parameter* x);
-
 };
 
 } // max namespace

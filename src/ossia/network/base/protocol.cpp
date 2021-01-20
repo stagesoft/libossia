@@ -17,6 +17,11 @@ void protocol_base::request(parameter_base&)
 {
 }
 
+bool protocol_base::push(const parameter_base& param, value&& v)
+{
+  return push(param, (const value&) v);
+}
+
 bool protocol_base::push(const parameter_base& p)
 {
   return push(p, p.value());
@@ -42,6 +47,19 @@ bool protocol_base::push_raw_bundle(
     b &= push_raw(addr);
   }
   return b;
+}
+
+std::future<void> protocol_base::update_async(node_base& node_base)
+{
+  // Mock implementation for devices which haven't been ported to async yet
+  std::promise<void> promise;
+  promise.set_value();
+  update(node_base);
+  return promise.get_future();
+}
+
+void protocol_base::set_device(device_base& dev)
+{
 }
 
 std::future<void> protocol_base::pull_async(parameter_base&)

@@ -77,26 +77,11 @@ public:
           break;
       }
     }
-    m_resampler.reset(0_tv, m_mode, m_handle.channels(), m_handle.sampleRate());
   }
 
-  void set_native_tempo(double v)
+  void transport(time_value date) override
   {
-    tempo = v;
-  }
-
-  void set_stretch_mode(ossia::audio_stretch_mode mode)
-  {
-    if(m_mode != mode)
-    {
-      m_mode = mode;
-      m_resampler.reset(0_tv, m_mode, channels(), m_handle.sampleRate());
-    }
-  }
-
-  void reset_resampler(time_value date) override
-  {
-    m_resampler.reset(date, m_mode, channels(), m_handle.sampleRate());
+    m_resampler.transport(to_sample(date, m_handle.sampleRate()));
   }
 
   void fetch_audio(int64_t start, int64_t samples_to_write, double** audio_array_base) noexcept
@@ -281,24 +266,19 @@ public:
     {
       if(t.prev_date < m_prev_date)
       {
-        reset_resampler(t.prev_date);
+        transport(t.prev_date);
       }
-
-      // Allocate some space
-      frame_data = nullptr;
 
       for (std::size_t chan = 0; chan < channels; chan++)
       {
         ap.samples[chan].resize(e.bufferSize());
       }
 
-      m_loop_duration_samples = m_loop_duration.impl * e.modelToSamples();
-      m_start_offset_samples = m_start_offset.impl * e.modelToSamples();
+      double stretch_ratio = update_stretch(t, e);
 
-      // resample
-      double tempo_ratio =  this->tempo / t.tempo;
+      // Resample
       m_resampler.run(*this, t, e,
-                      tempo_ratio,
+                      stretch_ratio,
                       channels, len,
                       samples_to_read, samples_to_write, samples_offset,
                       ap);
@@ -307,7 +287,7 @@ public:
       {
         // fade
         snd::do_fade(t.start_discontinuous, t.end_discontinuous, ap.samples[chan],
-                     samples_offset, samples_to_read);
+                     samples_offset, samples_to_write);
       }
 
       ossia::snd::perform_upmix(this->upmix, channels, ap);
@@ -337,21 +317,11 @@ private:
 
   std::size_t start{};
   std::size_t upmix{};
-  double tempo{};
 
   using read_fn_t = void(*)(ossia::mutable_audio_span<float>& ap, void* data, int64_t samples);
   read_fn_t m_converter{};
   std::vector<char> m_safetyBuffer;
   std::vector<std::vector<float>> m_resampleBuffer;
-  void* frame_data{};
-
-  resampler m_resampler;
-  audio_stretch_mode m_mode{};
-
-  time_value m_prev_date{};
-
-  int64_t m_loop_duration_samples{};
-  int64_t m_start_offset_samples{};
 };
 
 }

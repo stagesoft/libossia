@@ -18,21 +18,43 @@
 
 using namespace ossia::max;
 
-void* ossia_max::browse_clock;
-ZeroconfOscqueryListener ossia_max::zeroconf_oscq_listener;
-ZeroconfMinuitListener ossia_max::zeroconf_minuit_listener;
+void* ossia_max::s_browse_clock;
+ZeroconfOscqueryListener ossia_max::s_zeroconf_oscq_listener;
+ZeroconfMinuitListener ossia_max::s_zeroconf_minuit_listener;
+std::map<ossia::net::node_base*, ossia::safe_set<matcher*>> ossia_max::s_node_matchers_map{};
+t_class* ossia_max::ossia_patcher_listener_class;
+
+void patcher_listener_notify(t_object* x, t_symbol *s,
+                             t_symbol *msg, t_object *sender, void *data)
+{
+  if(msg == gensym("willfree"))
+  {
+    ossia_max::remove_patcher_descriptor(sender);
+  }
+}
+
+void patcher_listener_free(t_object *x)
+{
+  object_unregister(x);
+}
+
+void *patcher_listener_new()
+{
+  return (t_object *)object_alloc(ossia_max::ossia_patcher_listener_class);
+}
 
 // ossia-max library constructor
 ossia_max::ossia_max():
     m_localProtocol{new ossia::net::local_protocol},
-    m_device{std::unique_ptr<ossia::net::protocol_base>(m_localProtocol), "ossia_max_device"},
+    m_device{std::make_shared<ossia::net::generic_device>(
+        std::unique_ptr<ossia::net::protocol_base>(m_localProtocol), "ossia_max_device")},
     m_log_sink{std::make_shared<max_msp_log_sink>()}
 {
   m_log_sink.get()->set_level(spdlog::level::err);
   ossia::context c{{m_log_sink}};
   common_symbols_init();
 
-  m_device.on_attribute_modified.connect<&device_base::on_attribute_modified_callback>();
+  m_device->on_attribute_modified.connect<&device_base::on_attribute_modified_callback>();
 
   parameters.reserve(2048);
   remotes.reserve(1024);
@@ -41,14 +63,17 @@ ossia_max::ossia_max():
   views.reserve(512);
   devices.reserve(8);
   clients.reserve(8);
+  explorers.reserve(128);
+  oasserts.reserve(32);
 
-#if OSSIA_MAX_AUTOREGISTER
-  m_reg_clock = clock_new(this, (method) ossia_max::register_nodes);
-#endif
+  s_browse_clock = clock_new(this, (method) ossia_max::discover_network_devices);
+  clock_delay(ossia_max::s_browse_clock, 100.);
 
-  m_timer_clock = clock_new(this, (method) ossia_max::poll_all_queues);
-  browse_clock = clock_new(this, (method) ossia_max::discover_network_devices);
-  clock_delay(ossia_max::browse_clock, 100.);
+  ossia_patcher_listener_class = class_new("ossia.patcher_listener", (method)patcher_listener_new, (method)patcher_listener_free, sizeof(t_object), 0L, A_CANT, 0);
+  class_addmethod(ossia_patcher_listener_class, (method)patcher_listener_notify,			"notify", 0);
+  class_register(CLASS_NOBOX, ossia_patcher_listener_class);
+
+  m_patcher_listener = (t_object*) object_new(CLASS_NOBOX, gensym("ossia.patcher_listener"), nullptr);
 
   post("OSSIA library for Max is loaded");
   post("build SHA : %s", ossia::get_commit_sha().c_str());
@@ -57,7 +82,7 @@ ossia_max::ossia_max():
 // ossia-max library destructor
 ossia_max::~ossia_max()
 {
-  m_device.on_attribute_modified.disconnect<&device_base::on_attribute_modified_callback>();
+  m_device->on_attribute_modified.disconnect<&device_base::on_attribute_modified_callback>();
 
   for (auto x : devices.copy())
   {
@@ -68,7 +93,6 @@ ossia_max::~ossia_max()
     {
       multiplex.stop_expose_to(*proto);
     }
-    x->m_protocols.clear();
     x->disconnect_slots();
   }
   for (auto x : views.copy()){
@@ -90,6 +114,54 @@ ossia_max& ossia_max::instance()
 {
   static ossia_max library_instance;
   return library_instance;
+}
+
+void ossia_max::create_patcher_hierarchy(t_object* patcher)
+{
+  auto parent = ossia::max::get_patcher(patcher);
+  ossia_max::instance().patchers[patcher].parent_patcher = parent;
+
+  while(parent)
+  {
+    ossia_max::instance().patchers[parent].subpatchers.push_back(patcher);
+    patcher = parent;
+    parent = ossia::max::get_patcher(patcher);
+    ossia_max::instance().patchers[patcher].parent_patcher = parent;
+  }
+}
+
+patcher_descriptor& ossia_max::get_patcher_descriptor(t_object* patcher)
+{
+  auto& map = ossia_max::instance().patchers;
+  auto it = map.find(patcher);
+  if(it != map.end())
+  {
+    object_attach_byptr_register(
+        ossia_max::instance().m_patcher_listener,
+        patcher, CLASS_NOBOX);
+  }
+
+  return map[patcher];
+}
+
+void ossia_max::remove_patcher_descriptor(t_object* patcher)
+{
+  auto& map = ossia_max::instance().patchers;
+
+  auto it = map.find(patcher);
+  if(it != map.end())
+  {
+    auto parent = it->second.parent_patcher;
+    if(parent)
+    {
+      auto parent_it = map.find(parent);
+      if(parent_it != map.end())
+      {
+        parent_it->second.subpatchers.remove_all(patcher);
+      }
+    }
+    map.erase(it);
+  }
 }
 
 template<typename T>
@@ -125,269 +197,13 @@ std::vector<T*> sort_by_depth(const ossia::safe_set<T*>& safe)
   return list;
 }
 
-void ossia_max::register_nodes(ossia_max* x)
-{
-  auto& inst = ossia_max::instance();
-
-  inst.registering_nodes = true;
-
-  // first fill non-registered containers with all objects
-  fill_nr_vector(inst.devices, inst.nr_devices);
-  fill_nr_vector(inst.models, inst.nr_models);
-  fill_nr_vector(inst.parameters, inst.nr_parameters);
-  fill_nr_vector(inst.clients,    inst.nr_clients);
-  fill_nr_vector(inst.views, inst.nr_views);
-  fill_nr_vector(inst.remotes, inst.nr_remotes);
-  fill_nr_vector(inst.attributes, inst.nr_attributes);
-  auto dev_obj_list   = sort_by_depth(inst.nr_devices);
-  auto mod_obj_list   = sort_by_depth(inst.nr_models);
-  auto param_obj_list = sort_by_depth(inst.nr_parameters);
-  auto clt_obj_list = sort_by_depth(inst.nr_clients);
-  auto view_obj_list = sort_by_depth(inst.nr_views);
-  auto rem_obj_list = sort_by_depth(inst.nr_remotes);
-  auto att_obj_list = sort_by_depth(inst.nr_attributes);
-
-  std::vector<t_object*> to_be_initialized;
-
-  auto& map = inst.root_patcher;
-  for (auto it = map.begin(); it != map.end(); it++)
-  {
-    if(it->second.is_loadbanged)
-      continue;
-
-    t_object* patcher = it->first;
-
-    to_be_initialized.push_back(patcher);
-
-    for (auto dev : dev_obj_list)
-    {
-      if (dev->m_patcher_hierarchy.empty()) continue;
-      if(dev->m_patcher_hierarchy.back() == patcher)
-        ossia::max::device::register_children(dev);
-    }
-    for (auto model : mod_obj_list)
-    {
-      if (model->m_patcher_hierarchy.empty()) continue;
-      if ( model->m_patcher_hierarchy.back() == patcher
-            && model->m_matchers.empty())
-        ossia_register(model);
-    }
-    for (auto param : param_obj_list)
-    {
-      if (param->m_patcher_hierarchy.empty()) continue;
-      if ( param->m_patcher_hierarchy.back() == patcher
-            && param->m_matchers.empty())
-        ossia_register(param);
-    }
-
-    for (auto client : clt_obj_list)
-    {
-      if(client->m_patcher_hierarchy.empty()) continue;
-      if(client->m_patcher_hierarchy.back() == patcher)
-        ossia::max::client::register_children(client);
-    }
-    for (auto view : view_obj_list)
-    {
-      if (view->m_patcher_hierarchy.empty()) continue;
-      if ( view->m_patcher_hierarchy.back() == patcher
-            && view->m_matchers.empty())
-        ossia_register(view);
-    }
-    for (auto remote : rem_obj_list)
-    {
-      if (remote->m_patcher_hierarchy.empty()) continue;
-      if ( remote->m_patcher_hierarchy.back() == patcher
-            && remote->m_matchers.empty())
-        ossia_register(remote);
-    }
-    for (auto attr : att_obj_list)
-    {
-      if (attr->m_patcher_hierarchy.empty()) continue;
-      if ( attr->m_patcher_hierarchy.back() == patcher
-            && attr->m_matchers.empty())
-        ossia_register(attr);
-    }
-
-    // finally rise a flag to mark this patcher loadbangded
-    it->second.is_loadbanged = true;
-  }
-
-  inst.registering_nodes = false;
-
-  // push default value for all devices
-  std::vector<ossia::net::generic_device*> dev_list;
-  dev_list.reserve(inst.devices.size() + 1);
-  for(auto dev : inst.devices.reference())
-  {
-    dev_list.push_back(dev->m_device);
-  }
-  dev_list.push_back(inst.get_default_device());
-
-  ossia::sort(dev_list, [&](ossia::net::generic_device* a, ossia::net::generic_device* b)
-  {
-    auto prio_a = ossia::net::get_priority(a->get_root_node());
-    auto prio_b = ossia::net::get_priority(b->get_root_node());
-
-    if(!prio_a)
-      prio_a = 0.;
-
-    if(!prio_b)
-      prio_b = 0.;
-
-    return *prio_a > *prio_b;
-  });
-
-  for (auto dev : dev_list)
-  {
-    auto list = ossia::net::list_all_child(&dev->get_root_node());
-
-    for (ossia::net::node_base* child : list)
-    {
-      if (auto param = child->get_parameter())
-      {
-        auto val = ossia::net::get_default_value(*child);
-        if(val)
-        {
-          bool trig = false;
-          for(auto param : ossia_max::instance().parameters.reference())
-          {
-            for (auto& m : param->m_matchers)
-            {
-              if ( m->get_node() == child )
-              {
-                auto op = static_cast<parameter*>(m->get_parent());
-                auto patcher = op->m_patcher_hierarchy.back();
-                if(ossia::contains(to_be_initialized,patcher))
-                {
-                  child->get_parameter()->push_value(*val);
-                  trig = true;
-                  break;
-                }
-              }
-            }
-            if(trig)
-              break;
-          }
-
-          if(trig)
-          {
-            trig_output_value(child);
-          }
-        }
-      }
-    }
-  }
-}
-
-void ossia_max::start_timers()
-{
-  auto& x = ossia_max::instance();
-  clock_set(x.m_timer_clock, 1);
-  x.m_clock_count++;
-}
-
-void ossia_max::stop_timers()
-{
-  auto& x = ossia_max::instance();
-  if( x.m_clock_count > 0 )
-  {
-    x.m_clock_count--;
-  }
-  else
-  {
-    std::cout << "stop poll timers" << std::endl;
-    clock_unset(x.m_timer_clock);
-  }
-}
-
-void ossia_max::poll_all_queues(ossia_max* x)
-{
-  for(auto param : ossia_max::instance().parameters.reference())
-  {
-    for (auto& m : param->m_matchers)
-    {
-      m->output_value();
-    }
-  }
-
-  for(auto remote : ossia_max::instance().remotes.reference())
-  {
-    for (auto& m : remote->m_matchers)
-    {
-      m->output_value();
-    }
-  }
-
-  clock_delay(x->m_timer_clock, 10); // TODO add method to change rate
-}
-
 namespace ossia
 {
 namespace max
 {
 
-template <typename T>
-void object_quarantining(T* x)
-{
-  x->m_node_selection.clear();
-  if (!object_is_quarantined<T>(x))
-    x->quarantine().push_back(x);
-}
-
-template void object_quarantining<parameter>(parameter*);
-template void object_quarantining<attribute>(attribute*);
-template void object_quarantining<model>(model*);
-template void object_quarantining<remote>(remote*);
-template void object_quarantining<view>(view*);
-
-template <typename T>
-void object_dequarantining(T* x)
-{
-  x->quarantine().remove_all(x);
-}
-
-template void object_dequarantining<attribute>(attribute*);
-template void object_dequarantining<parameter>(parameter*);
-template void object_dequarantining<model>(model*);
-template void object_dequarantining<remote>(remote*);
-template void object_dequarantining<view>(view*);
-
-template <typename T>
-bool object_is_quarantined(T* x)
-{
-  return x->quarantine().contains(x);
-}
-
-template bool object_is_quarantined<parameter>(parameter*);
-template bool object_is_quarantined<model>(model*);
-template bool object_is_quarantined<remote>(remote*);
-template bool object_is_quarantined<view>(view*);
-
 #pragma mark -
 #pragma mark Utilities
-
-void register_quarantinized()
-{
-  for (auto model : model::quarantine().copy())
-  {
-    ossia_register(model);
-  }
-
-  for (auto parameter : parameter::quarantine().copy())
-  {
-    ossia_register(parameter);
-  }
-
-  for (auto view : view::quarantine().copy())
-  {
-    ossia_register(view);
-  }
-
-  for (auto remote : remote::quarantine().copy())
-  {
-    ossia_register(remote);
-  }
-}
 
 std::vector<object_base*> find_children_to_register(
     t_object* caller, t_object* root_patcher, t_symbol* search_symbol, bool search_dev)
@@ -397,45 +213,44 @@ std::vector<object_base*> find_children_to_register(
                                : gensym("ossia.remote");
 
   std::vector<object_base*> found;
-  bool found_model = false;
   bool found_view = false;
 
   // 1: look for [classname] objects into the patcher
   t_object* next_box = object_attr_getobj(root_patcher, _sym_firstobject);
 
   t_object* object_box = NULL;
-  object_obex_lookup(caller, gensym("#B"), &object_box);
+  if(caller)
+    object_obex_lookup(caller, gensym("#B"), &object_box);
 
   while (next_box)
   {
     if(next_box != object_box)
     {
+      object_base* object = (object_base*) jbox_get_object(next_box);
+
       t_symbol* curr_classname = object_attr_getsym(next_box, _sym_maxclass);
       if (curr_classname == search_symbol)
       {
-          object_base* o = (object_base*) jbox_get_object(next_box);
 
           // ignore dying object
-          if (!o->m_dead)
-            found.push_back(o);
-
+          if (!object->m_dead)
+            found.push_back(object);
       }
 
       // if we're looking for ossia.view but found a model, remind it
-      if ( search_symbol == gensym("ossia.view")
-           && curr_classname == gensym("ossia.model") )
-        found_model = true;
-      else if ( search_symbol == gensym("ossia.model")
-                && curr_classname == gensym("ossia.view") )
-        found_view = true;
+      if ( search_symbol == gensym("ossia.model")
+              && curr_classname == gensym("ossia.view") )
+      found_view = true;
 
       // if there is a client or device in the current patcher
-      // don't register anything
+      // return only that object
       if ( search_dev
            && ( curr_classname == gensym("ossia.device")
              || curr_classname == gensym("ossia.client") ))
       {
-        return {};
+        // ignore dying object
+        if (!object->m_dead)
+          return {object};
       }
     }
     next_box = object_attr_getobj(next_box, _sym_nextobject);
@@ -507,36 +322,11 @@ std::vector<object_base*> find_children_to_register(
   return found;
 }
 
-t_object* get_patcher(t_object* object)
+void ossia_max::discover_network_devices(ossia_max*)
 {
-  t_object* patcher = nullptr;
-  auto err = object_obex_lookup(object, gensym("#P"), &patcher);
-
-  auto bpatcher = object_attr_getobj(object, _sym_parentpatcher);
-
-  if(patcher != nullptr && err == MAX_ERR_NONE)
-    return patcher;
-  else
-    return bpatcher;
-}
-
-std::vector<std::string> parse_tags_symbol(t_symbol** tags_symbol, long size)
-{
-  std::vector<std::string> tags;
-
-  for(int i=0;i<size;i++)
-  {
-    tags.push_back(tags_symbol[i]->s_name);
-  }
-
-  return tags;
-}
-
-void ossia_max::discover_network_devices(ossia_max* x)
-{
-  ossia_max::zeroconf_oscq_listener.browse();
-  ossia_max::zeroconf_minuit_listener.browse();
-  clock_delay(ossia_max::browse_clock, 100.);
+  ossia_max::s_zeroconf_oscq_listener.browse();
+  ossia_max::s_zeroconf_minuit_listener.browse();
+  clock_delay(ossia_max::s_browse_clock, 100.);
 }
 
 } // max namespace

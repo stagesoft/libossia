@@ -15,6 +15,7 @@
 
 #include <boost/algorithm/string.hpp>
 
+#include <ossia/detail/json.hpp>
 #include <rapidjson/allocators.h>
 #include <rapidjson/document.h>
 #include <rapidjson/filewritestream.h>
@@ -31,10 +32,13 @@
 #include <string>
 #include <vector>
 
+#include <ossia-config.hpp>
+#if defined(OSSIA_C)
 #include <ossia-c/log/ossia_log.h>
 #include <ossia-c/ossia/ossia_utils.hpp>
 #include <ossia-c/preset/preset.h>
 #include <ossia-c/preset/result.h>
+#endif
 
 #if defined(GetObject)
 #undef GetObject
@@ -62,7 +66,7 @@ struct ossia_preset
 };
 
 /// C functions ///
-
+#if defined(OSSIA_C)
 extern "C"
 {
   static ossia_preset_result lippincott();
@@ -401,7 +405,7 @@ extern "C"
   }
 
 } // extern "C"
-
+#endif
 /// C++ Implementations: Presets ///
 
 ossia::value json_to_ossia_value(const rapidjson::Value& value)
@@ -1270,7 +1274,7 @@ void ossia::presets::apply_preset(
 ossia::presets::preset ossia::presets::make_preset(ossia::net::node_base& node)
 {
   ossia::presets::preset cue;
-  auto nodes = ossia::net::list_all_child(&node);
+  auto nodes = ossia::net::list_all_children(&node);
   for (auto n : nodes)
   {
     if (auto param = n->get_parameter())
@@ -1502,6 +1506,7 @@ void ossia::presets::apply_preset(
   }
 }
 
+#if defined(OSSIA_C)
 /// Exception handling ///
 
 static ossia_preset_result lippincott()
@@ -1547,3 +1552,4 @@ static ossia_preset_result lippincott()
     return OSSIA_PRESETS_UNKNOWN_ERROR;
   }
 }
+#endif

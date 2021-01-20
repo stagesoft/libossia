@@ -14,14 +14,21 @@ case "$TRAVIS_OS_NAME" in
       docker pull iscore/iscore-rpi-sdk:latest
       set -e
     else
-      wget -nv https://cmake.org/files/v3.16/cmake-3.16.4-Linux-x86_64.tar.gz -O cmake-linux.tgz &
+      wget -nv https://cmake.org/files/v3.18/cmake-3.18.3-Linux-x86_64.tar.gz -O cmake-linux.tgz &
 
-      echo 'deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-9 main' | sudo tee /etc/apt/sources.list.d/llvm.list
+      echo 'deb http://apt.llvm.org/focal/ llvm-toolchain-focal-10 main' | sudo tee /etc/apt/sources.list.d/llvm.list
       sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 1397BC53640DB551 15CF4D18AF4F7421
       sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
-      sudo add-apt-repository --yes ppa:beineri/opt-qt-5.14.1-bionic
+      sudo add-apt-repository --yes ppa:beineri/opt-qt-5.15.0-focal
       sudo apt-get update -qq
-      sudo apt-get install -qq --yes --force-yes g++-9 binutils ninja-build qt514-meta-minimal libasound2-dev clang-9 lld-9 portaudio19-dev mesa-common-dev libgl1-mesa-dev
+      sudo apt-get install -qq --yes --force-yes \
+          g++-9 binutils ninja-build \
+          clang-10 lld-10 \
+          qt515base qt515declarative qt515svg qt515quickcontrols2 qt515websockets qt515serialport \
+          libasound2-dev portaudio19-dev \
+          mesa-common-dev libgl1-mesa-dev \
+          libbluetooth-dev \
+          libavahi-client-dev
 
       wait wget || true
 
@@ -37,7 +44,7 @@ case "$TRAVIS_OS_NAME" in
       sudo pip3 install git+https://github.com/rpgillespie6/fastcov.git
 
       # For some reason gcov seems to be not available anymore...
-      wget -nv https://github.com/OSSIA/sdk/releases/download/sdk14/gcov
+      wget -nv https://github.com/ossia/sdk/releases/download/sdk14/gcov
       file ./gcov
       chmod +x ./gcov
       sudo cp ./gcov /usr/bin/gcov
@@ -90,6 +97,23 @@ case "$TRAVIS_OS_NAME" in
     fi
   ;;
   osx)
+    # Setup codesigning
+    # Thanks https://www.update.rocks/blog/osx-signing-with-travis/
+    (
+      set +x
+      KEY_CHAIN=build.keychain
+
+      openssl aes-256-cbc -K $encrypted_5c96fe262983_key -iv $encrypted_5c96fe262983_iv -in "$TRAVIS_BUILD_DIR/ci/ossia-cert.p12.enc" -out ossia-cert.p12 -d
+
+      security create-keychain -p travis $KEY_CHAIN
+      security default-keychain -s $KEY_CHAIN
+      security unlock-keychain -p travis $KEY_CHAIN
+      security import ossia-cert.p12 -k $KEY_CHAIN -P $MAC_CODESIGN_PASSWORD -T /usr/bin/codesign;
+      security set-key-partition-list -S apple-tool:,apple: -s -k travis $KEY_CHAIN
+
+      rm -rf *.p12
+    )
+
     # work around a homebrew bug
     set +e
     # try to force a ruby update
@@ -97,7 +121,7 @@ case "$TRAVIS_OS_NAME" in
     # HOMEBREW_NO_AUTO_UPDATE=1 brew install ruby
     HOMEBREW_NO_AUTO_UPDATE=1 brew install gnu-tar xz
     ARCHIVE=homebrew-cache.txz
-    wget -nv "https://github.com/OSSIA/score-sdk/releases/download/sdk9/$ARCHIVE" -O "$ARCHIVE"
+    wget -nv "https://github.com/ossia/score-sdk/releases/download/sdk9/$ARCHIVE" -O "$ARCHIVE"
     gtar xhzf "$ARCHIVE" --directory /usr/local/Cellar
     brew link --force boost cmake qt5 #ninja
     brew install portaudio

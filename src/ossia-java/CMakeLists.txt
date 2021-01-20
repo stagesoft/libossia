@@ -1,5 +1,3 @@
-cmake_minimum_required(VERSION 3.17)
-
 project(ossia-java Java)
 
 find_package(Java REQUIRED)
@@ -24,6 +22,7 @@ add_jar(ossia-java
   io/ossia/OscQueryServer.java
   io/ossia/OscQueryMirror.java
   io/ossia/Parameter.java
+  io/ossia/ParameterBuilder.java
   io/ossia/Protocol.java
   io/ossia/Value.java
   io/ossia/Domain.java
@@ -54,7 +53,7 @@ set(JAVA_NAME "$<TARGET_FILE_NAME:ossia>")
 if(${CMAKE_SIZEOF_VOID_P} MATCHES "8")
   if(APPLE)
     set(JAVA_FOLDER darwin)
-    set(JAVA_NAME libossia.jnilib)
+    set(JAVA_NAME libossia.dylib)
   elseif(WIN32)
     set(JAVA_FOLDER win32-x86-64)
   else()
@@ -63,7 +62,7 @@ if(${CMAKE_SIZEOF_VOID_P} MATCHES "8")
 else()
   if(APPLE)
     set(JAVA_FOLDER darwin)
-    set(JAVA_NAME libossia.jnilib)
+    set(JAVA_NAME libossia.dylib)
   elseif(WIN32)
     set(JAVA_FOLDER win32-x86)
   else()
@@ -72,6 +71,17 @@ else()
 endif()
 
 add_custom_command(TARGET ossia-java POST_BUILD
-  COMMAND "${CMAKE_COMMAND}" -E make_directory $<TARGET_FILE_DIR:ossia>/${JAVA_FOLDER}
-  COMMAND "${CMAKE_COMMAND}" -E copy $<TARGET_FILE:ossia> $<TARGET_FILE_DIR:ossia>/${JAVA_FOLDER}/${JAVA_NAME}
-  COMMAND "${Java_JAR_EXECUTABLE}" -uf ossia-java.jar -C $<TARGET_FILE_DIR:ossia> ${JAVA_FOLDER}/${JAVA_NAME})
+  COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:ossia>/${JAVA_FOLDER}"
+  COMMAND "${CMAKE_COMMAND}" -E copy $<TARGET_FILE:ossia> "$<TARGET_FILE_DIR:ossia>/${JAVA_FOLDER}/${JAVA_NAME}"
+  COMMAND "${Java_JAR_EXECUTABLE}" -uf ossia-java.jar -C $<TARGET_FILE_DIR:ossia> "${JAVA_FOLDER}/${JAVA_NAME}"
+)
+
+install(
+  FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/jna.jar"
+    "${CMAKE_CURRENT_BINARY_DIR}/ossia-java-example.jar"
+    "${CMAKE_CURRENT_BINARY_DIR}/ossia-java-test.jar"
+    "${CMAKE_CURRENT_BINARY_DIR}/ossia-java.jar"
+  DESTINATION
+    .
+)

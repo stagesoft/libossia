@@ -2,7 +2,7 @@ image: Visual Studio 2019
 
 environment:
   CTEST_OUTPUT_ON_FAILURE: 1
-  BOOST_ROOT: C:/Libraries/boost_1_71_0
+  BOOST_ROOT: C:/Libraries/boost_1_73_0
   DEKEN_PASSWORD:
     secure: J57LV7zrVl8xsXC/ng0TgA==
   GPG_DECODE_KEY:
@@ -12,22 +12,19 @@ environment:
     - APPVEYOR_BUILD_TYPE: testing
       platform: x64
       configuration: Debug
-      QTDIR: C:\Qt\5.13\msvc2017_64
+      QTDIR: C:\Qt\latest\msvc2019_64
 
     - APPVEYOR_BUILD_TYPE: testing
       platform: x64
       configuration: Release
-      QTDIR: C:\Qt\5.13\msvc2017_64
+      QTDIR: C:\Qt\latest\msvc2019_64
 
     - APPVEYOR_BUILD_TYPE: Release
       configuration: Release
-      QTDIR: C:\Qt\5.13\msvc2017_64
-      QTDIR-32bit: C:\Qt\5.13\msvc2017
+      QTDIR: C:\Qt\latest\msvc2019_64
+      QTDIR-32bit: C:\Qt\latest\msvc2019
 
     - APPVEYOR_BUILD_TYPE: ossia-cpp
-      configuration: Release
-
-    - APPVEYOR_BUILD_TYPE: ossia-unity3d
       configuration: Release
 
     - APPVEYOR_BUILD_TYPE: pd
@@ -39,39 +36,40 @@ environment:
     #- APPVEYOR_BUILD_TYPE: purrdata
     #  configuration: Release
 
-    - APPVEYOR_BUILD_TYPE: purrdata-32bit
-      configuration: Release
+    #- APPVEYOR_BUILD_TYPE: purrdata-32bit
+    #  configuration: Release
 
-    - APPVEYOR_BUILD_TYPE: pd-test
-      configuration: Debug
-      QTDIR-32bit: C:\Qt\5.13\msvc2017
+#    - APPVEYOR_BUILD_TYPE: pd-test
+#      configuration: Debug
+#      QTDIR-32bit: C:\Qt\latest\msvc2019
 
     - APPVEYOR_BUILD_TYPE: max
       configuration: Release
 
-    - APPVEYOR_BUILD_TYPE: python
-      configuration: Release
-      python: Python27
-      platform: x64
-
-    - APPVEYOR_BUILD_TYPE: python
-      configuration: Release
-      python: Python27
-      platform: x86
-
-    - APPVEYOR_BUILD_TYPE: python
-      configuration: Release
-      python: Python36
-      platform: x64
-
-    - APPVEYOR_BUILD_TYPE: python
-      configuration: Release
-      python: Python36
-      platform: x86
-
+#     - APPVEYOR_BUILD_TYPE: python
+#       configuration: Release
+#       python: Python27
+#       platform: x64
+# 
+#     - APPVEYOR_BUILD_TYPE: python
+#       configuration: Release
+#       python: Python27
+#       platform: x86
+# 
+#     - APPVEYOR_BUILD_TYPE: python
+#       configuration: Release
+#       python: Python36
+#       platform: x64
+# 
+#     - APPVEYOR_BUILD_TYPE: python
+#       configuration: Release
+#       python: Python36
+#       platform: x86
+# 
     - APPVEYOR_BUILD_TYPE: qml
       configuration: Release
-      QTDIR: C:\Qt\5.13\msvc2017_64
+      QTDIR: C:\Qt\latest\msvc2019_64
+      QTDIR-32bit: C:\Qt\latest\msvc2019
       platform: x64
 
 before_build:
@@ -111,33 +109,11 @@ artifacts:
   - path: libossia-native-win*.zip
     name: ossia-windows
     type: zip
-  - path: pyossia*.whl
-    name: pyossia-wheel-win
-    type: zip
-  - path: ossia-unity3d-win.zip
-    name: ossia-unity3d-win
-    type: zip
+#  - path: pyossia*.whl
+#    name: pyossia-wheel-win
+#    type: zip
 
 deploy:
-  release: libossia $(APPVEYOR_REPO_TAG_NAME)
-  description: >-
-      <h1> Release of OSSIA $TRAVIS_TAG </h1>
-      <p>
-      * All macOS packages are fat binaries that should work on macOS from 10.9.<br>
-      * Packages ending in 'win32' are 32-bit, 'win64' are 64-bit and 'win' work on both architectures.<br>
-      * All Windows packages are built with VS2017.<br>
-      * Python packages are built with Python 2.7 and 3.4 on ubuntu 14.04, 2.7 and 3.6 version on macOSX.12 (from Homebrew) and 2.7 and 3.5 on Raspbian stretch.<br>
-      * QML packages are built with Homebrew's Qt version on macOS.<br>
-      * QML packages are built with Qt 5.11 VS2017 64bit (only) on Windows.<br>
-      * QML packages are meant to be put in the [QML Import Path](http://doc.qt.io/qt-5/qtqml-syntax-imports.html). For instance on macOS it should look like '/usr/local/Cellar/qt/5.9.1/qml/Ossia/qmldir'.<br>
-      </p>
-      <p>
-      Please consult [this wiki page](https://github.com/OSSIA/libossia/wiki/Integrations) to see what's here and what's missing.<br><br>
-      * [Documentation](https://ossia.github.io)<br>
-      * [Examples](https://github.com/OSSIA/libossia/tree/master/Documentation)<br>
-      * [Building from source](https://github.com/OSSIA/libossia/wiki/Building)<br>
-      * ***Do note use the Github source package ("Source code" link below) to build; instead do a git clone or use 'ossia-src-unix.tar.gz'. Else the build won't work due to Github not putting submodules in the archive.***<br>
-
   provider: GitHub
   auth_token:
     secure: Zl/uqZozGXtvixbEP89fyT3oQW6uKclpRGOa1Rwsdryt7zrGk0pQBRXUwUSzNrA2

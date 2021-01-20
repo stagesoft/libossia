@@ -3,14 +3,16 @@ if(OSSIA_JAVA)
   add_subdirectory(ossia-java)
 endif()
 
+if(OSSIA_UNITY3D)
+  add_subdirectory(ossia-unity3d)
+endif()
+
 if(OSSIA_NODEJS)
   add_subdirectory(ossia-node)
 endif()
 
-if(NOT WIN32)
 if(OSSIA_PYTHON)
   add_subdirectory(ossia-python ossia-python/pyossia)
-endif()
 endif()
 
 if(OSSIA_PD)

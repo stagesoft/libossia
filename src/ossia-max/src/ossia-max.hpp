@@ -22,12 +22,19 @@
 #include "client.hpp"
 #include "ossia_object.hpp"
 #include "logger.hpp"
+#include "explorer.hpp"
+#include "monitor.hpp"
+#include "search.hpp"
+#include "router.hpp"
+#include "fuzzysearch.hpp"
+#include "assert.hpp"
 
 #include "ZeroconfOscqueryListener.hpp"
 #include "ZeroconfMinuitListener.hpp"
 
 extern "C"
 {
+    OSSIA_MAX_EXPORT void ossia_router_setup();
     OSSIA_MAX_EXPORT void ossia_attribute_setup();
     OSSIA_MAX_EXPORT void ossia_client_setup();
     OSSIA_MAX_EXPORT void ossia_device_setup();
@@ -37,6 +44,12 @@ extern "C"
     OSSIA_MAX_EXPORT void ossia_remote_setup();
     OSSIA_MAX_EXPORT void ossia_view_setup();
     OSSIA_MAX_EXPORT void ossia_ossia_setup();
+    OSSIA_MAX_EXPORT void ossia_explorer_setup();
+    OSSIA_MAX_EXPORT void ossia_search_setup();
+    OSSIA_MAX_EXPORT void ossia_monitor_setup();
+    OSSIA_MAX_EXPORT void ossia_fuzzysearch_setup();
+    OSSIA_MAX_EXPORT void ossia_assert_setup();
+    OSSIA_MAX_EXPORT void ossia_equals_setup();
 }
 
 namespace ossia
@@ -74,22 +87,55 @@ struct max_msp_log_sink final :
 
     void set_pattern(const std::string &pattern) override { }
     void set_formatter(std::unique_ptr<spdlog::formatter> sink_formatter) override { }
+};
 
+struct patcher_descriptor{
+  ossia::safe_set<parameter*> parameters{};
+  ossia::safe_set<remote*>    remotes{};
+  ossia::safe_set<attribute*> attributes{};
+  model*     model{};
+  view*      view{};
+  device*    device{};
+  client*    client{};
+
+  t_object* parent_patcher{};
+  ossia::safe_set<t_object*> subpatchers{};
+
+  bool loadbanged{}; // true if patcher have been loadbanged already
+
+  bool empty() const
+  {
+    return parameters.empty()
+           && remotes.empty()
+           && attributes.empty()
+           && model  != nullptr
+           && view   != nullptr
+           && device != nullptr
+           && client != nullptr;
+  }
+
+  auto size() const
+  {
+    return parameters.size()
+           + remotes.size()
+           + attributes.size()
+           + (model?1:0)
+           + (view?1:0)
+           + (device?1:0)
+           + (client?1:0);
+  }
 };
 
 class ossia_max
 {
 public:
   static ossia_max& instance();
-  static ossia::net::generic_device* get_default_device()
+  static const std::shared_ptr<ossia::net::generic_device>& get_default_device()
   {
-    return &instance().m_device;
+    return instance().m_device;
   }
 
-  static void start_timers();
-  static void stop_timers();
-  static void register_nodes(ossia_max* x);
-  static void poll_all_queues(ossia_max* x);
+  // static void register_nodes(ossia_max* x);
   static void discover_network_devices(ossia_max* x);
 
   template<typename T>
@@ -103,6 +149,12 @@ public:
     if(std::is_same<T, attribute>::value) return ossia_attribute_class;
     if(std::is_same<T, ossia_object>::value) return ossia_ossia_class;
     if(std::is_same<T, ossia::max::logger>::value) return ossia_logger_class;
+    if(std::is_same<T, ossia::max::explorer>::value) return ossia_explorer_class;
+    if(std::is_same<T, ossia::max::monitor>::value) return ossia_monitor_class;
+    if(std::is_same<T, ossia::max::search>::value) return ossia_search_class;
+    if(std::is_same<T, ossia::max::router>::value) return ossia_router_class;
+    if(std::is_same<T, ossia::max::fuzzysearch>::value) return ossia_fuzzysearch_class;
+    if(std::is_same<T, ossia::max::oassert>::value) return ossia_assert_class;
     return nullptr;
   }
 
@@ -122,17 +174,26 @@ public:
     }
   }
 
+  t_class* ossia_router_class{};
   t_class* ossia_client_class{};
   t_class* ossia_attribute_class{};
   t_class* ossia_device_class{};
+  t_class* ossia_explorer_class{};
+  t_class* ossia_monitor_class{};
+  t_class* ossia_search_class{};
+  t_class* ossia_fuzzysearch_class{};
   t_class* ossia_logger_class{};
   t_class* ossia_model_class{};
   t_class* ossia_parameter_class{};
   t_class* ossia_remote_class{};
   t_class* ossia_view_class{};
   t_class* ossia_ossia_class{};
+  t_class* ossia_assert_class{};
+  t_class* ossia_equals_class{};
+  static t_class* ossia_patcher_listener_class;
 
   // keep list of all objects
+  // TODO is it still needed ?
   ossia::safe_vector<parameter*> parameters;
   ossia::safe_vector<remote*> remotes;
   ossia::safe_vector<model*> models;
@@ -140,7 +201,13 @@ public:
   ossia::safe_vector<device*> devices;
   ossia::safe_vector<client*> clients;
   ossia::safe_vector<attribute*> attributes;
+  ossia::safe_vector<explorer*> explorers;
+  ossia::safe_vector<monitor*> monitors;
+  ossia::safe_vector<search*> searchs;
+  ossia::safe_vector<logger*> loggers;
+  ossia::safe_vector<oassert*> oasserts;
 
+  // TODO remove all those nr* vectors, should not be needed anymore
   // list of non-registered objects
   ossia::safe_set<parameter*> nr_parameters;
   ossia::safe_set<remote*> nr_remotes;
@@ -149,102 +216,36 @@ public:
   ossia::safe_set<device*> nr_devices;
   ossia::safe_set<client*> nr_clients;
   ossia::safe_set<attribute*> nr_attributes;
+  ossia::safe_set<monitor*> nr_monitors;
 
-  ossia::safe_set<model*> model_quarantine;
-  ossia::safe_set<view*> view_quarantine;
-  ossia::safe_set<parameter*> parameter_quarantine;
-  ossia::safe_set<remote*> remote_quarantine;
-  ossia::safe_set<attribute*> attribute_quarantine;
+  static std::map<ossia::net::node_base*, ossia::safe_set<matcher*>> s_node_matchers_map;
 
+  // TODO is this still needed ?
   bool registering_nodes=false;
 
-  // this is used at loadbang to mark a patcher loaded
-  // and trigger its registration
-  struct root_descriptor{
-    bool is_loadbanged{};
-    unsigned long count{}; // number of object under this root
+  std::map<t_object*, patcher_descriptor> patchers;
 
-    unsigned long inc(){ return ++count;}
-    unsigned long dec(){ return --count;}
-  };
+  static void create_patcher_hierarchy(t_object* patcher);
+  static patcher_descriptor& get_patcher_descriptor(t_object* patcher);
+  static void remove_patcher_descriptor(t_object* patcher);
 
-  typedef std::map<t_object*, root_descriptor> RootMap;
-
-  RootMap root_patcher;
   void* m_reg_clock{};
-  void* m_timer_clock{};
-  static void* browse_clock;
+  static void* s_browse_clock;
 
-
-  unsigned long long m_clock_count{0};
-
-  static ZeroconfOscqueryListener zeroconf_oscq_listener;
-  static ZeroconfMinuitListener   zeroconf_minuit_listener;
+  static ZeroconfOscqueryListener s_zeroconf_oscq_listener;
+  static ZeroconfMinuitListener   s_zeroconf_minuit_listener;
 
 private:
   ossia_max();
   ~ossia_max();
 
   ossia::net::local_protocol* m_localProtocol{};
-  ossia::net::generic_device m_device;
+  std::shared_ptr<ossia::net::generic_device> m_device;
   string_map<std::shared_ptr<ossia::websocket_threaded_connection>> m_connections;
   std::shared_ptr<max_msp_log_sink> m_log_sink;
+
+  t_object* m_patcher_listener;
 };
-
-#pragma mark -
-#pragma mark Templates
-
-template <typename T>
-extern void object_quarantining(T*);
-
-template <typename T>
-extern void object_dequarantining(T*);
-
-template <typename T>
-extern bool object_is_quarantined(T*);
-
-struct object_base;
-
-void object_namespace(object_base* x);
-
-#pragma mark -
-#pragma mark Utilities
-
-/**
- * @brief register_quarantinized Try to register all quarantinized objects
- */
-void register_quarantinized();
-
-/**
- * @brief Find all objects [classname] in the current patcher.
- * @param patcher : patcher in which we are looking for objects
- * @param classname : name of the object to search (ossia.model or ossia.view)
- * @return std::vector<object_base*> containing pointer to object_base struct of the
- * corresponding classname
- */
-std::vector<object_base*> find_children_to_register(
-    t_object* object, t_object* patcher, t_symbol* classname, bool search_dev = false);
-
-/**
- * @brief             Convenient method to easily get the patcher where a box
- * is
- */
-t_object* get_patcher(t_object* object);
-
-/**
- * @brief return relative path to corresponding object
- * @param x
- * @param classname
- * @param found_obj
- * @param address
- * @return
- */
-//    bool get_relative_path(t_object* x, t_symbol* classname, t_class**
-//    found_obj, std::string& address);
-
-/**
- */
-std::vector<std::string> parse_tags_symbol(t_symbol** tags_symbol, long size);
 
 template<typename T, typename... Args>
 T* make_ossia(Args&&... args)

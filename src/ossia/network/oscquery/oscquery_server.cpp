@@ -28,7 +28,7 @@ oscquery_server_protocol::oscquery_server_protocol(
     uint16_t osc_port, uint16_t ws_port)
     : m_oscServer{std::make_unique<osc::receiver>(
           osc_port,
-          [=](const oscpack::ReceivedMessage& m,
+          [this](const oscpack::ReceivedMessage& m,
               const oscpack::IpEndpointName& ip) {
             this->on_OSCMessage(m, ip);
           })}
@@ -64,23 +64,6 @@ oscquery_server_protocol::oscquery_server_protocol(
             return oscquery::server_reply{};
         }
       });
-
-  m_websocketServer->listen(m_wsPort);
-  m_serverThread = std::thread{[&] {
-    try
-    {
-      m_websocketServer->run();
-    }
-    catch (const std::exception& e)
-    {
-      ossia::logger().error("Error in websocket processing: {}", e.what());
-    }
-    catch (...)
-    {
-      ossia::logger().error("Error in websocket processing");
-    }
-  }};
-  m_oscServer->run();
 }
 
 oscquery_server_protocol::~oscquery_server_protocol()
@@ -316,6 +299,23 @@ void oscquery_server_protocol::set_device(net::device_base& dev)
         if (p.callback_count() > 0)
           observe(p, true);
       });
+
+  m_websocketServer->listen(m_wsPort);
+  m_serverThread = std::thread{[&] {
+    try
+    {
+      m_websocketServer->run();
+    }
+    catch (const std::exception& e)
+    {
+      ossia::logger().error("Error in websocket processing: {}", e.what());
+    }
+    catch (...)
+    {
+      ossia::logger().error("Error in websocket processing");
+    }
+  }};
+  m_oscServer->run();
 }
 
 void oscquery_server_protocol::stop()
@@ -698,7 +698,7 @@ server_reply oscquery_server_protocol::on_BinaryWSrequest(
     const std::string& message)
 {
   auto handler
-      = [=](const oscpack::ReceivedMessage& m,
+      = [this](const oscpack::ReceivedMessage& m,
             const oscpack::IpEndpointName& ip) { this->on_OSCMessage(m, ip); };
   osc::listener<decltype(handler)> h{handler};
   auto clt = find_client(hdl);

@@ -1,6 +1,7 @@
 #include <ossia/dataflow/graph/graph_static.hpp>
 #include <ossia/dataflow/graph_edge_helpers.hpp>
 #include <ossia/audio/audio_protocol.hpp>
+#include <ossia/audio/audio_device.hpp>
 #include <ossia/dataflow/nodes/rand_float.hpp>
 #include <ossia/dataflow/nodes/sine.hpp>
 #include <ossia/dataflow/nodes/gain.hpp>
@@ -29,7 +30,7 @@ int main(int argc, char** argv) {
   e.register_device(&osc.device);
 
   // multiplies the inputs by a float value
-  auto gain = std::make_shared<ossia::nodes::gain>();
+  auto gain = std::make_shared<ossia::nodes::gain_node>();
   g.add_node(gain);
 
   // the gain node can be controlled through the OSC address /volume,

@@ -187,35 +187,55 @@ public:
     if (m_runThread.joinable())
       stop();
 
-    m_runThread = std::thread([this]() {
-      osc_thread_run:
-      try {
-        m_socket->Run();
-      } catch(...) {
-        goto osc_thread_run;
-      }
-    });
+    m_runThread = std::thread([this] { run_impl(); });
+    while(!m_running)
+      std::this_thread::sleep_for(std::chrono::microseconds(1));
+  }
+
+  void run_impl()
+  {
+    m_running = true;
+osc_thread_run:
+    try {
+      m_socket->Run();
+    } catch(...) {
+      goto osc_thread_run;
+    }
   }
 
   void stop()
   {
+    m_running = false;
     if (m_socket)
     {
       if (m_runThread.joinable())
       {
+        try
         {
           oscpack::UdpTransmitSocket send_socket(
               oscpack::IpEndpointName("127.0.0.1", port()));
           send_socket.Send("__stop_", 8);
+          m_socket->AsynchronousBreak();
+          std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+          m_runThread.join();
         }
-
-        m_socket->AsynchronousBreak();
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-        m_runThread.join();
+        catch(std::exception& e)
+        {
+          if (m_runThread.joinable())
+            m_runThread.detach();
+        }
       }
 
       m_socket.reset();
+    }
+    else
+    {
+      if(m_runThread.joinable())
+      {
+        // Error somewhere: the thread is joinable, but there's no socket...
+        m_runThread.detach();
+      }
     }
   }
 
@@ -254,5 +274,6 @@ private:
   std::unique_ptr<oscpack::ReceiveSocket> m_socket;
 
   std::thread m_runThread;
+  std::atomic_bool m_running = false;
 };
 }

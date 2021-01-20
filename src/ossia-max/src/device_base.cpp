@@ -7,13 +7,15 @@ namespace ossia
 {
 namespace max
 {
+Nano::Signal<void(device_base*)> device_base::on_device_created{};
+Nano::Signal<void(device_base*)> device_base::on_device_removing{};
 
 void device_base::on_parameter_created_callback(const ossia::net::parameter_base& param)
 {
   auto& node = param.get_node();
   std::string addr = ossia::net::address_string_from_node(node);
   t_atom a[2];
-  A_SETSYM(a, gensym("create"));
+  A_SETSYM(a, gensym("created"));
   A_SETSYM(a+1, gensym(addr.c_str()));
   outlet_anything(m_dumpout, gensym("parameter"), 2, a);
 }
@@ -35,58 +37,46 @@ void device_base::on_parameter_deleted_callback(const ossia::net::parameter_base
   auto& node = param.get_node();
   std::string addr = ossia::net::address_string_from_node(node);
   t_atom a[2];
-  A_SETSYM(a, gensym("delete"));
+  A_SETSYM(a, gensym("removed"));
   A_SETSYM(a+1, gensym(addr.c_str()));
   outlet_anything(m_dumpout, gensym("parameter"), 2, a);
 }
 
 void device_base::on_attribute_modified_callback(ossia::net::node_base& node, const std::string& attribute)
 {
-  if (node.get_parameter())
+  auto& matchers = ossia_max::instance().s_node_matchers_map[&node];
+
+  for(const auto& m : matchers)
   {
-    for ( auto param : ossia_max::instance().parameters.reference() )
+    auto obj = m->get_owner();
+    if(obj)
     {
-      for ( auto& m : param->m_matchers )
+      switch(obj->m_otype)
       {
-        if ( m->get_node() == &node )
-          parameter::update_attribute((ossia::max::parameter*)m->get_parent(),attribute, &node);
-      }
-    }
-
-    for ( auto remote : ossia_max::instance().remotes.reference() )
-    {
-      for ( auto& m : remote->m_matchers )
-      {
-        if ( m->get_node() == &node )
-          remote::update_attribute((ossia::max::remote*)m->get_parent(),attribute, &node);
-      }
-    }
-
-    for ( auto attr : ossia_max::instance().attributes.reference() )
-    {
-      for ( auto& m : attr->m_matchers )
-      {
-        if ( m->get_node() == &node )
-          attribute::update_attribute((ossia::max::attribute*)m->get_parent(),attribute, &node);
-      }
-    }
-  } else {
-    for ( auto model : ossia_max::instance().models.reference() )
-    {
-      for ( auto& m : model->m_matchers )
-      {
-        if ( m->get_node() == &node )
-          node_base::update_attribute((node_base*)m->get_parent(),attribute, &node);
-      }
-    }
-
-    for ( auto view : ossia_max::instance().views.reference() )
-    {
-      for ( auto& m : view->m_matchers )
-      {
-        if ( m->get_node() == &node )
-          node_base::update_attribute((node_base*)m->get_parent(),attribute, &node);
-          ;
+        case object_class::remote:
+        {
+          auto rmt = static_cast<ossia::max::remote*>(obj);
+          // only break for 'unit' attribute
+          if( attribute == ossia::net::text_unit()
+           || attribute == ossia::net::text_extended_type()){
+            rmt->set_unit();
+            break;
+          }
+        }
+        case object_class::attribute:
+        case object_class::param:
+        {
+          auto oc = static_cast<ossia::max::parameter_base*>(obj);
+          oc->update_attribute(oc, attribute, &node);
+          break;
+        }
+        case object_class::model:
+        case object_class::view:
+        case object_class::device:
+        case object_class::client:
+          break;
+        default:
+            ;
       }
     }
   }
@@ -100,7 +90,7 @@ void device_base::on_node_renamed_callback(
   std::string addr = ossia::net::address_string_from_node(node);
   std::string old_addr = addr.substr(0, addr.size()-name.size()) + old_name;
   t_atom a[3];
-  A_SETSYM(a, gensym("rename"));
+  A_SETSYM(a, gensym("renamed"));
   A_SETSYM(a+1, gensym(old_addr.c_str()));
   A_SETSYM(a+2, gensym(addr.c_str()));
   outlet_anything(m_dumpout, gensym("node"), 3, a);
@@ -121,7 +111,8 @@ void device_base::on_node_removing_callback(ossia::net::node_base& node)
   t_atom a[2];
   A_SETSYM(a, gensym("removed"));
   A_SETSYM(a+1, gensym(addr.c_str()));
-  outlet_anything(m_dumpout, gensym("node"), 2, a);
+  if(m_dumpout)
+    outlet_anything(m_dumpout, gensym("node"), 2, a);
 }
 
 void device_base::connect_slots()
@@ -139,7 +130,7 @@ void device_base::connect_slots()
     m_device->on_node_created.connect<&device_base::on_node_created_callback>(this);
     m_device->on_node_removing.connect<&device_base::on_node_removing_callback>(this);
 
-    m_matchers.emplace_back(std::make_shared<t_matcher>(&m_device->get_root_node(), nullptr));
+    m_matchers.emplace_back(std::make_shared<matcher>(&m_device->get_root_node(), nullptr));
     // This is to handle [get address( message only
     // so is it really needed ?
     assert(!m_matchers.empty());

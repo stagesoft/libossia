@@ -11,22 +11,23 @@ libossia offers bindings and implementations for several environments: PureData,
 
 You can find some documentation for the library and its various implementations is at https://ossia.github.io
 
-Please feel free to ask questions on the [forum](http://forum.ossia.io/c/libossia), or to come and chat with us ! [![Gitter](https://badges.gitter.im/OSSIA/libossia.svg)](https://gitter.im/OSSIA/libossia?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+Please feel free to ask questions on the [forum](http://forum.ossia.io/c/libossia), or to come and chat with us ! [![Gitter](https://badges.gitter.im/ossia/libossia.svg)](https://gitter.im/ossia/libossia?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 More about the general project at: http://ossia.io
 
 Documentation :
-* [Lib and Implementations](https://ossia.github.io)
-* [Examples](https://github.com/OSSIA/libossia/tree/master/examples)
+* [Lib and Implementations](https://ossia.github.io/ossia-docs)
+* [Examples](https://github.com/ossia/libossia/tree/master/examples)
 * [Doxygen](http://ossia.github.io/libossia/html)
-* [Building](https://github.com/OSSIA/libossia/wiki/Building)
-* [Code style](https://github.com/OSSIA/libossia/wiki/Code-style-guide)
+* [Building](https://github.com/ossia/libossia/wiki/Building)
+* [Code style](https://github.com/ossia/libossia/wiki/Code-style-guide)
 
 Build Status
 ============
-* Linux, OS X : [![Build Status](https://travis-ci.org/OSSIA/libossia.svg)](https://travis-ci.org/OSSIA/libossia)
+* Linux, OS X : [![Build Status](https://travis-ci.org/ossia/libossia.svg)](https://travis-ci.org/ossia/libossia)
 * Windows : [![Build status](https://ci.appveyor.com/api/projects/status/ut3o8p64lib3ie1w?svg=true)](https://ci.appveyor.com/project/JeanMichalCelerier/libossia)
-* Coveralls : [![Coverage Status](https://coveralls.io/repos/github/OSSIA/libossia/badge.svg?branch=master)](https://coveralls.io/github/OSSIA/libossia?branch=master)
+* Java & Unity3D : [![Azure Pipelines](https://img.shields.io/azure-devops/build/ossia/f914424f-63a4-43f7-b424-67c9dc58ae05/1)](https://dev.azure.com/ossia/libossia/_build?definitionId=1)
+* Coveralls : [![Coverage Status](https://coveralls.io/repos/github/ossia/libossia/badge.svg?branch=master)](https://coveralls.io/github/ossia/libossia?branch=master)
 
 License
 =======

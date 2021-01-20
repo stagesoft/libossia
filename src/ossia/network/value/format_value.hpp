@@ -1,5 +1,5 @@
 #pragma once
-#include <fmt/format.h>
+#include <ossia/detail/fmt.hpp>
 #include <ossia/network/value/value.hpp>
 #include <ossia/detail/optional.hpp>
 #include <boost/algorithm/string/replace.hpp>
@@ -128,6 +128,19 @@ struct formatter<std::vector<ossia::value>>
 
   template <typename FormatContext>
   auto format(const std::vector<ossia::value>& v, FormatContext &ctx)
+  {
+    return format_vec(v, ctx);
+  }
+};
+
+template <typename T>
+struct formatter<std::vector<T>>
+{
+  template <typename ParseContext>
+  constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const std::vector<T>& v, FormatContext &ctx)
   {
     return format_vec(v, ctx);
   }

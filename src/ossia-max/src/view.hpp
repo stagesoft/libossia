@@ -1,35 +1,34 @@
 #pragma once
-#include <ossia-max/src/object_base.hpp>
+#include <ossia-max/src/node_base.hpp>
 
 namespace ossia
 {
 namespace max
 {
 
-#pragma mark -
-#pragma mark t_view structure declaration
+class device_base;
 
-class view : public object_base // FIXME why view doesn't inherite from ossia::max::node_base ??
+class view : public node_base
 {
 public:
 
   using is_view = std::true_type;
 
-  bool register_node(const std::vector<std::shared_ptr<t_matcher>>& nodes);
-  bool do_registration(const std::vector<std::shared_ptr<t_matcher>>& nodes);
-  bool unregister();
+  void do_registration();
+  void unregister();
 
-  static ossia::safe_set<view*>& quarantine();
+  ossia::safe_set<ossia::net::device_base*> m_devices{};
 
-  static void register_children(view* x);
+  void on_node_created_callback(ossia::net::node_base& node);
+
+  void on_device_created(ossia::max::device_base* device);
+  void on_device_removing(ossia::max::device_base* device);
+
   static void* create(t_symbol*, long, t_atom*);
   static void destroy(ossia::max::view*);
-
 };
 
 } // max namespace
 } // ossia namespace
 
-#pragma mark -
-#pragma mark ossia_view class declaration
 

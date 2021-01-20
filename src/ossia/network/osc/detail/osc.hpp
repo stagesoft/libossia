@@ -439,6 +439,17 @@ inline ossia::value filter_value(const Addr_T& addr, const ossia::value& v)
   return {};
 }
 
+template <typename Addr_T>
+inline ossia::value filter_value(const Addr_T& addr, ossia::value&& v)
+{
+  auto val
+      = filter_value(addr.get_domain(), std::move(v), addr.get_bounding());
+  auto filtered = addr.filter_value(val);
+  if (!filtered)
+    return val;
+  return {};
+}
+
 inline ossia::value to_value(
     const ossia::value& current,
     oscpack::ReceivedMessageArgumentIterator beg_it,
@@ -575,7 +586,7 @@ operator<<(oscpack::OutboundPacketStream& p, const ossia::value& val)
 inline oscpack::OutboundPacketStream&
 operator<<(oscpack::OutboundPacketStream& p, const ossia::domain& dom)
 {
-  ossia::apply(ossia::net::osc_write_domain_visitor{p}, dom);
+  ossia::apply(ossia::net::osc_write_domain_visitor{{{p}}}, dom);
 
   return p;
 }

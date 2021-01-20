@@ -56,6 +56,7 @@ public:
    * @brief Send a value to the network.
    */
   virtual bool push(const parameter_base&, const ossia::value& v) = 0;
+  virtual bool push(const parameter_base&, ossia::value&& v);
   bool push(const parameter_base& p);
 
   /**
@@ -102,6 +103,12 @@ public:
    * @brief If the protocol supports it, request the namespace corresponding
    * to this node.
    */
+  virtual std::future<void> update_async(node_base& node_base);
+
+  /**
+   * @brief If the protocol supports it, request the namespace corresponding
+   * to this node. If the update takes too long, nodes may be dropped as there is a default timeout.
+   */
   virtual bool update(node_base& node_base) = 0;
 
   /**
@@ -109,9 +116,7 @@ public:
    * when
    * the protocol is set.
    */
-  virtual void set_device(ossia::net::device_base& dev)
-  {
-  }
+  virtual void set_device(ossia::net::device_base& dev);
 
   //! Replace the loggers used
   virtual void set_logger(const network_logger& l)

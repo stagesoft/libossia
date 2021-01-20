@@ -1,6 +1,8 @@
 #!/bin/bash -ex
 # Note : to make the tests work under travis, they have to be changed in order not to require QApplication but only QCoreApplication
 
+source ${0%/*}/codesign_functions.sh
+
 case "$TRAVIS_OS_NAME" in
   linux)
     export CMAKE_BIN=$(readlink -f "$(find cmake-latest/bin -name cmake -type f )")
@@ -79,18 +81,12 @@ case "$TRAVIS_OS_NAME" in
 
       ;;
       Release)
-        OSSIA_UNITY=1
-        if [[ "$OSSIA_STATIC" == "1" ]]; then
-          OSSIA_UNITY=0
-        fi
-
         $CMAKE_BIN -DCMAKE_C_COMPILER="$CC" \
           -DCMAKE_CXX_COMPILER="$CXX" \
           -DCMAKE_INSTALL_PREFIX="$TRAVIS_BUILD_DIR/install" \
           -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
           -DOSSIA_C=1 \
           -DOSSIA_CPP=1 \
-          -DOSSIA_UNITY3D=$OSSIA_UNITY \
           -DOSSIA_STATIC=$OSSIA_STATIC \
           -DOSSIA_TESTING=1 \
           -DOSSIA_EXAMPLES=0 \
@@ -111,10 +107,6 @@ case "$TRAVIS_OS_NAME" in
           cd $TRAVIS_BUILD_DIR/install
           tar -czf ${ARTIFACTS_DIR}/libossia-native-linux_x86_64-static.tar.gz include lib
         else
-          # make unity3d package
-          cd $TRAVIS_BUILD_DIR/install/ossia-unity/
-          tar -czf ${ARTIFACTS_DIR}/ossia-unity3d-linux_x86_64.tar.gz *
-
           cd $TRAVIS_BUILD_DIR/install
           tar -czf ${ARTIFACTS_DIR}/libossia-native-linux_x86_64.tar.gz include lib
         fi
@@ -392,10 +384,10 @@ def get_versions():
           -DCMAKE_BUILD_TYPE=Debug \
           -DOSSIA_TESTING=1 \
           -DOSSIA_COVERAGE=1 \
-          -DOSSIA_CI=1 \
           -DPORTAUDIO_ONLY_DYNAMIC=1 \
           -DOSSIA_PD=0 \
           -DOSSIA_QT=1 \
+          -DOSSIA_C=1 \
           ..
         $CMAKE_BIN --build . -- -j2
         $CMAKE_BIN --build . --target ossia_coverage
@@ -450,7 +442,6 @@ def get_versions():
     if [[ "$BUILD_TYPE" == "PdRelease" ]]; then
 
       $CMAKE_BIN -DCMAKE_BUILD_TYPE=Release \
-               -DOSSIA_SANITIZE=1 \
                -DCMAKE_PREFIX_PATH="$CMAKE_PREFIX_PATH" \
                -DCMAKE_INSTALL_PREFIX="$TRAVIS_BUILD_DIR" \
                -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
@@ -464,14 +455,13 @@ def get_versions():
       echo List TRAVIS_BUILD_DIR content
       cd $TRAVIS_BUILD_DIR
       ls
-      pushd $TRAVIS_BUILD_DIR/ossia-pd-package/ && tar -czf ${ARTIFACTS_DIR}/ossia-pd-osx.tar.gz ossia && popd
 
+      release_macos_folder "$TRAVIS_BUILD_DIR/ossia-pd-package/ossia" "ossia-pd-data-osx.zip" "io.ossia.ossia-puredata"
       $TRAVIS_BUILD_DIR/ci/push_deken.sh
 
     elif [[ "$BUILD_TYPE" == "PurrDataRelease" ]]; then
 
       $CMAKE_BIN -DCMAKE_BUILD_TYPE=Release \
-               -DOSSIA_SANITIZE=1 \
                -DCMAKE_PREFIX_PATH="$CMAKE_PREFIX_PATH" \
                -DCMAKE_INSTALL_PREFIX="$TRAVIS_BUILD_DIR" \
                -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
@@ -486,7 +476,8 @@ def get_versions():
       echo List TRAVIS_BUILD_DIR content
       cd $TRAVIS_BUILD_DIR
       ls
-      pushd $TRAVIS_BUILD_DIR/ossia-pd-package/ && tar -czf ${ARTIFACTS_DIR}/ossia-purr-data-osx.tar.gz ossia && popd
+
+      release_macos_folder "$TRAVIS_BUILD_DIR/ossia-pd-package/ossia" "ossia-purr-data-osx.zip" "io.ossia.ossia-purrdata"
 
     elif [[ "$BUILD_TYPE" == "PdTest" ]]; then
 
@@ -507,9 +498,10 @@ def get_versions():
       mkdir -p ~/Documents/Pd/externals
       mv $TRAVIS_BUILD_DIR/ossia-pd-package/ossia ~/Documents/Pd/externals
 
-      wget http://msp.ucsd.edu/Software/pd-0.48-1test3.mac.tar.gz
-      tar xf pd-0.48-1test3.mac.tar.gz
-      export PATH="${PWD}/Pd-0.48-1test3.app/Contents/Resources/bin:${PATH}"
+      export PD_VERSION=0.48-2
+      wget http://msp.ucsd.edu/Software/pd-$PD_VERSION.mac.tar.gz
+      tar xf pd-$PD_VERSION.mac.tar.gz
+      export PATH="${PWD}/Pd-$PD_VERSION.app/Contents/Resources/bin:${PATH}"
 
       echo "Test Pd loading on MacOS"
       pd -path "${HOME}/Documents/Pd/externals" -nogui -lib ossia 2>&1 -send "pd quit;"
@@ -518,7 +510,6 @@ def get_versions():
 
     elif [[ "$BUILD_TYPE" == "MaxRelease" ]]; then
       $CMAKE_BIN -DCMAKE_BUILD_TYPE=Release \
-               -DOSSIA_SANITIZE=1 \
                -DCMAKE_PREFIX_PATH="$CMAKE_PREFIX_PATH" \
                -DCMAKE_INSTALL_PREFIX="$TRAVIS_BUILD_DIR" \
                -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
@@ -531,20 +522,20 @@ def get_versions():
       echo List TRAVIS_BUILD_DIR content
       cd $TRAVIS_BUILD_DIR
       ls
-      pushd ${TRAVIS_BUILD_DIR}/ossia-max-package/ && tar -czf ${ARTIFACTS_DIR}/ossia-max-osx.tar.gz ossia && popd
+      
+      release_macos_folder "$TRAVIS_BUILD_DIR/ossia-max-package/ossia" "ossia-max-osx.zip" "io.ossia.ossia-max"
 
     elif [[ "$BUILD_TYPE" == "python" ]]; then
       # _version.py is not valid in a non-git folder
-      # When making a wheel, we write the git tag which it has been build from
-      # request the version
-      WHEEL_TAG_VERSION=$(echo -e "import sys\nsys.path.append('${TRAVIS_BUILD_DIR}/src/ossia-python/')\nfrom pyossia._version import get_versions\nget_versions()['version']" | ${PYTHON_BIN})
+      # When making a wheel, we write the git tag from which it has been build
+      PEP440_VERSION=$(echo $TRAVIS_TAG | sed s/^[^0-9]*//g)
+
       echo "#! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
 def get_versions():
-  return {'version':'${WHEEL_TAG_VERSION}'}" > ${TRAVIS_BUILD_DIR}/src/ossia-python/pyossia/_version.py
+  return {'version':'${PEP440_VERSION}'}" > ${TRAVIS_BUILD_DIR}/src/ossia-python/pyossia/_version.py
       $CMAKE_BIN -DCMAKE_BUILD_TYPE=Release \
-                 -DOSSIA_SANITIZE=1 \
                  -DCMAKE_PREFIX_PATH="$CMAKE_PREFIX_PATH" \
                  -DCMAKE_INSTALL_PREFIX="$TRAVIS_BUILD_DIR" \
                  -DPYTHON_EXECUTABLE=${PYTHON_BIN} \
@@ -556,7 +547,9 @@ def get_versions():
                  ..
 
       $CMAKE_BIN --build . -- -j2
+      codesign_osx "$TRAVIS_BUILD_DIR"
       $CMAKE_BIN --build . --target install
+      codesign_osx "$TRAVIS_BUILD_DIR"
 
       # now we just want to install the wheel and run the tests
       ${PYTHON_BIN} -m pip install --user ${TRAVIS_BUILD_DIR}/build/src/ossia-python/dist/pyossia*.whl
@@ -569,7 +562,6 @@ def get_versions():
       cp ${TRAVIS_BUILD_DIR}/build/src/ossia-python/dist/pyossia*.whl ${ARTIFACTS_DIR}/
     elif [[ "$BUILD_TYPE" == "qml" ]]; then
       $CMAKE_BIN -DCMAKE_BUILD_TYPE=Release \
-                 -DOSSIA_SANITIZE=1 \
                  -DCMAKE_PREFIX_PATH="$CMAKE_PREFIX_PATH" \
                  -DCMAKE_INSTALL_PREFIX="$TRAVIS_BUILD_DIR"/ossia-qml \
                  -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
@@ -579,8 +571,8 @@ def get_versions():
                  ..
       $CMAKE_BIN --build . -- -j2
       $CMAKE_BIN --build . --target install
-
-      cd "$TRAVIS_BUILD_DIR/ossia-qml" && tar -czf ${ARTIFACTS_DIR}/ossia-qml-osx.tar.gz Ossia
+      
+      release_macos_folder "$TRAVIS_BUILD_DIR/ossia-qml/Ossia" "ossia-qml-osx.zip" "io.ossia.ossia-qml"
 
     elif [[  "$BUILD_TYPE" == "ossia-cpp" ]]; then
       $CMAKE_BIN -DCMAKE_BUILD_TYPE=Release \
@@ -590,23 +582,17 @@ def get_versions():
         -DOSSIA_EXAMPLES=0 \
         -DOSSIA_STATIC=0 \
         -DOSSIA_CI=1 \
-        -DCMAKE_INSTALL_PREFIX=$TRAVIS_BUILD_DIR/install \
+        -DCMAKE_INSTALL_PREFIX=$TRAVIS_BUILD_DIR/libossia \
         -DOSSIA_CPP_ONLY=1 ..
 
-        $CMAKE_BIN --build . -- -j2
-        $CMAKE_BIN --build . --target install
+      $CMAKE_BIN --build . -- -j2
+      $CMAKE_BIN --build . --target install
 
-        cd $TRAVIS_BUILD_DIR/install
-        tar -czf ${ARTIFACTS_DIR}/libossia-cpp-osx.tar.gz *
+      release_macos_folder "$TRAVIS_BUILD_DIR/libossia" "ossia-cpp-osx.zip" "io.ossia.ossia-cpp"
+
     else
-      OSSIA_UNITY=1
-      if [[ "$OSSIA_STATIC" == "1" ]]; then
-        OSSIA_UNITY=0
-      fi
-
       $CMAKE_BIN -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
                -DOSSIA_STATIC=$OSSIA_STATIC \
-               -DOSSIA_SANITIZE=1 \
                -DOSSIA_TESTING=1 \
                -DOSSIA_EXAMPLES=1 \
                -DCMAKE_PREFIX_PATH="$CMAKE_PREFIX_PATH" \
@@ -618,9 +604,8 @@ def get_versions():
                -DOSSIA_PROTOCOL_AUDIO=0 \
                -DOSSIA_C=1 \
                -DOSSIA_CPP=1 \
-               -DOSSIA_UNITY3D=${OSSIA_UNITY} \
                -DOSSIA_OSX_RETROCOMPATIBILITY=1 \
-               -DCMAKE_INSTALL_PREFIX=$TRAVIS_BUILD_DIR/install \
+               -DCMAKE_INSTALL_PREFIX=$TRAVIS_BUILD_DIR/libossia \
                -DOSSIA_PD=0 \
                ..
 
@@ -630,14 +615,9 @@ def get_versions():
 
       if [[ "$BUILD_TYPE" == "Release" ]]; then
         if [[ "$OSSIA_STATIC" == "1" ]]; then
-          cd $TRAVIS_BUILD_DIR/install
-          tar -czf ${ARTIFACTS_DIR}/libossia-native-macos-static.tar.gz include lib
+          zip -r ${ARTIFACTS_DIR}/libossia-native-macos-static.zip "$TRAVIS_BUILD_DIR/libossia"
         else
-          cd $TRAVIS_BUILD_DIR/install/ossia-unity
-          tar -czf ${ARTIFACTS_DIR}/ossia-unity3d-macos.tar.gz *
-
-          cd $TRAVIS_BUILD_DIR/install
-          tar -czf ${ARTIFACTS_DIR}/libossia-native-macos.tar.gz include lib
+          release_macos_folder "$TRAVIS_BUILD_DIR/libossia" "libossia-native-osx.zip" "io.ossia.ossia-native"
         fi
       fi
     fi

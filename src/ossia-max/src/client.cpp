@@ -7,6 +7,8 @@
 #include "remote.hpp"
 #include "view.hpp"
 #include "utils.hpp"
+#include "ZeroconfMinuitListener.hpp"
+#include "ZeroconfOscqueryListener.hpp"
 
 #include <ossia/network/osc/osc.hpp>
 #include <ossia/network/oscquery/oscquery_mirror.hpp>
@@ -36,10 +38,6 @@ extern "C" void ossia_client_setup()
       (short)sizeof(client), 0L, A_GIMME, 0);
 
   device_base::class_setup(c);
-
-  class_addmethod(
-      c, (method)client::register_children,
-      "register", A_NOTHING, 0);
 
   class_addmethod(
       c, (method)client::update,
@@ -83,9 +81,20 @@ void* client::create(t_symbol* name, long argc, t_atom* argv)
 
   if (x)
   {
+    critical_enter(0);
+    auto& pat_desc = ossia_max::get_patcher_descriptor(x->m_patcher);
+    if(!pat_desc.client && !pat_desc.device)
+      pat_desc.client = x;
+    else
+    {
+      error("You can put only one [ossia.device] or [ossia.client] per patcher");
+      object_free(x);
+      critical_exit(0);
+      return nullptr;
+    }
+
     // make outlets
-    x->m_dumpout
-        = outlet_new(x, NULL); // anything outlet to dump client state
+    x->m_dumpout = outlet_new(x, NULL); // anything outlet to dump client state
 
     x->m_device = 0;
 
@@ -93,13 +102,6 @@ void* client::create(t_symbol* name, long argc, t_atom* argv)
 
     x->m_poll_clock = clock_new(x, (method)client::poll_message);
     x->m_clock = clock_new(x, (method) client::connect);
-
-    if (ossia::max::find_peer(x))
-    {
-      error("You can have only one [ossia.device] or [ossia.client] per patcher.");
-      client::destroy(x);
-      return nullptr;
-    }
 
     // parse arguments
     long attrstart = attr_args_offset(argc, argv);
@@ -127,7 +129,10 @@ void* client::create(t_symbol* name, long argc, t_atom* argv)
     // process attr args, if any
     attr_args_process(x, argc - attrstart, argv + attrstart);
 
+    defer_low(x, (method) object_base::loadbang, nullptr, 0, nullptr);
+
     ossia_library.clients.push_back(x);
+    critical_exit(0);
   }
 
   return (x);
@@ -135,23 +140,22 @@ void* client::create(t_symbol* name, long argc, t_atom* argv)
 
 void client::destroy(client* x)
 {
+  critical_enter(0);
+
   x->m_dead = true;
+  x->m_node_selection.clear();
   x->m_matchers.clear();
 
-  clock_free((t_object*)x->m_clock);
-
-
-  // No more needed since all children
-  // are connected to node.about_to_be_deleted
-  // x->unregister_children();
+  if(x->m_clock)
+    clock_free((t_object*)x->m_clock);
 
   disconnect(x);
-  outlet_delete(x->m_dumpout);
+  if(x->m_dumpout)
+    outlet_delete(x->m_dumpout);
   ossia_max::instance().clients.remove_all(x);
-#if OSSIA_MAX_AUTOREGISTER
-  register_quarantinized();
-#endif
+
   x->~client();
+  critical_exit(0);
 }
 
 #pragma mark -
@@ -161,7 +165,7 @@ void client::assist(client*, void*, long m, long a, char* s)
 {
   if (m == ASSIST_INLET)
   {
-    sprintf(s, "All purpose input");
+    sprintf(s, "Client messages input");
   }
   else
   {
@@ -256,11 +260,11 @@ void client::connect(client* x)
 
       try
       {
-        x->m_device = new ossia::net::generic_device{
+        x->m_device = std::make_shared<ossia::net::generic_device>(
             std::make_unique<ossia::net::minuit_protocol>(
               minuit_settings.name, minuit_settings.host,
               minuit_settings.remote_port, minuit_settings.local_port),
-            x->m_name->s_name};
+            x->m_name->s_name);
       }
       catch (const std::exception& e)
       {
@@ -289,8 +293,8 @@ void client::connect(client* x)
       {
         x->m_oscq_protocol = new ossia::oscquery::oscquery_mirror_protocol{wsurl};
         x->m_oscq_protocol->set_zombie_on_remove(false);
-        x->m_device = new ossia::net::generic_device{
-            std::unique_ptr<ossia::net::protocol_base>(x->m_oscq_protocol), oscq_settings.name};
+        x->m_device = std::make_shared<ossia::net::generic_device>(
+            std::unique_ptr<ossia::net::protocol_base>(x->m_oscq_protocol), oscq_settings.name);
 
         clock_set(x->m_poll_clock, 1);
       }
@@ -325,11 +329,11 @@ void client::connect(client* x)
 
       try
       {
-        x->m_device = new ossia::net::generic_device{
+        x->m_device = std::make_shared<ossia::net::generic_device>(
             std::make_unique<ossia::net::osc_protocol>(
               osc_settings.host, osc_settings.remote_port,
               osc_settings.local_port, osc_settings.name),
-            x->m_name->s_name};
+            x->m_name->s_name);
       }
       catch (const std::exception& e)
       {
@@ -344,14 +348,7 @@ void client::connect(client* x)
       x->m_device = ZeroconfOscqueryListener::find_device(name);
       if(!x->m_device)
       {
-        if(auto data = ZeroconfMinuitListener::find_device(name))
-        {
-          x->m_device = new ossia::net::generic_device(
-                          std::make_unique<ossia::net::minuit_protocol>(
-                            data->name, data->host,
-                            data->remote_port, (rand() + 1024)%65536),
-                            data->name);
-        }
+        x->m_device = ZeroconfMinuitListener::find_device(name);
       }
       else
       {
@@ -374,9 +371,12 @@ void client::connect(client* x)
     outlet_anything(x->m_dumpout, gensym("connect"), count, connection_status);
 
     x->connect_slots();
-    ossia_max::instance().start_timers();
     client::update(x);
+    client::on_device_created(x);
     clock_unset(x->m_clock);
+
+    register_children_in_patcher_recursively(x->m_patcher, x);
+    output_all_values(x->m_patcher, true);
   }
   else
   {
@@ -390,34 +390,33 @@ void client::connect(client* x)
 
 void client::get_devices(client* x)
 {
+  auto minuit_devices = ZeroconfMinuitListener::get_devices();
+  auto oscq_devices = ZeroconfOscqueryListener::get_devices();
 
-}
+  t_atom a;
+  A_SETLONG(&a, minuit_devices.size() + oscq_devices.size());
+  outlet_anything(x->m_dumpout, gensym("devices"), 1, &a);
 
-void client::register_children(client* x)
-{
-  std::vector<object_base*> children_view = find_children_to_register(
-      &x->m_object, get_patcher(&x->m_object), gensym("ossia.view"));
-
-  for (auto child : children_view)
+  std::array<t_atom, 2> av;
+  for(const auto& dev : minuit_devices)
   {
-    if (child->m_otype == object_class::view)
-    {
-      ossia::max::view* view = (ossia::max::view*)child;
-      view->register_node(x->m_matchers);
-    }
-    else if (child->m_otype == object_class::remote)
-    {
-      ossia::max::remote* remote = (ossia::max::remote*)child;
-      remote->register_node(x->m_matchers);
-    }
+    A_SETSYM(av.data(), gensym("minuit"));
+    A_SETSYM(av.data()+1, gensym(dev->get_name().c_str()));
+    outlet_anything(x->m_dumpout, gensym("device"), 2, av.data());
+  }
+
+  for(const auto& dev : oscq_devices)
+  {
+    A_SETSYM(av.data(), gensym("oscquery"));
+    A_SETSYM(av.data()+1, gensym(dev->get_name().c_str()));
+    outlet_anything(x->m_dumpout, gensym("device"), 2, av.data());
   }
 }
 
 void client::unregister_children()
 {
-
   std::vector<object_base*> children_view = find_children_to_register(
-      &m_object, get_patcher(&m_object), gensym("ossia.view"));
+      &m_object, m_patcher, gensym("ossia.view"));
 
   for (auto child : children_view)
   {
@@ -439,14 +438,6 @@ void client::update(client* x)
   if (x->m_device)
   {
     x->m_device->get_protocol().update(*x->m_device);
-
-    auto& map = ossia_max::instance().root_patcher;
-    auto it = map.find(x->m_patcher_hierarchy.back());
-
-    // register children only if root patcher have been loadbanged
-    // else the patcher itself will trigger a registration on loadbang
-    if(it != map.end() && it->second.is_loadbanged)
-      client::register_children(x);
   }
 }
 
@@ -454,16 +445,19 @@ void client::disconnect(client* x)
 {
   if (x->m_device)
   {
+    x->m_node_selection.clear();
     x->m_matchers.clear();
     x->disconnect_slots();
+    // FIXME it should not be necessary to unregister_children because they should listen to on_node_removing signal
     x->unregister_children();
-    if(!x->is_zeroconf())
-      delete x->m_device;
     x->m_device = nullptr;
     x->m_oscq_protocol = nullptr;
-    ossia_max::instance().stop_timers();
+    client::on_device_removing(x);
+
+    outlet_anything(x->m_dumpout, gensym("disconnected"), 0, nullptr);
   }
-  clock_unset(x->m_clock); // avoid automatic reconnection
+  if(x->m_clock)
+    clock_unset(x->m_clock); // avoid automatic reconnection
 }
 
 void client::poll_message(client* x)

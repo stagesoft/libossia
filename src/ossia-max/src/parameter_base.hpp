@@ -14,6 +14,8 @@ public:
 
   parameter_base();
 
+  void output_values(bool only_default);
+
   // attribute setting method
   void set_access_mode();
   void set_repetition_filter();
@@ -31,20 +33,20 @@ public:
   static void class_setup(t_class*c);
 
   static void get_mess_cb(parameter_base* x, t_symbol* s);
-  static void get_unit(parameter_base*x, std::vector<t_matcher*> nodes);
-  static void get_rate(parameter_base*x, std::vector<t_matcher*> nodes);
-  static void get_mute(parameter_base*x, std::vector<t_matcher*> nodes);
-  static void get_domain(parameter_base* x, std::vector<t_matcher*> nodes);
-  static void get_min(parameter_base* x, std::vector<t_matcher*> nodes);
-  static void get_max(parameter_base* x, std::vector<t_matcher*> nodes);
-  static void get_bounding_mode(parameter_base* x, std::vector<t_matcher*> nodes);
-  static void get_default(parameter_base* x, std::vector<t_matcher*> nodes);
-  static void get_type(parameter_base* x, std::vector<t_matcher*> nodes);
-  static void get_access_mode(parameter_base* x, std::vector<t_matcher*> nodes);
-  static void get_repetition_filter(parameter_base* x, std::vector<t_matcher*> nodes);
-  static void get_critical(parameter_base* x, std::vector<t_matcher*> nodes);
-  static void get_enable(parameter_base* x, std::vector<t_matcher*> nodes);
-  static void get_queue_length(parameter_base*x, std::vector<t_matcher*> nodes);
+  static void get_unit(parameter_base*x, std::vector<matcher*> nodes);
+  static void get_rate(parameter_base*x, std::vector<matcher*> nodes);
+  static void get_mute(parameter_base*x, std::vector<matcher*> nodes);
+  static void get_domain(parameter_base* x, std::vector<matcher*> nodes);
+  static void get_min(parameter_base* x, std::vector<matcher*> nodes);
+  static void get_max(parameter_base* x, std::vector<matcher*> nodes);
+  static void get_bounding_mode(parameter_base* x, std::vector<matcher*> nodes);
+  static void get_default(parameter_base* x, std::vector<matcher*> nodes);
+  static void get_type(parameter_base* x, std::vector<matcher*> nodes);
+  static void get_access_mode(parameter_base* x, std::vector<matcher*> nodes);
+  static void get_repetition_filter(parameter_base* x, std::vector<matcher*> nodes);
+  static void get_critical(parameter_base* x, std::vector<matcher*> nodes);
+  static void get_enable(parameter_base* x, std::vector<matcher*> nodes);
+  static void get_queue_length(parameter_base*x, std::vector<matcher*> nodes);
 
   // attributes
   t_symbol* m_type{};
@@ -59,13 +61,15 @@ public:
   long m_enable{1};
   long m_critical{0};
   t_symbol* m_unit{};
-  std::optional<ossia::unit_t> m_ounit;
+  std::optional<ossia::unit_t> m_local_unit;
 
   // size of size-variable attribute
   long m_default_size{};
   long m_range_size{};
   long m_min_size{};
   long m_max_size{};
+
+  bool m_set_flag{};
 
   /**
    * @brief t_obj_base::push : push a value to a node
@@ -85,7 +89,6 @@ public:
    * @param x
    */
   static void bang(parameter_base* x);
-  static void output_value(parameter_base* x);
   static void push_default_value(parameter_base* x);
 
   static void set(parameter_base* x, t_symbol* s, int argc, t_atom* argv);

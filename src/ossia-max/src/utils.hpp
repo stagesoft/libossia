@@ -21,19 +21,40 @@ namespace ossia
 namespace max
 {
 
-/**
- * @brief find_peers: find object of the same class in the patcher
- * @param x : object we are looking for friend
- * @return true if we find one, false otherwise
- */
-bool find_peer(object_base *x);
+void object_namespace(object_base* x);
 
 /**
- * @brief find_global_node: find node matching address with a 'device:' prefix
- * @param addr : address string
- * @return pointer to the node
+ * @brief Find all objects [classname] in the current patcher.
+ * @param patcher : patcher in which we are looking for objects
+ * @param classname : name of the object to search (ossia.model or ossia.view)
+ * @return std::vector<object_base*> containing pointer to object_base struct of the
+ * corresponding classname
  */
-std::vector<ossia::net::node_base*> find_global_nodes(ossia::string_view addr);
+std::vector<object_base*> find_children_to_register(
+    t_object* object, t_object* patcher, t_symbol* classname, bool search_dev = false);
+
+/**
+ * @brief register_objects_in_patcher_recursively : iterate over all patcher's objects and register them one by one recursively
+ * @param root_patcher: starting patcher
+ * @param caller: object that calls the function
+ */
+void register_children_in_patcher_recursively(t_object* root_patcher, object_base* caller);
+
+
+/**
+ * @brief Convenient method to easily get the patcher where a box is
+ */
+t_object* get_patcher(t_object* object);
+
+/**
+ */
+std::vector<std::string> parse_tags_symbol(t_symbol** tags_symbol, long size);
+
+/**
+ * @brief get_all_devices: iterate over all ossia.device and ossia.client to get their generic_device
+ * @return a list of all known generic_devices*
+ */
+std::vector<ossia::net::generic_device*> get_all_devices();
 
 /**
  * @brief get_parameter_type: return address type (relative, absolute or globale)
@@ -58,8 +79,6 @@ std::vector<ossia::value> attribute2value(t_atom* atom, long size);
 ossia::val_type symbol2val_type(t_symbol* s);
 t_symbol* val_type2symbol(ossia::val_type t);
 
-std::string object_path_absolute(object_base* x);
-
 /**
  * @brief symbol2bounding_mode convert t_symbol* to corresponging ossia::bounding_mode
  * @param t_symbol* bounding_mode
@@ -77,14 +96,42 @@ t_symbol* access_mode2symbol(ossia::access_mode mode);
  * @param node
  * @return
  */
-std::vector<ossia::max::t_matcher*> make_matchers_vector(object_base* x, const ossia::net::node_base* node);
+std::vector<ossia::max::matcher*> make_matchers_vector(object_base* x, const ossia::net::node_base* node);
 
 ossia::value atom2value(t_symbol* s, int argc, t_atom* argv);
 
-void trig_output_value(ossia::net::node_base* node);
+// return a list of nodes priority from root to node
+std::vector<ossia::net::priority> get_priority_list(ossia::net::node_base* node);
+
+struct node_priority
+{
+  std::shared_ptr<matcher> obj{};
+  std::vector<ossia::net::priority> priorities;
+
+  friend std::ostream &operator<<( std::ostream &output, const node_priority &n ) {
+    output << object_classname(n.obj->get_owner())->s_name << "\t" << n.obj->get_node()->get_name() << "\t";
+    for(auto p : n.priorities)
+      output << p << " ";
+    return output;
+  }
+};
+
+/**
+ * @brief fire_values_by_priority: sort graph by priority ond output values
+ * @param priority_graph: vector of node_priority to sort and fire
+ * @param only_default: only output default values
+ */
+void fire_values_by_priority(std::vector<node_priority>& priority_graph, bool only_default);
+
+
+/**
+* @brief fire_all_values_by_priority: output every parameter's values by priority order
+* @param patcher: the patcher in which to look for object
+* @param only_default: output only default value
+*/
+void output_all_values(t_object* patcher, bool only_default);
 
 // put templates after prototype so we can use them
-
 template<typename T>
 std::vector<T*> get_objects(typename T::is_model* = nullptr)
 {
@@ -159,7 +206,7 @@ T* find_parent_box(
   ossia::remove_one(objects, x);
 
   // and sort objects by hierarchy size
-  // because the first parent have potentially the same hierarchy depth
+  // because the first parent might have the same hierarchy depth
   ossia::sort(objects, [](auto o1, auto o2){
     return o1->m_patcher_hierarchy.size() > o2->m_patcher_hierarchy.size();});
 
@@ -208,133 +255,23 @@ static inline T* find_parent_box_alive(
   return parent;
 }
 
-template<typename T>
-void ossia_register(T* x)
-{
-  if(x->m_dead)
-    return; // object will be removed soon
-
-  if (x->m_reg_clock)
-  {
-    clock_unset(x->m_reg_clock);
-  }
-
-  if (!x->m_name)
-    return;
-
-  std::vector<std::shared_ptr<t_matcher>> tmp;
-  std::vector<std::shared_ptr<t_matcher>>* matchers = &tmp;
-  std::vector<ossia::net::node_base*> nodes;
-
-  if (x->m_addr_scope == ossia::net::address_scope::global)
-  {
-    std::string addr = x->m_name->s_name;
-
-    if(x->m_otype == object_class::param || x->m_otype == object_class::model)
-    {
-       size_t pos = 0;
-       while( pos != std::string::npos && nodes.empty())
-       {
-         // remove the last part which should be created
-         pos = addr.find_last_of('/');
-         if( pos < addr.size() )
-         {
-           addr = addr.substr(0,pos);
-         }
-         nodes = ossia::max::find_global_nodes(addr+"/");
-       }
-       addr += '/';
-    }
-    else
-    {
-      nodes = ossia::max::find_global_nodes(addr);
-    }
-
-    tmp.reserve(nodes.size());
-    for (auto n : nodes)
-    {
-      tmp.emplace_back(std::make_shared<t_matcher>(n, (object_base*)nullptr));
-    }
-  }
-  else
-  {
-    std::pair<int,ossia::max::device*> device{};
-    device.second =
-        find_parent_box_alive<ossia::max::device>(x, 0, &device.first);
-
-    std::pair<int,ossia::max::client*> client{};
-    client.second =
-        find_parent_box_alive<ossia::max::client>(x, 0, &client.first);
-
-    std::pair<int,ossia::max::model*> model{};
-    std::pair<int,ossia::max::view*> view{};
-    int start_level{};
-
-    if ( x->m_otype == object_class::view || x->m_otype == object_class::model)
-    {
-      start_level = 1;
-    }
-
-    if (x->m_addr_scope == ossia::net::address_scope::relative)
-    {
-      // then try to locate a parent view or model
-      if (x->m_otype == object_class::view || x->m_otype == object_class::remote)
-      {
-        view.second = find_parent_box_alive<ossia::max::view>(
-              x, start_level, &view.first);
-      }
-
-      if (!view.second)
-      {
-        model.second = find_parent_box_alive<ossia::max::model>(
-              x, start_level, &model.first);
-      }
-    }
-
-    std::vector<std::pair<int, object_base*>> vec{device, client, model, view};
-    // sort pair by ascending order : closest one first
-    std::sort(vec.begin(), vec.end());
-
-    for(auto& p : vec)
-    {
-      if(p.second)
-      {
-        matchers = &p.second->m_matchers;
-        break;
-      }
-    }
-
-    if(matchers == &tmp
-       && x->m_addr_scope != ossia::net::address_scope::global)
-    {
-      tmp.push_back(std::make_shared<t_matcher>(&ossia_max::get_default_device()->get_root_node(),
-                      (object_base*) nullptr));
-    }
-  }
-
-  x->register_node(*matchers);
-}
-
-template<typename T>
-void ossia_check_and_register(T* x)
-{
-  auto& map = ossia_max::instance().root_patcher;
-  auto it = map.find(x->m_patcher_hierarchy.back());
-
-  if(!x->m_reg_clock)
-    x->m_reg_clock = clock_new(x, (method) ossia_register<T>);
-
-  clock_delay(x->m_reg_clock, 1);
-}
-
 template <typename T>
 void address_mess_cb(T* x, t_symbol* address)
 {
+  x->save_children_state();
   x->m_name = address;
   x->m_addr_scope = ossia::net::get_address_scope(x->m_name->s_name);
   x->update_path();
-  x->unregister();
-  ossia_register(x);
+  x->m_node_selection.clear();
+  x->m_matchers.clear();
+  x->do_registration();
+
+  if(x->m_otype == object_class::view
+  || x->m_otype == object_class::model)
+  {
+    register_children_in_patcher_recursively(x->m_patcher, x);
+    output_all_values(x->m_patcher, false);
+  }
 }
 
 struct domain_visitor {
@@ -373,7 +310,7 @@ struct domain_visitor {
     {
       x->m_range_size = d.values.size() > OSSIA_MAX_MAX_ATTR_SIZE ? OSSIA_MAX_MAX_ATTR_SIZE : d.values.size();
       int i=0;
-      for(const auto& s : d.values.container)
+      for(const auto& s : d.values)
       {
         auto sym = gensym(s.c_str());
         A_SETSYM(x->m_range+i, sym);

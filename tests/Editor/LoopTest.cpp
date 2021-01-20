@@ -1,6 +1,6 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check it.
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-#define CATCH_CONFIG_MAIN
+
 #include <catch.hpp>
 #include <ossia/detail/config.hpp>
 
@@ -87,7 +87,7 @@ struct test_loop
       auto child = std::make_shared<loop>(1_tv, time_interval::exec_callback{}, time_event::exec_callback{}, time_event::exec_callback{});
 
       auto snd = std::make_shared<ossia::nodes::sound_ref>(); snd1 = snd.get();
-      snd->set_sound(std::vector<ossia::float_vector>{ {1., 2., 3., 4.} });
+      snd->set_sound(ossia::audio_array{ {1., 2., 3., 4.} });
       child->get_time_interval().add_time_process(std::make_shared<ossia::node_process>(snd));
       i1->add_time_process(child);
 
@@ -99,7 +99,7 @@ struct test_loop
       auto child = std::make_shared<loop>(2_tv, time_interval::exec_callback{}, time_event::exec_callback{}, time_event::exec_callback{});
 
       auto snd = std::make_shared<ossia::nodes::sound_ref>(); snd2 = snd.get();
-      snd->set_sound(std::vector<ossia::float_vector>{ {5.,6.,7.,8.} });
+      snd->set_sound(ossia::audio_array {{5., 6., 7., 8.}});
       child->get_time_interval().add_time_process(std::make_shared<ossia::node_process>(snd));
       i2->add_time_process(child);
 
@@ -193,7 +193,7 @@ TEST_CASE ("test_loop_sound", "test_loop_sound")
     loop l{4_tv, time_interval::exec_callback{}, time_event::exec_callback{},
            time_event::exec_callback{}};
     auto snd = std::make_shared<ossia::nodes::sound_ref>();
-    snd->set_sound(std::vector<ossia::float_vector>{ {0.1, 0.2, 0.3, 0.4} });
+    snd->set_sound(ossia::audio_array {{0.1, 0.2, 0.3, 0.4}});
     l.get_time_interval().add_time_process(std::make_shared<ossia::node_process>(snd));
 
     l.start();
@@ -208,7 +208,7 @@ TEST_CASE ("test_loop_sound", "test_loop_sound")
     loop l{4_tv, time_interval::exec_callback{}, time_event::exec_callback{},
            time_event::exec_callback{}};
     auto snd = std::make_shared<ossia::nodes::sound_ref>();
-    snd->set_sound(std::vector<ossia::float_vector>{ {0.1, 0.2, 0.3, 0.4} });
+    snd->set_sound(ossia::audio_array {{0.1, 0.2, 0.3, 0.4}});
     l.get_time_interval().add_time_process(std::make_shared<ossia::node_process>(snd));
 
     l.start();
@@ -225,7 +225,7 @@ TEST_CASE ("test_loop_sound", "test_loop_sound")
     loop l{4_tv, time_interval::exec_callback{}, time_event::exec_callback{},
            time_event::exec_callback{}};
     auto snd = std::make_shared<ossia::nodes::sound_ref>();
-    snd->set_sound(std::vector<ossia::float_vector>{ {0.1, 0.2, 0.3, 0.4} });
+    snd->set_sound(ossia::audio_array {{0.1, 0.2, 0.3, 0.4}});
     l.get_time_interval().add_time_process(std::make_shared<ossia::node_process>(snd));
 
     l.start();
@@ -234,7 +234,7 @@ TEST_CASE ("test_loop_sound", "test_loop_sound")
     e.bufferSize = 9;
 
     for(auto tk : snd->requested_tokens)
-      ((ossia::graph_node*)snd.get())->run(tk, {e});
+      ((ossia::graph_node*)snd.get())->run(tk, {&e});
     auto op = snd->root_outputs()[0]->target<audio_port>()->samples;
     audio_vector expected{audio_channel{0.1f, 0.2f, 0.3f, 0.4f, 0.1f, 0.2f, 0.3f, 0.4f, 0.1f}};
     for(int i = 0; i < 9; i++)
@@ -268,7 +268,7 @@ TEST_CASE ("test_subloop", "test_subloop")
   parent.get_time_interval().add_time_process(child);
 
   auto snd = std::make_shared<ossia::nodes::sound_ref>();
-  snd->set_sound(std::vector<ossia::float_vector>{ {0.1, 0.2, 0.3, 0.4} });
+  snd->set_sound(ossia::audio_array {{0.1, 0.2, 0.3, 0.4}});
   child->get_time_interval().add_time_process(std::make_shared<ossia::node_process>(snd));
 
   parent.start();
@@ -277,7 +277,7 @@ TEST_CASE ("test_subloop", "test_subloop")
   ossia::execution_state e;
   e.bufferSize = 14;
   for(auto tk : snd->requested_tokens)
-    ((ossia::graph_node*)snd.get())->run(tk, {e});
+    ((ossia::graph_node*)snd.get())->run(tk, {&e});
 
 
   audio_vector expected{audio_channel{0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1, 0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1}};
@@ -325,7 +325,7 @@ TEST_CASE ("test_subloops_in_scenario", "test_subloops_in_scenario")
   {
     REQUIRE(chan[i] - expected[0][i] < 0.000001);
   }
-  for(int i = 14; i < chan.size(); i++)
+  for(std::size_t i = 14; i < chan.size(); i++)
   {
     REQUIRE(0.f == chan[i]);
   }

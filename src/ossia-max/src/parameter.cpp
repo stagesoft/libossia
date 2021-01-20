@@ -48,6 +48,9 @@ void* parameter::create(t_symbol* s, long argc, t_atom* argv)
 
   if (x)
   {
+    critical_enter(0);
+    ossia_max::get_patcher_descriptor(x->m_patcher).parameters.push_back(x);
+
     // make outlets
     x->m_dumpout
         = outlet_new(x, NULL); // anything outlet to dump parameter state
@@ -65,20 +68,13 @@ void* parameter::create(t_symbol* s, long argc, t_atom* argv)
 
     // check name argument
     x->m_name = _sym_nothing;
-    if (attrstart && argv)
+    if (attrstart > 0 && argv)
     {
       if (atom_gettype(argv) == A_SYM)
       {
         x->m_name = atom_getsym(argv);
         x->m_addr_scope = ossia::net::get_address_scope(x->m_name->s_name);
       }
-    }
-
-    if (x->m_name == _sym_nothing)
-    {
-      object_error((t_object*)x, "needs a name as first argument");
-      x->m_name = gensym("untitledParameter");
-      return x;
     }
 
     // process attr args, if any
@@ -100,10 +96,10 @@ void* parameter::create(t_symbol* s, long argc, t_atom* argv)
     // https://cycling74.com/forums/notify-when-attribute-changes
     object_attach_byptr_register(x, x, CLASS_BOX);
 
-    // start registration
-    ossia_check_and_register(x);
+    defer_low(x, (method) object_base::loadbang, nullptr, 0, nullptr);
 
     ossia_max::instance().parameters.push_back(x);
+    critical_exit(0);
   }
 
   return x;
@@ -111,26 +107,28 @@ void* parameter::create(t_symbol* s, long argc, t_atom* argv)
 
 void parameter::destroy(parameter* x)
 {
+  critical_enter(0);
+  x->m_dead = true;
   x->unregister();
-  object_dequarantining<parameter>(x);
   ossia_max::instance().parameters.remove_all(x);
   outlet_delete(x->m_data_out);
   outlet_delete(x->m_dumpout);
   x->~parameter();
+  critical_exit(0);
 }
 
 void parameter::assist(parameter* x, void* b, long m, long a, char* s)
 {
   if (m == ASSIST_INLET)
   {
-    sprintf(s, "All purpose input");
+    sprintf(s, "Parameter input");
   }
   else
   {
     switch(a)
     {
       case 0:
-        sprintf(s, "Data output");
+        sprintf(s, "Parameter value");
         break;
       case 1:
         sprintf(s, "Dumpout");
@@ -159,68 +157,18 @@ t_max_err parameter::notify(parameter *x, t_symbol *s,
   return 0;
 }
 
-bool parameter::register_node(const std::vector<std::shared_ptr<t_matcher>>& nodes)
+void parameter::do_registration()
 {
-  bool res = do_registration(nodes);
-  if (res)
-  {
-    object_dequarantining<parameter>(this);
-    for (auto remote : remote::quarantine().copy())
-    {
-      ossia_register(remote);
-    }
-    for (auto remote : attribute::quarantine().copy())
-    {
-      ossia_register(remote);
-    }
-    if(ossia_max::instance().registering_nodes)
-      ossia_max::instance().nr_parameters.remove_all(this);
-  }
-  else
-    object_quarantining<parameter>(this);
+  m_registered = true;
 
-  return res;
-}
+  m_matchers = find_or_create_matchers();
 
-bool parameter::do_registration(const std::vector<std::shared_ptr<t_matcher>>& matchers)
-{
-  if(!ossia_max::instance().registering_nodes)
-    unregister(); // we should unregister here because we may have add a node
-                // between the registered node and the parameter
-
-
-  for (auto& m : matchers)
-  {
-    auto node = m->get_node();
-    m_parent_node = node;
-
-    auto params = ossia::net::find_or_create_parameter(
-          *node, m_name->s_name, m_type->s_name);
-
-    for (auto p : params)
-    {
-      if (!p)
-      {
-        object_error(
-              (t_object*)this,
-              "type should one of: float, symbol, int, vec2f, "
-              "vec3f, vec4f, bool, list, char");
-
-        return false;
-      }
-
-      ossia::net::set_priority(p->get_node(), m_priority);
-
-      ossia::net::set_disabled(p->get_node(), !m_enable);
-
-      ossia::net::set_hidden(p->get_node(), m_invisible);
-
-      m_matchers.emplace_back(std::make_shared<t_matcher>(&p->get_node(), this));
-    }
-  }
-
+  m_selection_path.reset();
   fill_selection();
 
+  set_priority();
+  set_hidden();
+  set_enable();
   set_description();
   set_tags();
   set_access_mode();
@@ -233,10 +181,22 @@ bool parameter::do_registration(const std::vector<std::shared_ptr<t_matcher>>& m
   set_repetition_filter();
   set_recall_safe();
 
-  if(!ossia_max::instance().registering_nodes) // don't push default value when registering at loadbang
-    push_default_value(this);                  // default value will be sent at the end of the global registration
-
-  return (!m_matchers.empty() || m_is_pattern);
+  for(const auto& m : m_matchers)
+  {
+    auto param = m->get_node()->get_parameter();
+    auto val = param->get_default_value();
+    auto it = m_value_map.find(m->get_node()->get_name());
+    if(it != m_value_map.end())
+    {
+      val = it->second;
+      m_value_map.erase(it);
+    }
+    if(val)
+    {
+      // push quiet here because will be fired later following priority
+      param->push_value_quiet(*val);
+    }
+  }
 }
 
 bool parameter::unregister()
@@ -244,16 +204,9 @@ bool parameter::unregister()
   m_node_selection.clear();
   m_matchers.clear();
 
-  for (auto remote : remote::quarantine().copy())
-  {
-    ossia_register(remote);
-  }
-  for (auto attribute : attribute::quarantine().copy())
-  {
-    ossia_register(attribute);
-  }
+  ossia_max::instance().nr_parameters.push_back(this);
 
-  object_quarantining(this);
+  m_registered = false;
 
   return true;
 }
@@ -274,10 +227,12 @@ void parameter::save_values()
   }
 }
 
-ossia::safe_set<parameter *> &parameter::quarantine()
+void parameter::on_device_created_callback(ossia::max::device* dev)
 {
-  return ossia_max::instance().parameter_quarantine;
+  // TODO match the device name with m_name prefix
+  // then create_node_from_matcher
 }
+
 
 } // max namespace
 } // ossia namespace

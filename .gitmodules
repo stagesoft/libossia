@@ -28,14 +28,6 @@
 [submodule "3rdparty/hopscotch-map"]
     path = 3rdparty/hopscotch-map
     url = https://github.com/tessil/hopscotch-map.git
-[submodule "3rdparty/pure-data"]
-    path = 3rdparty/pure-data
-    #url = https://github.com/avilleret/pure-data.git
-    #url = https://git.code.sf.net/p/pure-data/pure-data
-  url = https://github.com/pure-data/pure-data.git
-[submodule "3rdparty/CicmWrapper"]
-    path = 3rdparty/CicmWrapper
-    url = https://github.com/avilleret/CicmWrapper.git
 [submodule "3rdparty/chobo-shl"]
     path = 3rdparty/chobo-shl
     url = https://github.com/Chobolabs/chobo-shl
@@ -77,7 +69,7 @@
     url = https://github.com/jcelerier/flat_hash_map
 [submodule "3rdparty/max-sdk"]
     path = 3rdparty/max-sdk
-    url = https://github.com/Cycling74/max-sdk.git
+    url = https://github.com/ossia/max-sdk.git
 [submodule "3rdparty/verdigris"]
     path = 3rdparty/verdigris
     url = https://github.com/jcelerier/verdigris
@@ -102,9 +94,6 @@
 [submodule "3rdparty/dr_libs"]
 	path = 3rdparty/dr_libs
 	url = https://github.com/mackron/dr_libs
-[submodule "3rdparty/purr-data"]
-	path = 3rdparty/purr-data
-	url = https://git.purrdata.net/jwilkes/purr-data.git 
 [submodule "3rdparty/rubberband"]
 	path = 3rdparty/rubberband
 	url = https://github.com/jcelerier/rubberband/
@@ -123,3 +112,9 @@
 [submodule "3rdparty/cpp-taskflow"]
 	path = 3rdparty/cpp-taskflow
 	url = https://github.com/cpp-taskflow/cpp-taskflow
+[submodule "3rdparty/rapidfuzz-cpp"]
+	path = 3rdparty/rapidfuzz-cpp
+	url = https://github.com/maxbachmann/rapidfuzz-cpp.git 
+[submodule "3rdparty/Catch2"]
+	path = 3rdparty/Catch2
+	url = https://github.com/catchorg/Catch2

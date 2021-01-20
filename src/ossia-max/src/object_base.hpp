@@ -1,6 +1,10 @@
 #pragma once
 #include <ossia/detail/config.hpp>
 #include "ext.h"
+#include "ext_obex.h"
+#include "ext_critical.h"
+
+#include "matcher.hpp"
 
 #include <ossia/detail/safe_vec.hpp>
 #include <ossia/detail/optional.hpp>
@@ -11,8 +15,7 @@
 #include <ossia/network/generic/generic_device.hpp>
 #include <ossia/network/common/path.hpp>
 
-#include <concurrentqueue.h>
-
+#include <iostream>
 #include <map>
 
 #define OSSIA_MAX_MAX_ATTR_SIZE 256
@@ -34,53 +37,14 @@ enum class object_class
   view,
   device,
   client,
-  attribute
+  attribute,
+  explorer,
+  search,
+  monitor,
+  fuzzysearch
 };
 
 struct object_base;
-
-class t_matcher
-{
-public:
-  t_matcher(ossia::net::node_base* n, object_base* p); // constructor
-  ~t_matcher();
-  t_matcher(const t_matcher&) = delete;
-  t_matcher(t_matcher&& other);
-  t_matcher& operator=(const t_matcher&) = delete;
-  t_matcher& operator=(t_matcher&& other);
-
-  void enqueue_value(ossia::value v);
-  void output_value();
-  ossia::net::node_base* get_node() const { return node; }
-  object_base* get_parent() const { return owner; }
-  const t_atom* get_atom_addr_ptr() const { return &m_addr; }
-  void set_parent_addr();
-
-  inline bool operator==(const t_matcher& rhs)
-  { return (get_node() == rhs.node); }
-
-  void set_dead(){ m_dead = true; }
-  void set_zombie(){ m_zombie = true; }
-  bool is_zombie() const { return  m_zombie; }
-  bool is_locked() const { return m_lock; }
-  bool is_dead() const { return m_dead; }
-
-  std::vector<ossia::value> m_set_pool;
-
-private:
-  ossia::net::node_base* node{};
-  object_base* owner{};
-
-  std::optional<ossia::callback_container<ossia::value_callback>::iterator>
-    callbackit = std::nullopt;
-
-  moodycamel::ConcurrentQueue<ossia::value> m_queue_list;
-
-  bool m_dead{}; // true when Max object is being deleted
-  bool m_zombie{}; // true if node is deleted, t_matcher should be deleted asap
-  bool m_lock{};
-  t_atom m_addr{};
-};
 
 struct search_result
 {
@@ -113,23 +77,21 @@ public:
   bool m_dead{false}; // wether this object is being deleted or not;
   bool m_is_deleted{};
   bool m_lock{false}; // attribute lock
+  bool m_registered{}; // true if register_node() have been called at least once
   long m_queue_length{64};
   ossia::net::address_scope m_addr_scope{};
   object_class m_otype{};
 
   void* m_clock{};
-  void* m_reg_clock{}; // registration clock that should be initialized by constructor
-                       // and canceled by loadbang method
+  void* m_highlight_clock{}; // clock to reset color after some amount of time
+                             // to highlight the object in the patcher
 
   float m_rate{10};
 
-  ossia::net::generic_device* m_device{};
-  // std::vector<ossia::net::node_base*> m_nodes{};
-  ossia::net::node_base* m_parent_node{};
-  std::vector<std::shared_ptr<t_matcher>> m_matchers{};
-  std::vector<t_matcher*> m_node_selection{};
+  std::shared_ptr<ossia::net::generic_device> m_device{};
+  std::vector<std::shared_ptr<matcher>> m_matchers{};
+  std::vector<matcher*> m_node_selection{};
   std::optional<ossia::traversal::path> m_selection_path{};
-
   static void class_setup(t_class*c);
 
   void fill_selection();
@@ -142,31 +104,39 @@ public:
   void set_hidden();
   void set_recall_safe();
 
-  static void get_description(object_base* x, std::vector<t_matcher*> nodes);
-  static void get_tags(object_base* x, std::vector<t_matcher*> nodes);
-  static void get_priority(object_base* x, std::vector<t_matcher*> nodes);
-  static void get_hidden(object_base* x, std::vector<t_matcher*> nodes);
-  static void get_zombie(object_base*x, std::vector<t_matcher*> nodes);
+  // return the global path of the object with pattern
+  std::string make_global_pattern();
+  object_base* find_parent_object();
+
+  // return the first parent ossia object, nullptr otherwise
+  object_base* find_parent_object_recursively(t_object* patcher, bool look_for_model_view);
+
+  static void get_description(object_base* x, std::vector<matcher*> nodes);
+  static void get_tags(object_base* x, std::vector<matcher*> nodes);
+  static void get_priority(object_base* x, std::vector<matcher*> nodes);
+  static void get_hidden(object_base* x, std::vector<matcher*> nodes);
+  static void get_zombie(object_base*x, std::vector<matcher*> nodes);
   static void get_mess_cb(object_base* x, t_symbol* s);
   static void select_mess_cb(object_base* x, t_symbol* s, int argc, t_atom* argv);
-  static void get_recall_safe(object_base*x, std::vector<t_matcher*> nodes);
-
+  static void get_recall_safe(object_base*x, std::vector<matcher*> nodes);
 
   // default attributes
   t_symbol* m_name{};
   t_symbol* m_tags[OSSIA_MAX_MAX_ATTR_SIZE] = {{}};
   t_symbol* m_description{};
-  long m_priority{};
+  float m_priority{};
   long m_invisible{};
   long m_defer_set{1};
   long m_recall_safe{};
+  long m_trim_addr{1};
+  t_object* m_patcher{};
 
   long m_tags_size{};
   long m_description_size{};
+  t_jrgba m_color{};
 
   std::vector<search_result> m_found_parameters{};
   std::vector<search_result> m_found_models{};
-  t_object* m_patcher{};
 
   // constructor
   object_base();
@@ -177,22 +147,42 @@ public:
   bool m_loadbanged{}; // true if object received a loadbang
 
   std::mutex m_bind_mutex;
+  // TODO check where this is filled
   std::vector<t_object*> m_patcher_hierarchy; // canvas hierarchy in ascending order, the last is the root patcher
-
 
   static void update_attribute(object_base* x, ossia::string_view attribute, const ossia::net::node_base* node);
   static t_max_err notify(object_base *x, t_symbol *s, t_symbol *msg, void *sender, void *data);
-  void is_deleted(const ossia::net::node_base& n);
+  void on_node_removing(const ossia::net::node_base& n);
 
   static void defer_set_output(object_base*x, t_symbol*s ,int argc, t_atom* argv);
   static void set(object_base* x, t_symbol* s, int argc, t_atom* argv);
-  static void get_address(object_base *x,  std::vector<t_matcher*> nodes);
+  static void get_address(object_base *x,  std::vector<matcher*> nodes);
   static void lock_and_touch(object_base* x, t_symbol* s);
+  static void closebang(object_base* x);
   static void loadbang(object_base* x);
+  void save_children_state();
+  void highlight();
+  static void reset_color(object_base* x);
+
+  void push_parameter_value(ossia::net::parameter_base* param, const ossia::value& val);
+
+  ossia::traversal::path get_path()
+  {
+    if(!m_path)
+      update_path();
+    return *m_path;
+  }
 
 protected:
-  std::optional<ossia::traversal::path> m_path;
+  std::vector<std::shared_ptr<matcher>> find_or_create_matchers();
+
   std::map<std::string, ossia::value> m_value_map;
+
+  static ossia::safe_set<ossia::net::parameter_base*> param_locks;
+
+private:
+  std::vector<std::shared_ptr<matcher>> find_parent_nodes();
+  std::optional<ossia::traversal::path> m_path;
 };
 
 #pragma mark -

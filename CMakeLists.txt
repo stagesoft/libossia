@@ -11,13 +11,22 @@ if(APPLE AND EXISTS /usr/local/opt/qt5)
   list(APPEND CMAKE_PREFIX_PATH "/usr/local/opt/qt5")
 endif()
 
-cmake_minimum_required(VERSION 3.17 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.13 FATAL_ERROR)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.18)
+  cmake_policy(VERSION 3.18)
+endif()
 
-project(OSSIA C CXX)
+
+project(ossia C CXX)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE 1)
 find_package(Threads)
-find_package(Qt5 5.3 COMPONENTS Core)
+
+if(NOT QT_VERSION)
+  set(QT_VERSION Qt5 5.9)
+  set(QT_PREFIX Qt5)
+endif()
+find_package(${QT_VERSION} COMPONENTS Core)
 
 # Options
 ## FIXME : the following variable doesn't have a type
@@ -47,7 +56,8 @@ if(OSSIA_EXAMPLES)
 endif()
 
 if(OSSIA_TESTING)
-  enable_testing()
+  include(CTest)
+  add_subdirectory(3rdparty/Catch2)
   add_subdirectory(tests)
 endif()
 

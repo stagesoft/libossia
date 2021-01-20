@@ -6,6 +6,7 @@
 
 #include <smallfun.hpp>
 
+#include <iostream>
 #include <string>
 
 namespace ossia
@@ -255,6 +256,10 @@ OSSIA_EXPORT bool match(const path& p, const ossia::net::node_base& node);
 OSSIA_EXPORT bool match(
     const path& p, const ossia::net::node_base& node,
     ossia::net::node_base& root);
+
+//! Convert ossia regex syntax to std::regex
+OSSIA_EXPORT std::string substitute_characters(const std::string& path);
+
 }
 }
 

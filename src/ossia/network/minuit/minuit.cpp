@@ -36,7 +36,7 @@ minuit_protocol::minuit_protocol(
           m_logger, remote_ip, remote_port)}
     , m_receiver{std::make_unique<osc::receiver>(
           local_port,
-          [=](const oscpack::ReceivedMessage& m,
+          [this](const oscpack::ReceivedMessage& m,
               const oscpack::IpEndpointName& ip) {
             this->on_received_message(m, ip);
           })}
@@ -108,7 +108,7 @@ minuit_protocol& minuit_protocol::set_local_port(uint16_t out_port)
 {
   m_localPort = out_port;
   m_receiver = std::make_unique<osc::receiver>(
-      out_port, [=](const oscpack::ReceivedMessage& m,
+      out_port, [this](const oscpack::ReceivedMessage& m,
                     const oscpack::IpEndpointName& ip) {
         this->on_received_message(m, ip);
       });
@@ -339,11 +339,7 @@ void minuit_protocol::namespace_refresh(
 void minuit_protocol::namespace_refreshed(ossia::string_view addr)
 {
   lock_type lock(m_nsRequestMutex);
-#if defined(__ANDROID_API__)
-  auto it = m_nsRequests.find(addr.to_string());
-#else
   auto it = m_nsRequests.find(addr);
-#endif
   if (it != m_nsRequests.end())
   {
     m_nsRequests.erase(it);
@@ -405,10 +401,11 @@ void minuit_protocol::on_received_message(
 }
 
 void minuit_protocol::update_zeroconf()
+try
 {
   m_zcServer = make_zeroconf_server(
       m_localName + " Minuit server", "_minuit._tcp", m_localName, m_localPort,
       m_remotePort);
-}
+} catch(...) {}
 }
 }

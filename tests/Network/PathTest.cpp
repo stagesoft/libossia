@@ -1,11 +1,13 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check it.
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-#define CATCH_CONFIG_MAIN
+
 #include <catch.hpp>
 #include <ossia/detail/config.hpp>
 
 #include <regex>
 #include <iostream>
+#include <set>
+
 #include <ossia/network/common/path.hpp>
 #include <ossia/detail/algorithms.hpp>
 #include <boost/algorithm/string/replace.hpp>
@@ -479,6 +481,24 @@ TEST_CASE ("test_match_range", "test_match_range")
 
 }
 
+TEST_CASE ("test_match_range_bug_588", "test_match_range_bug_588")
+{
+  {
+    ossia::net::generic_device device{};
+    auto created = ossia::net::create_nodes(device, "/foo.{1..1}");
+    std::set<ossia::net::node_base*> created_set(created.begin(), created.end());
+
+    REQUIRE(created_set.size() == 1);
+    REQUIRE((*created_set.begin())->get_name() == "foo.1");
+
+    {
+      auto match = ossia::net::find_nodes(device, "/foo.{1..1}");
+      std::set<ossia::net::node_base*> match_set(match.begin(), match.end());
+
+      REQUIRE(created_set == match_set);
+    }
+  }
+}
 
 TEST_CASE ("test_match_instances", "test_match_instances")
 

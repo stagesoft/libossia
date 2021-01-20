@@ -4,126 +4,153 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include "ossia-max.hpp"
 #include <regex>
+#include <algorithm> // std::lexicographical_compare
 
 namespace ossia
 {
 namespace max
 {
 
-bool find_peer(object_base* x)
+std::vector<ossia::net::generic_device*> get_all_devices()
 {
-    t_symbol* classname = object_classname(x);
-    t_symbol* derived_classname = nullptr;
+  ossia_max& instance = ossia_max::instance();
+  std::vector<ossia::net::generic_device*> devs;
+  devs.reserve(instance.devices.size() + instance.clients.size() + 1);
+  devs.push_back(instance.get_default_device().get());
 
-    if (x->m_otype == object_class::view)
-      derived_classname = gensym("ossia.model");
-    else if (x->m_otype == object_class::model)
-      derived_classname = gensym("ossia.view");
-    else if (x->m_otype == object_class::device)
-      derived_classname = gensym("ossia.client");
-    else if (x->m_otype == object_class::client)
-      derived_classname = gensym("ossia.device");
+  for (auto device_obj : instance.devices.reference())
+  {
+    auto dev = device_obj->m_device;
+    if (dev)
+      devs.push_back(dev.get());
+  }
 
-    t_object *patcher, *box, *obj;
-    object_obex_lookup(x, gensym("#P"), &patcher);
-    for (box = jpatcher_get_firstobject(patcher); box; box =
-         jbox_get_nextobject(box)) {
-      obj = jbox_get_object(box);
-      if (obj)
-      {
-        t_symbol* current = object_classname(obj);
-        if(current == classname
-           && (object_base*)obj != x)
-          return true;
-        if (derived_classname && current == derived_classname)
-          return true;
-      }
-    }
-    return false;
+  for(auto client_obj : instance.clients.reference())
+  {
+    auto dev = client_obj->m_device;
+    if (dev)
+      devs.push_back(dev.get());
+  }
+
+  return devs;
 }
 
-std::vector<ossia::net::node_base*> find_global_nodes(ossia::string_view addr)
+
+std::vector<parameter_base*> list_all_objects_recursively(t_object* patcher)
 {
-  std::vector<ossia::net::node_base*> nodes{};
-  nodes.reserve(4);
-  ossia_max& instance = ossia_max::instance();
-  size_t pos = addr.find(":");
-  if (pos == std::string::npos) return nodes;
+  std::vector<parameter_base*> objects;
+  objects.reserve(128);
+  auto& pat_desc = ossia_max::instance().patchers[patcher];
 
-  ossia::string_view prefix = addr.substr(0,pos);
-  // remove 'device_name:/' prefix
-  ossia::string_view osc_name = addr.substr(pos+2);
+  objects.insert(objects.end(), pat_desc.parameters.begin(), pat_desc.parameters.end());
+  objects.insert(objects.end(), pat_desc.remotes.begin(), pat_desc.remotes.end());
 
-  bool is_prefix_pattern = ossia::traversal::is_pattern(prefix);
-  bool is_osc_name_pattern = ossia::traversal::is_pattern(osc_name);
-  std::regex pattern(prefix.data(), prefix.size(), std::regex_constants::ECMAScript);
-
-  for (auto device : instance.devices.reference())
+  for(auto subpat : pat_desc.subpatchers)
   {
-    auto dev = device->m_device;
-    if (!dev) continue;
+    auto subpatcher_objects = list_all_objects_recursively(subpat);
+    objects.insert(objects.end(), subpatcher_objects.begin(), subpatcher_objects.end());
+  }
+  return objects;
+}
 
-    std::string name = dev->get_name();
+// return a vector of all priority from top to bottom (root node)
+std::vector<ossia::net::priority> get_priority_list(ossia::net::node_base* node)
+{
+  // TODO cache that and reset on tree changed
+  std::vector<float> priorities;
+  priorities.reserve(32);
 
-    bool match;
-    if(is_prefix_pattern)
+  while(node)
+  {
+    auto prio = ossia::net::get_priority(*node);
+    if(prio)
     {
-      try {
-        match = std::regex_match(name, pattern);
-      } catch (std::exception& e) {
-        error("'%s' bad regex: %s", prefix.data(), e.what());
-        return nodes;
-      }
-    } else match = (name == prefix);
-
-    if (match)
+      priorities.push_back(*prio);
+    }
+    else
     {
-      if (is_osc_name_pattern)
+      priorities.push_back(0);
+    }
+    node = node->get_parent();
+  }
+
+  std::reverse(priorities.begin(), priorities.end());
+
+  return priorities;
+}
+
+void fire_values_by_priority(std::vector<node_priority>& priority_graph, bool only_default = false)
+{
+  // keep only BI and not impulse (with default value, optionally)
+  ossia::remove_erase_if(priority_graph, [only_default](const node_priority& np){
+    auto param = np.obj->get_node()->get_parameter();
+    if(param
+    && param->get_access() == ossia::access_mode::BI
+    && param->get_value_type() != ossia::val_type::IMPULSE)
+    {
+      if(only_default)
       {
-        auto tmp = ossia::net::find_nodes(dev->get_root_node(), osc_name);
-        nodes.insert(nodes.end(), tmp.begin(), tmp.end());
+        auto val = param->get_default_value();
+        if(!val)
+          return true;
+      }
+      return false;
+    }
+    return true;
+  });
+
+  // sort vector against all priorities
+  std::sort(priority_graph.begin(), priority_graph.end(), [](const node_priority& a, const node_priority& b){
+    return std::lexicographical_compare(
+        b.priorities.begin(), b.priorities.end(),
+        a.priorities.begin(), a.priorities.end());
+  });
+
+  // fire values by descending priority order
+  for(const auto& p : priority_graph)
+  {
+    auto matcher = p.obj;
+    auto node = matcher->get_node();
+    auto param = node->get_parameter();
+    if(param)
+    {
+      if(only_default && p.obj->get_owner()->m_otype == object_class::param)
+      {
+        auto val = param->get_default_value();
+        if(val)
+          matcher->output_value(*val);
       }
       else
       {
-        auto node = ossia::net::find_node(dev->get_root_node(),osc_name);
-        if (node) nodes.push_back(node);
+        matcher->output_value(param->value());
+      }
+    }
+  }
+}
+
+void output_all_values(t_object* patcher, bool only_default)
+{
+  auto all_objects = list_all_objects_recursively(patcher);
+
+  std::vector<node_priority> priority_graph;
+  priority_graph.reserve(all_objects.size());
+
+  for(const auto obj : all_objects)
+  {
+    assert(obj != nullptr);
+
+    for(const auto& m : obj->m_matchers)
+    {
+      auto node = m->get_node();
+      if(node)
+      {
+        auto prio = get_priority_list(node);
+        priority_graph.push_back({m, prio});
       }
     }
   }
 
-  for (auto client : instance.clients.reference())
-  {
-    auto dev = client->m_device;
-    if (!dev) continue;
-
-    std::string name = dev->get_name();
-
-    bool match;
-    if(is_prefix_pattern)
-    {
-      try {
-        match = std::regex_match(name, pattern);
-      } catch (std::exception& e) {
-        error("'%s' bad regex: %s", prefix.data(), e.what());
-        return nodes;
-      }
-    } else match = (name == prefix);
-
-    if (match)
-    {
-      if (is_osc_name_pattern)
-      {
-        auto tmp = ossia::net::find_nodes(dev->get_root_node(), osc_name);
-        nodes.insert(nodes.end(), tmp.begin(), tmp.end());
-      }
-      else
-      {
-        auto node = ossia::net::find_node(dev->get_root_node(),osc_name);
-        if (node) nodes.push_back(node);
-      }
-    }
-  }
-  return nodes;
+  fire_values_by_priority(priority_graph, only_default);
 }
 
 ossia::net::address_scope get_address_scope(ossia::string_view addr)
@@ -297,9 +324,10 @@ t_symbol* access_mode2symbol(ossia::access_mode mode)
   }
 }
 
-std::vector<ossia::max::t_matcher*> make_matchers_vector(object_base* x, const ossia::net::node_base* node)
+// TODO wrap this in a member method and rename it get_matchers(node_base* n);
+std::vector<ossia::max::matcher*> make_matchers_vector(object_base* x, const ossia::net::node_base* node)
 {
-  std::vector<ossia::max::t_matcher*> matchers;
+  std::vector<ossia::max::matcher*> matchers;
   if (node)
   {
     for (auto& m : x->m_matchers)
@@ -326,135 +354,164 @@ std::vector<ossia::max::t_matcher*> make_matchers_vector(object_base* x, const o
 
 ossia::value atom2value(t_symbol* s, int argc, t_atom* argv)
 {
-    if (argc == 1 && !s)
+  // TODO unify with parameter_base::push code
+  if (argc == 1 && !s)
+  {
+    ossia::value v;
+    // convert one element array to single element
+    switch(argv->a_type)
     {
-      ossia::value v;
-      // convert one element array to single element
-      switch(argv->a_type)
+      case A_SYM:
+        v = ossia::value(std::string(atom_getsym(argv)->s_name));
+        break;
+      case A_FLOAT:
+        v = ossia::value(atom_getfloat(argv));
+        break;
+      case A_LONG:
+        v = static_cast<int32_t>(atom_getlong(argv));
+        break;
+      default:
+        ;
+    }
+
+    return v;
+  }
+  else
+  {
+    std::vector<ossia::value> list;
+    list.reserve(argc+1);
+    if ( s && s != gensym("list") )
+      list.push_back(std::string(s->s_name));
+
+    for (; argc > 0; argc--, argv++)
+    {
+      switch (argv->a_type)
       {
         case A_SYM:
-          v = ossia::value(std::string(atom_getsym(argv)->s_name));
+          list.push_back(std::string(atom_getsym(argv)->s_name));
           break;
         case A_FLOAT:
-          v = ossia::value(atom_getfloat(argv));
+          list.push_back(atom_getfloat(argv));
           break;
         case A_LONG:
-          v = static_cast<int32_t>(atom_getlong(argv));
+          list.push_back(static_cast<int32_t>(atom_getlong(argv)));
           break;
         default:
           ;
       }
-
-      return v;
     }
-    else
-    {
-      std::vector<ossia::value> list;
-      list.reserve(argc+1);
-      if ( s && s != gensym("list") )
-        list.push_back(std::string(s->s_name));
+    return ossia::value(list);
+  }
+}
 
-      for (; argc > 0; argc--, argv++)
+template<class T> void register_objects_by_type(const ossia::safe_set<T>& objs)
+{
+  for(auto obj : objs)
+  {
+    if(!obj->m_dead && obj->m_name && obj->m_name != _sym_nothing)
+    {
+      obj->m_node_selection.clear();
+      obj->m_matchers.clear();
+      obj->update_path();
+      obj->do_registration();
+    }
+  }
+}
+
+void register_children_in_patcher_recursively(t_object* patcher, object_base* caller)
+{
+  ossia_max::instance().patchers[patcher].loadbanged = true;
+
+  t_object* root_patcher{};
+  if(caller)
+    root_patcher = caller->m_patcher;
+
+  // 1: look for device, client, model and view objects into the patcher
+  auto& pat_desc = ossia_max::instance().patchers[patcher];
+
+  if(root_patcher != patcher)
+  {
+    device_base* db = pat_desc.device?static_cast<device_base*>(pat_desc.device):
+                                      static_cast<device_base*>(pat_desc.client);
+    if(db && db != caller)
+    {
+      if(db->m_device && !db->m_dead)
       {
-        switch (argv->a_type)
+        db->m_registered = true;
+        return register_children_in_patcher_recursively(patcher, db);
+      }
+      else
+        return;
+    }
+  }
+
+  node_base* nb = pat_desc.model?static_cast<node_base*>(pat_desc.model):
+                                 static_cast<node_base*>(pat_desc.view);
+
+  if(nb && nb != caller)
+  {
+    if(!nb->m_dead && nb->m_name && nb->m_name != _sym_nothing)
+    {
+      nb->m_node_selection.clear();
+      nb->m_matchers.clear();
+      nb->update_path();
+      switch(nb->m_otype)
+      {
+        case object_class::model:
         {
-          case A_SYM:
-            list.push_back(std::string(atom_getsym(argv)->s_name));
-            break;
-          case A_FLOAT:
-            list.push_back(atom_getfloat(argv));
-            break;
-          case A_LONG:
-            list.push_back(static_cast<int32_t>(atom_getlong(argv)));
-            break;
-          default:
-            ;
+          auto mdl = static_cast<model*>(nb);
+          mdl->do_registration();
+          register_children_in_patcher_recursively(patcher, mdl);
+          break;
         }
+        case object_class::view:
+        {
+          auto vw = static_cast<view*>(nb);
+          vw->do_registration();
+          register_children_in_patcher_recursively(patcher, vw);
+          break;
+        }
+        default:
+          break;
       }
-
-      return ossia::value(list);
     }
+    return;
+  }
+
+  register_objects_by_type(pat_desc.parameters);
+  register_objects_by_type(pat_desc.remotes);
+  register_objects_by_type(pat_desc.attributes);
+
+  for(auto subpatcher : pat_desc.subpatchers)
+  {
+    register_children_in_patcher_recursively(subpatcher, caller);
+  }
 }
 
-std::string object_path_absolute(object_base* x)
+t_object* get_patcher(t_object* object)
 {
-  std::vector<std::string> vs;
-  vs.reserve(8);
+  t_object* patcher = nullptr;
+  auto err = object_obex_lookup(object, gensym("#P"), &patcher);
 
-  vs.push_back(x->m_name->s_name);
+  auto bpatcher = object_attr_getobj(object, _sym_parentpatcher);
 
-  ossia::max::view* view = nullptr;
-  ossia::max::model* model = nullptr;
-
-  int start_level = 0;
-  int view_level = 0;
-  int model_level = 0;
-
-  if (x->m_otype == object_class::view)
-    start_level = 1;
-
-  view = find_parent_box_alive<ossia::max::view>(x, start_level, &view_level);
-
-  if (x->m_otype == object_class::model
-      || x->m_otype == object_class::remote)
-  {
-    model =  find_parent_box_alive<ossia::max::model>(x, start_level, &model_level);
-  }
-
-  t_object* object = nullptr;
-  ossia::max::view* tmp = nullptr;
-
-  // FIXME this will fail as soon as https://github.com/OSSIA/libossia/issues/208 is implemented
-  // or if model and view are mixed in the same hierarchy
-
-  while (view)
-  {
-    vs.push_back(view->m_name->s_name);
-    tmp = view;
-    view = find_parent_box_alive<ossia::max::view>(tmp, 1, &view_level);
-  }
-
-  ossia::max::model* tmp_model = nullptr;
-  while (model)
-  {
-    vs.push_back(model->m_name->s_name);
-    tmp_model = model;
-    model
-        = find_parent_box_alive<ossia::max::model>(tmp_model, 1, &model_level);
-  }
-
-  fmt::memory_buffer fullpath;
-  auto rit = vs.rbegin();
-  for (; rit != vs.rend(); ++rit)
-  {
-    fmt::format_to(fullpath, "/{}", *rit);
-  }
-
-  if (vs.empty())
-    fmt::format_to(fullpath, "/");
-
-  return std::string(fullpath.data(), fullpath.size());
+  if(patcher != nullptr && err == MAX_ERR_NONE)
+    return patcher;
+  else
+    return bpatcher;
 }
 
-void trig_output_value(ossia::net::node_base* node)
+std::vector<std::string> parse_tags_symbol(t_symbol** tags_symbol, long size)
 {
-    for(auto param : ossia_max::instance().parameters.reference())
-    {
-      for (auto& m : param->m_matchers)
-      {
-        if ( m->get_node() == node )
-          m->output_value();
-      }
-    }
+  std::vector<std::string> tags;
 
-    for(auto remote : ossia_max::instance().remotes.reference())
-    {
-      for (auto& m : remote->m_matchers)
-      {
-        if ( m->get_node() == node )
-          m->output_value();
-      }
-    }
+  for(int i=0;i<size;i++)
+  {
+    tags.push_back(tags_symbol[i]->s_name);
+  }
+
+  return tags;
 }
+
 } // namespace max
 } // namespace ossia

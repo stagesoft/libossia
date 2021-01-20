@@ -1,4 +1,3 @@
-cmake_minimum_required(VERSION 3.17)
 project("ossia-pd")
 
 set(CMAKE_SUPPRESS_REGENERATION true)
@@ -13,19 +12,22 @@ endif()
 
 message(STATUS "Update ossia-pd dependencies: pure-data and CicmWrapper")
 if(OSSIA_PURR_DATA)
-  execute_process(COMMAND git submodule update --init -- ${OSSIA_3RDPARTY_FOLDER}/purr-data
-                  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-  execute_process(COMMAND git submodule update --init -- ${OSSIA_3RDPARTY_FOLDER}/CicmWrapper
-                  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-  execute_process(COMMAND git checkout ef2d85771b3e5f01cc41e6f236f27afe09378f4d
-                  WORKING_DIRECTORY ${OSSIA_3RDPARTY_FOLDER}/CicmWrapper)
+  if(NOT EXISTS "${OSSIA_3RDPARTY_FOLDER}/purr-data")
+    execute_process(COMMAND git clone --recursive -j16 https://github.com/jcelerier/purr-data
+                    WORKING_DIRECTORY "${OSSIA_3RDPARTY_FOLDER}")
+    execute_process(COMMAND git clone --recursive -j16 https://github.com/jcelerier/CicmWrapper
+                    WORKING_DIRECTORY "${OSSIA_3RDPARTY_FOLDER}")
+  endif()
 else()
-  execute_process(COMMAND git submodule update --init -- ${OSSIA_3RDPARTY_FOLDER}/pure-data
-                  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-  execute_process(COMMAND git submodule update --init -- ${OSSIA_3RDPARTY_FOLDER}/CicmWrapper
-                  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+  if(NOT EXISTS "${OSSIA_3RDPARTY_FOLDER}/pure-data")
+    execute_process(COMMAND git clone --recursive -j16 https://git.code.sf.net/p/pure-data/pure-data
+                    WORKING_DIRECTORY "${OSSIA_3RDPARTY_FOLDER}")
+    execute_process(COMMAND git checkout 0.49-0
+                    WORKING_DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/pure-data")
+    execute_process(COMMAND git clone --recursive -j16 https://github.com/jcelerier/CicmWrapper
+                    WORKING_DIRECTORY "${OSSIA_3RDPARTY_FOLDER}")
+  endif()
 endif()
-
 
 
 if(MSVC)
@@ -39,11 +41,12 @@ if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/pd/bin/pd.lib")
         WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/")
   else()
     message("Downloading and extracting PureData windows binary")
+    set(PD_VERSION "0.49-0")
     # First download Pd.
     if("${CMAKE_SIZEOF_VOID_P}" MATCHES "8")
-      file(DOWNLOAD "http://msp.ucsd.edu/Software/pd-0.49-0.msw.zip" "${CMAKE_CURRENT_BINARY_DIR}/pd.zip")
+      file(DOWNLOAD "http://msp.ucsd.edu/Software/pd-${PD_VERSION}.msw.zip" "${CMAKE_CURRENT_BINARY_DIR}/pd.zip")
     else()
-      file(DOWNLOAD "http://msp.ucsd.edu/Software/pd-0.49-0-i386.msw.zip" "${CMAKE_CURRENT_BINARY_DIR}/pd.zip")
+      file(DOWNLOAD "http://msp.ucsd.edu/Software/pd-${PD_VERSION}-i386.msw.zip" "${CMAKE_CURRENT_BINARY_DIR}/pd.zip")
     endif()
 
     # Extract Pd.
@@ -52,9 +55,10 @@ if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/pd/bin/pd.lib")
         WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/")
 
     if("${CMAKE_SIZEOF_VOID_P}" MATCHES "8")
-      file(RENAME "${CMAKE_CURRENT_BINARY_DIR}/pd-0.49-0" "${CMAKE_CURRENT_BINARY_DIR}/pd")
+      file(RENAME "${CMAKE_CURRENT_BINARY_DIR}/pd-${PD_VERSION}" "${CMAKE_CURRENT_BINARY_DIR}/pd")
+    else()
+      file(RENAME "${CMAKE_CURRENT_BINARY_DIR}/pd-${PD_VERSION}-i386" "${CMAKE_CURRENT_BINARY_DIR}/pd")
     endif()
-
   endif()
 endif()
 endif()
@@ -121,12 +125,7 @@ set(PROJECT_SRCS
 include(GenerateExportHeader)
 add_library(${PROJECT_NAME} SHARED ${PROJECT_SRCS})
 
-if(OSSIA_SANITIZE)
-    sanitize_build(${PROJECT_NAME})
-endif()
-
 target_compile_options(${PROJECT_NAME} PRIVATE ${OSSIA_COMPILE_OPTIONS})
-use_gold(${PROJECT_NAME})
 
 generate_export_header(${PROJECT_NAME} BASE_NAME OSSIA_PD)
 

@@ -7,8 +7,9 @@
 #include <ossia/network/midi/detail/channel.hpp>
 #include <ossia/network/value/value.hpp>
 
-#include <readerwriterqueue.h>
+#include <ossia/detail/lockfree_queue.hpp>
 
+#include <rtmidi17/message.hpp>
 #include <array>
 #include <atomic>
 #include <cassert>
@@ -25,8 +26,8 @@ struct OSSIA_EXPORT midi_info
 {
   enum class Type
   {
-    RemoteInput,
-    RemoteOutput
+    Input,
+    Output
   };
 
   midi_info() = default;
@@ -70,7 +71,7 @@ public:
   void set_learning(bool);
 
 private:
-  moodycamel::ReaderWriterQueue<rtmidi::message> messages;
+  ossia::spsc_queue<rtmidi::message> messages;
   std::unique_ptr<rtmidi::midi_in> m_input;
   std::unique_ptr<rtmidi::midi_out> m_output;
 

@@ -15,14 +15,15 @@ namespace ossia
 namespace max
 {
 
-void node_base::preset(node_base *x, t_symbol*s, long argc, t_atom* argv)
+void node_base::preset(node_base *x, t_symbol*, long argc, t_atom* argv)
 {
   ossia::net::node_base* node{};
   switch (x->m_otype)
   {
     case object_class::client:
     case object_class::device:
-      node = &x->m_device->get_root_node();
+      if(x->m_device)
+        node = &x->m_device->get_root_node();
       break;
     case object_class::model:
     case object_class::view:
@@ -38,8 +39,8 @@ void node_base::preset(node_base *x, t_symbol*s, long argc, t_atom* argv)
   status[0] = argv[0];
 
   if ( argc < 2
-       || argv[0].a_type != A_SYM
-       || argv[1].a_type != A_SYM )
+    || argv[0].a_type != A_SYM
+    || argv[1].a_type != A_SYM )
   {
     object_error((t_object*)x, "Wrong argument number to 'preset' message"
                 "needs 2 symbol arguments: <load|save> <filename>");
@@ -94,9 +95,9 @@ void node_base::preset(node_base *x, t_symbol*s, long argc, t_atom* argv)
         auto json = ossia::presets::read_file(argv[0].a_w.w_sym->s_name);
         ossia::presets::preset preset;
 
-        if (!ossia::presets::apply_json(json, *node, trig_output_value))
+        if (!ossia::presets::apply_json(json, *node))
         {
-          ossia::presets::apply_preset(json, *node, trig_output_value);
+          ossia::presets::apply_preset(json, *node);
         }
 
         A_SETFLOAT(status+1, 1);
@@ -123,31 +124,34 @@ void node_base::preset(node_base *x, t_symbol*s, long argc, t_atom* argv)
 
 void node_base::get_namespace(node_base* x)
 {
-  t_symbol* prependsym = gensym("namespace");
-  std::vector<ossia::net::node_base*> list;
+  const static t_symbol* prependsym = gensym("namespace");
   for (auto& m : x->m_matchers)
   {
     auto n = m->get_node();
-    list = ossia::net::list_all_child(n);
+    std::vector<ossia::net::node_base*> children = ossia::net::list_all_children(n);
+
+    ossia::remove_erase_if(children, [](const auto& n){
+      return n->get_parameter() == nullptr; });
+
+    t_atom a;
+    A_SETLONG(&a, children.size());
+    outlet_anything(x->m_dumpout, gensym("namespace_size"), 1, &a);
 
     int pos = ossia::net::osc_parameter_string(*n).length();
     if (pos > 1) pos++; // root node always have '/' osc_address,
                         // while subnode doesn't ends with '/' (e.g. '/foo')
-    for (ossia::net::node_base* child : list)
+    for (ossia::net::node_base* child : children)
     {
-      if (child->get_parameter())
-      {
-        ossia::value name = ossia::net::osc_parameter_string(*child).substr(pos);
-        ossia::value val = child->get_parameter()->value();
+      ossia::value name = ossia::net::osc_parameter_string(*child).substr(pos);
+      ossia::value val = child->get_parameter()->value();
 
-        std::vector<t_atom> va;
-        value2atom vm{va};
+      std::vector<t_atom> va;
+      value2atom vm{va};
 
-        name.apply(vm);
-        val.apply(vm);
+      name.apply(vm);
+      val.apply(vm);
 
-        outlet_anything(x->m_dumpout, prependsym, va.size(), va.data());
-      }
+      outlet_anything(x->m_dumpout, prependsym, va.size(), va.data());
     }
   }
 }
@@ -158,7 +162,7 @@ void node_base::push_default_value(node_base* x)
   for (auto& m : x->m_matchers)
   {
     auto n = m->get_node();
-    list = ossia::net::list_all_child(n);
+    list = ossia::net::list_all_children(n);
 
     for (ossia::net::node_base* child : list)
     {
@@ -167,8 +171,7 @@ void node_base::push_default_value(node_base* x)
         auto val = ossia::net::get_default_value(*child);
         if(val)
         {
-          param->push_value(*val);
-          trig_output_value(child);
+          x->push_parameter_value(param, *val);
         }
       }
     }
@@ -178,13 +181,13 @@ void node_base::push_default_value(node_base* x)
 void node_base::class_setup(t_class* c)
 {
   object_base::class_setup(c);
-  class_addmethod(c, (method) node_base::set,           "set",       A_GIMME, 0);
-  class_addmethod(c, (method) node_base::get_namespace, "namespace", A_NOTHING,  0);
-  class_addmethod(c, (method) node_base::preset,        "preset",    A_GIMME, 0);
-  class_addmethod(c, (method) node_base::push_default_value, "reset", A_NOTHING, 0);
+  class_addmethod(c, (method) node_base::set,                "set",       A_GIMME, 0);
+  class_addmethod(c, (method) node_base::get_namespace,      "namespace", A_NOTHING,  0);
+  class_addmethod(c, (method) node_base::preset,             "preset",    A_GIMME, 0);
+  class_addmethod(c, (method) node_base::push_default_value, "reset",     A_NOTHING, 0);
 }
 
-void node_base::set(node_base* x, t_symbol* s, int argc, t_atom* argv)
+void node_base::set(node_base* x, t_symbol*, int argc, t_atom* argv)
 {
   if (argc > 0 && argv[0].a_type == A_SYM)
   {
@@ -199,9 +202,7 @@ void node_base::set(node_base* x, t_symbol* s, int argc, t_atom* argv)
       {
         if (auto param = node->get_parameter())
         {
-
-          param->push_value(v);
-          trig_output_value(node);
+          x->push_parameter_value(param, v);
         }
       }
     }

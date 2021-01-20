@@ -17,7 +17,7 @@
  * * The `ossia_value_*` functions allow to create and read the content of libossia values.
  *   Simply put, such a value is an union of various types: int, float, string, etc.
  * * The `ossia_logger_*` functions can be usd to set-up a simple WebSocket-based logging infrastructure.
- *   The format of the logger messages is given [in this example](https://github.com/OSSIA/libossia/blob/master/docs/Examples/Common/Logger.cpp).
+ *   The format of the logger messages is given [in this example](https://github.com/ossia/libossia/blob/master/docs/Examples/Common/Logger.cpp).
  * * The `ossia_mq_*` functions can be used when a thread-safe lock-free queue is needed.
  *   In particular, note that callbacks will be executed in different threads.
  *   Hence, this mechanism is needed if the user of this API cannot make its program thread-safe.
@@ -1347,6 +1347,16 @@ ossia_value_t ossia_node_get_default_value(
  * @see ossia::net::domain
  *  @{
  */
+
+/**
+ * @brief ossia_domain_create Create a domain
+ * @note It has no min/max nor values set on it
+ * @see ossia::net::domain::domain
+ * @return A new domain
+ */
+OSSIA_EXPORT
+ossia_domain_t ossia_domain_create(void);
+
 /**
  * @brief Create a domain from two values.
  * @note Multithread guarantees: Data-Safe.
@@ -1392,6 +1402,47 @@ OSSIA_EXPORT
 void ossia_domain_set_max(
     ossia_domain_t domain,
     ossia_value_t value);
+
+/**
+ * @brief Create a domain from a set of strings.
+ * @note Multithread guarantees: Data-Safe.
+ * @note The values will be copied inside the domain.
+ * @see ossia::make_domain
+ */
+OSSIA_EXPORT
+ossia_domain_t ossia_domain_make_string_set(
+        const char** strings,
+        size_t n);
+
+/**
+ * @brief Create a domain from a set of ints.
+ * @note Multithread guarantees: Data-Safe.
+ * @see ossia::make_domain
+ */
+OSSIA_EXPORT
+ossia_domain_t ossia_domain_make_int_set(
+        const int* values,
+        size_t n);
+
+/**
+ * @brief Create a domain from a set of floats.
+ * @note Multithread guarantees: Data-Safe.
+ * @see ossia::make_domain
+ */
+OSSIA_EXPORT
+ossia_domain_t ossia_domain_make_float_set(
+        const float* values,
+        size_t n);
+
+/**
+ * @brief Create a domain from a set of values.
+ * @note Multithread guarantees: Data-Safe.
+ * @see ossia::make_domain
+ */
+OSSIA_EXPORT
+ossia_domain_t ossia_domain_make_value_set(
+        const ossia_value_t* values,
+        size_t n);
 
 /**
  * @brief Get the values of a domain

@@ -4,6 +4,9 @@
 #include <ossia/dataflow/graph_node.hpp>
 #include <ossia/detail/pod_vector.hpp>
 #include <ossia/editor/scenario/time_interval.hpp>
+#include <ossia/audio/audio_tick.hpp>
+
+#include <ossia/editor/scenario/execution_log.hpp>
 
 #include <map>
 
@@ -84,6 +87,11 @@ struct tick_all_nodes
   ossia::execution_state& e;
   ossia::graph_interface& g;
 
+  void operator()(const ossia::audio_tick_state& st)
+  {
+    (*this)(st.frames, st.seconds);
+  }
+
   void operator()(unsigned long samples, double) const
   {
     std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -110,8 +118,17 @@ struct buffer_tick
   ossia::graph_interface& g;
   ossia::time_interval& itv;
 
+  void operator()(const ossia::audio_tick_state& st)
+  {
+    (*this)(st.frames, st.seconds);
+  }
+
   void operator()(unsigned long frameCount, double seconds)
   {
+#if defined(OSSIA_EXECUTION_LOG)
+    auto log = g_exec_log.start_tick();
+#endif
+
     std::atomic_thread_fence(std::memory_order_seq_cst);
     st.begin_tick();
     st.samples_since_start += frameCount;
@@ -121,10 +138,35 @@ struct buffer_tick
 
     const auto flicks = frameCount * st.samplesToModelRatio;
     const ossia::token_request tok{};
-    itv.tick_offset(ossia::time_value{int64_t(flicks)}, 0_tv, tok);
-    g.state(st);
+
+    // Temporal tick
+    {
+#if defined(OSSIA_EXECUTION_LOG)
+      auto log = g_exec_log.start_temporal();
+#endif
+
+      itv.tick_offset(ossia::time_value{int64_t(flicks)}, 0_tv, tok);
+    }
+
+    // Dataflow execution
+    {
+#if defined(OSSIA_EXECUTION_LOG)
+      auto log = g_exec_log.start_dataflow();
+#endif
+
+      g.state(st);
+    }
+
     std::atomic_thread_fence(std::memory_order_seq_cst);
-    (st.*Commit)();
+
+    // Apply messages
+    {
+#if defined(OSSIA_EXECUTION_LOG)
+      auto log = g_exec_log.start_commit();
+#endif
+
+      (st.*Commit)();
+    }
   }
 };
 
@@ -135,6 +177,11 @@ struct precise_score_tick
   ossia::execution_state& st;
   ossia::graph_interface& g;
   ossia::time_interval& itv;
+
+  void operator()(const ossia::audio_tick_state& st)
+  {
+    (*this)(st.frames, st.seconds);
+  }
 
   void operator()(unsigned long frameCount, double seconds)
   {
@@ -251,6 +298,11 @@ public:
     }
   }
 
+  void operator()(const ossia::audio_tick_state& st)
+  {
+    (*this)(st.frames, st.seconds);
+  }
+
   void operator()(unsigned long frameCount, double seconds)
   {
     st.samples_since_start += frameCount;
@@ -277,6 +329,11 @@ struct benchmark_score_tick
 {
   BaseTick base;
   ossia::double_vector m_tickDurations;
+
+  void operator()(const ossia::audio_tick_state& st)
+  {
+    (*this)(st.frames, st.seconds);
+  }
 
   void operator()(unsigned long frameCount, double seconds)
   {

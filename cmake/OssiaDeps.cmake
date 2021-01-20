@@ -1,5 +1,5 @@
 if(OSSIA_SUBMODULE_AUTOUPDATE)
-  message(STATUS "Update general OSSIA dependencies :")
+  message(STATUS "Update general libossia dependencies :")
   set(OSSIA_SUBMODULES
       asio
       bitset2
@@ -15,6 +15,7 @@ if(OSSIA_SUBMODULE_AUTOUPDATE)
       hopscotch-map
       multi_index
       nano-signal-slot
+      rapidfuzz-cpp
       rapidjson
       readerwriterqueue
       rnd
@@ -53,12 +54,16 @@ if(OSSIA_SUBMODULE_AUTOUPDATE)
     set(OSSIA_SUBMODULES ${OSSIA_SUBMODULES} wiiuse)
   endif()
 
+  if(OSSIA_TESTING)
+    set(OSSIA_SUBMODULES ${OSSIA_SUBMODULES} Catch2)
+  endif()
+
   execute_process(COMMAND git submodule sync --recursive
                   WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR})
 
   foreach(submodule ${OSSIA_SUBMODULES})
       message(" -> ${OSSIA_3RDPARTY_FOLDER}/${submodule}")
-      execute_process(COMMAND git submodule update --init -- ${OSSIA_3RDPARTY_FOLDER}/${submodule}
+      execute_process(COMMAND git submodule update --init --recursive -- ${OSSIA_3RDPARTY_FOLDER}/${submodule}
                       WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR})
   endforeach()
 
@@ -67,61 +72,39 @@ if(OSSIA_SUBMODULE_AUTOUPDATE)
 endif()
 
 # Download various dependencies
-if(WIN32)
-  message(STATUS "Downloading audio sdk to ${OSSIA_3RDPARTY_FOLDER}/win-audio-sdk.zip")
-  if("${OSSIA_SDK}" STREQUAL "")
-    set(OSSIA_SDK "ossia-sdk" CACHE INTERNAL "")
-  endif()
+set(BOOST_MINOR_MINIMAL 67)
+set(BOOST_MINOR_LATEST 75)
+find_package(Boost 1.${BOOST_MINOR_MINIMAL} QUIET)
+if (NOT Boost_FOUND)
+  set(OSSIA_MUST_INSTALL_BOOST 1 CACHE INTERNAL "")
+  set(BOOST_VERSION "boost_1_${BOOST_MINOR_LATEST}_0" CACHE INTERNAL "")
+  if ( NOT EXISTS "${OSSIA_3RDPARTY_FOLDER}/${BOOST_VERSION}/")
 
-  if (NOT EXISTS "${OSSIA_SDK}")
-    file(MAKE_DIRECTORY ${OSSIA_SDK})
-    file(DOWNLOAD
-      https://github.com/OSSIA/sdk/releases/download/sdk10/win-audio-sdk.zip
-      ${OSSIA_SDK}/win-audio-sdk.zip)
-
-    execute_process(
-      COMMAND ${CMAKE_COMMAND} -E tar xzf win-audio-sdk.zip
-      WORKING_DIRECTORY ${OSSIA_SDK})
-  endif()
-endif()
-
-set(BOOST_MINOR 73)
-if(ANDROID)
-  set(Boost_FOUND True)
-  include_directories("/opt/boost_1_${BOOST_MINOR}_0")
-else()
-  find_package(Boost 1.${BOOST_MINOR} QUIET)
-  if (NOT Boost_FOUND )
-    set(OSSIA_MUST_INSTALL_BOOST 1 CACHE INTERNAL "")
-    set(BOOST_VERSION "boost_1_${BOOST_MINOR}_0" CACHE INTERNAL "")
-    if ( NOT EXISTS "${OSSIA_3RDPARTY_FOLDER}/${BOOST_VERSION}/")
-
-      if(WIN32)
-        message(STATUS "Downloading boost to ${OSSIA_3RDPARTY_FOLDER}/${BOOST_VERSION}.zip")
-        set(BOOST_URL https://github.com/OSSIA/sdk/releases/download/sdk12/${BOOST_VERSION}.zip)
-        set(BOOST_ARCHIVE ${BOOST_VERSION}.zip)
-      else()
-        message(STATUS "Downloading boost to ${OSSIA_3RDPARTY_FOLDER}/${BOOST_VERSION}.tar.gz")
-        set(BOOST_URL https://github.com/OSSIA/sdk/releases/download/sdk12/${BOOST_VERSION}.tar.gz)
-        set(BOOST_ARCHIVE ${BOOST_VERSION}.tar.gz)
-      endif()
-
-      file(DOWNLOAD "${BOOST_URL}" "${OSSIA_3RDPARTY_FOLDER}/${BOOST_ARCHIVE}")
-
-    execute_process(
-      COMMAND "${CMAKE_COMMAND}" -E tar xzf "${BOOST_ARCHIVE}"
-      WORKING_DIRECTORY "${OSSIA_3RDPARTY_FOLDER}")
-
+    if(WIN32)
+      message(STATUS "Downloading boost to ${OSSIA_3RDPARTY_FOLDER}/${BOOST_VERSION}.zip")
+      set(BOOST_URL https://github.com/ossia/sdk/releases/download/sdk17/${BOOST_VERSION}.zip)
+      set(BOOST_ARCHIVE ${BOOST_VERSION}.zip)
+    else()
+      message(STATUS "Downloading boost to ${OSSIA_3RDPARTY_FOLDER}/${BOOST_VERSION}.tar.gz")
+      set(BOOST_URL https://github.com/ossia/sdk/releases/download/sdk17/${BOOST_VERSION}.tar.gz)
+      set(BOOST_ARCHIVE ${BOOST_VERSION}.tar.gz)
     endif()
-    set(BOOST_ROOT "${OSSIA_3RDPARTY_FOLDER}/${BOOST_VERSION}" CACHE INTERNAL "")
-    set(Boost_INCLUDE_DIR "${BOOST_ROOT}")
-    find_package(Boost 1.${BOOST_MINOR} REQUIRED)
-  endif()
 
-  add_library(boost INTERFACE IMPORTED)
-  set_property(TARGET boost PROPERTY
-               INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIR}")
+    file(DOWNLOAD "${BOOST_URL}" "${OSSIA_3RDPARTY_FOLDER}/${BOOST_ARCHIVE}")
+
+  execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E tar xzf "${BOOST_ARCHIVE}"
+    WORKING_DIRECTORY "${OSSIA_3RDPARTY_FOLDER}")
+
+  endif()
+  set(BOOST_ROOT "${OSSIA_3RDPARTY_FOLDER}/${BOOST_VERSION}" CACHE INTERNAL "")
+  set(Boost_INCLUDE_DIR "${BOOST_ROOT}")
+  find_package(Boost 1.${BOOST_MINOR_LATEST} REQUIRED)
 endif()
+
+add_library(boost INTERFACE IMPORTED)
+set_property(TARGET boost PROPERTY
+             INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIR}")
 
 if(OSSIA_PROTOCOL_MIDI)
   set(RTMIDI17_EXAMPLES OFF CACHE "" INTERNAL)
@@ -165,8 +148,21 @@ if(NOT (OSSIA_CI AND (UNIX AND NOT APPLE)))
     find_package(portaudio QUIET)
   endif()
 endif()
+
 add_definitions(-DFMT_HEADER_ONLY=1)
 if(MSVC)
   add_definitions(-D_CRT_SECURE_NO_WARNINGS)
   add_definitions(-D_SCL_SECURE_NO_WARNINGS)
 endif()
+
+include(ExternalProject)
+# rapidfuzz
+ExternalProject_add(rapidfuzz-cpp
+    SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../3rdparty/rapidfuzz-cpp"
+    PREFIX ${CMAKE_CURRENT_BINARY_DIR}/rapidfuzz-cpp
+    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
+)
+
+ExternalProject_Get_property(rapidfuzz-cpp INSTALL_DIR)
+set(RAPIDFUZZ_INCLUDE_DIR ${INSTALL_DIR}/include)
+
