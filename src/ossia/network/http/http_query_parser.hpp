@@ -4,6 +4,8 @@
 #include <boost/fusion/adapted/std_pair.hpp>
 #include <boost/spirit/home/x3.hpp>
 
+#include <sstream>
+
 #include <map>
 /**
  * \file http_query_parser.hpp
