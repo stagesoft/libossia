@@ -1,0 +1,17 @@
+Source: libossia
+Section: libs
+Priority: optional
+Maintainer: Ion Reguera <ion@stagelab.net>
+Build-Depends: cmake (>=3.17~), debhelper (>=11~), javahelper, default-jdk, python3-distutils, liboscpack-dev, libsndfile-dev, libjack-jackd2-dev, python3.7-dev, python3-setuptools, python3-wheel, libboost1.67-all-dev
+Standards-Version: 4.1.4
+Vcs-Git: https://github.com/stagesoft/libossia.git
+Vcs-Browser: https://github.com/stagesoft/libossia
+Homepage: https://ossia.io/site-libossia/about.html
+
+Package: libossia
+Section: libs
+Architecture: amd64
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: libossia is a modern C++, cross-environment distributed object model for creative coding.
