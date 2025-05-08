@@ -1,0 +1,20 @@
+Source: pyossia
+Section: libs
+Priority: optional
+Maintainer: Ion Reguera <ion@stagelab.com>
+Build-Depends: debhelper (>= 11), dh-python, python3-all, python3-setuptools, python3-wheel, python3-setuptools
+Standards-Version: 4.1.3
+Vcs-Git: https://github.com/stagesoft/libossia.git
+Vcs-Browser: https://github.com/stagesoft/libossia
+Homepage: https://ossia.io/site-libossia/about.html
+X-Python3-Version: >= 3.7
+
+
+Package: python3-pyossia
+Section: libs
+Architecture: amd64
+Depends: ${python3:Depends}, ${shlibs:Depends}, ${misc:Depends}, libossia, libavahi-client-dev
+Suggests: python-pyossia-doc
+Description: Python bindings for libossia
+ .
+ This package installs the library for Python 3.
