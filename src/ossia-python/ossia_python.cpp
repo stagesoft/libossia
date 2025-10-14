@@ -40,10 +40,88 @@ namespace py = pybind11;
 
 namespace py = pybind11;
 
-namespace ossia
-{
-namespace python
-{
+// Custom exception classes for ossia-python
+class OssiaError : public std::runtime_error {
+public:
+    explicit OssiaError(const std::string& msg) : std::runtime_error(msg) {}
+};
+
+class OssiaDeviceError : public OssiaError {
+public:
+    explicit OssiaDeviceError(const std::string& msg) : OssiaError("Device error: " + msg) {}
+};
+
+class OssiaNetworkError : public OssiaError {
+public:
+    explicit OssiaNetworkError(const std::string& msg) : OssiaError("Network error: " + msg) {}
+};
+
+class OssiaParameterError : public OssiaError {
+public:
+    explicit OssiaParameterError(const std::string& msg) : OssiaError("Parameter error: " + msg) {}
+};
+
+class OssiaPresetError : public OssiaError {
+public:
+    explicit OssiaPresetError(const std::string& msg) : OssiaError("Preset error: " + msg) {}
+};
+
+// Exception context utilities for enhanced error messages
+struct ExceptionContext {
+    std::string operation;      // e.g., "create_oscquery_server"
+    std::string object_type;    // e.g., "LocalDevice"
+    std::string object_name;    // e.g., device name
+    std::map<std::string, std::string> parameters; // operation-specific params
+
+    std::string format_message(const std::string& base_error) const {
+        std::ostringstream oss;
+        oss << operation;
+        if (!object_type.empty()) oss << " on " << object_type;
+        if (!object_name.empty()) oss << " '" << object_name << "'";
+        oss << ": " << base_error;
+
+        if (!parameters.empty()) {
+            oss << " (";
+            bool first = true;
+            for (const auto& [key, value] : parameters) {
+                if (!first) oss << ", ";
+                oss << key << "=" << value;
+                first = false;
+            }
+            oss << ")";
+        }
+        return oss.str();
+    }
+};
+
+// Safe wrapper function template for exception handling
+template<typename Func>
+auto safe_call(Func&& func, const std::string& context = "") {
+    try {
+        return func();
+    } catch (const std::exception& e) {
+        std::string msg = context.empty() ? e.what() : context + ": " + e.what();
+        throw OssiaError(msg);
+    } catch (...) {
+        std::string msg = context.empty() ? "Unknown error occurred" : context + ": Unknown error occurred";
+        throw OssiaError(msg);
+    }
+}
+
+// Safe callback wrapper for exception barriers in async operations
+void safe_callback_wrapper(const std::function<void()>& callback) {
+    try {
+        callback();
+    } catch (const std::exception& e) {
+        // Log the error but don't propagate to avoid crashing
+        ossia::logger().error("Exception in callback: {}", e.what());
+    } catch (...) {
+        ossia::logger().error("Unknown exception in callback");
+    }
+}
+
+namespace ossia {
+  namespace python {
 
 /**
  * @brief To cast python value into OSSIA value
@@ -160,6 +238,13 @@ public:
   \return bool */
   bool create_oscquery_server(int osc_port, int ws_port, bool log = false)
   {
+    ExceptionContext ctx;
+    ctx.operation = "create_oscquery_server";
+    ctx.object_type = "LocalDevice";
+    ctx.object_name = m_device.get_name();
+    ctx.parameters["osc_port"] = std::to_string(osc_port);
+    ctx.parameters["ws_port"] = std::to_string(ws_port);
+
     try
     {
       m_local_protocol.expose_to(
@@ -198,17 +283,14 @@ public:
 
       return true;
     }
-    catch(std::exception& e)
+    catch (const std::exception& e)
     {
-      ossia::logger().error(
-          "ossia_local_device: error when creating OSCQuery server: {}", e.what());
+      throw OssiaNetworkError(ctx.format_message(e.what()));
     }
     catch(...)
     {
-      ossia::logger().error(
-          "ossia_local_device: error when creating OSCQuery server: {}");
+      throw OssiaNetworkError(ctx.format_message("Unknown error occurred"));
     }
-    return false;
   }
 
   /** Make the local device able to handle osc request and emit osc message
@@ -221,6 +303,14 @@ public:
   bool
   create_osc_server(std::string ip, int remote_port, int local_port, bool log = false)
   {
+    ExceptionContext ctx;
+    ctx.operation = "create_osc_server";
+    ctx.object_type = "LocalDevice";
+    ctx.object_name = m_device.get_name();
+    ctx.parameters["ip"] = ip;
+    ctx.parameters["remote_port"] = std::to_string(remote_port);
+    ctx.parameters["local_port"] = std::to_string(local_port);
+
     try
     {
       m_local_protocol.expose_to(std::make_unique<ossia::net::osc_protocol>(
@@ -258,22 +348,29 @@ public:
 
       return true;
     }
-    catch(std::exception& e)
+    catch (const std::exception& e)
     {
-      ossia::logger().error(
-          "ossia_local_device: error when creating OSC server: {}", e.what());
+      throw OssiaNetworkError(ctx.format_message(e.what()));
     }
-    catch(...)
+    catch (...)
     {
-      ossia::logger().error("ossia_local_device: error when creating OSC server: {}");
+      throw OssiaNetworkError(ctx.format_message("Unknown error occurred"));
     }
-    return false;
   }
 
   bool create_minuit_server(
       std::string local_name, std::string ip, int remote_port, int local_port,
       bool log = false)
   {
+    ExceptionContext ctx;
+    ctx.operation = "create_minuit_server";
+    ctx.object_type = "LocalDevice";
+    ctx.object_name = m_device.get_name();
+    ctx.parameters["local_name"] = local_name;
+    ctx.parameters["ip"] = ip;
+    ctx.parameters["remote_port"] = std::to_string(remote_port);
+    ctx.parameters["local_port"] = std::to_string(local_port);
+
     try
     {
       auto proto = std::make_unique<ossia::net::minuit_protocol>(
@@ -297,26 +394,58 @@ public:
       m_local_protocol.expose_to(std::move(proto));
       return true;
     }
-    catch(std::exception& e)
+    catch (const std::exception& e)
     {
-      ossia::logger().error(
-          "ossia_local_device: error when creating Minuit client: {}", e.what());
+      throw OssiaNetworkError(ctx.format_message(e.what()));
     }
-    catch(...)
+    catch (...)
     {
-      ossia::logger().error("ossia_local_device: error when creating Minuit client: {}");
+      throw OssiaNetworkError(ctx.format_message("Unknown error occurred"));
     }
-    return false;
   }
 
   ossia::net::node_base* add_node(const std::string& address)
   {
-    return &ossia::net::find_or_create_node(m_device.get_root_node(), address);
+    ExceptionContext ctx;
+    ctx.operation = "add_node";
+    ctx.object_type = "LocalDevice";
+    ctx.object_name = m_device.get_name();
+    ctx.parameters["address"] = address;
+
+    try
+    {
+      return &ossia::net::find_or_create_node(m_device.get_root_node(), address);
+    }
+    catch (const std::exception& e)
+    {
+      throw OssiaParameterError(ctx.format_message(e.what()));
+    }
+    catch (...)
+    {
+      throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+    }
   }
 
   ossia::net::node_base* find_node(const std::string& address)
   {
-    return ossia::net::find_node(m_device.get_root_node(), address);
+    ExceptionContext ctx;
+    ctx.operation = "find_node";
+    ctx.object_type = "LocalDevice";
+    ctx.object_name = m_device.get_name();
+    ctx.parameters["address"] = address;
+
+    try
+    {
+      return ossia::net::find_node(m_device.get_root_node(), address);
+    }
+    catch (const std::exception& e)
+    {
+      throw OssiaParameterError(ctx.format_message(e.what()));
+    }
+    catch (...)
+    {
+      throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+    }
   }
 
   ossia::net::node_base* get_root_node() { return &m_device.get_root_node(); }
@@ -334,20 +463,67 @@ class ossia_oscquery_device
   ossia::oscquery::oscquery_mirror_protocol& m_oscquery_protocol;
 
 public:
-  ossia_oscquery_device(std::string name, std::string host, uint16_t local_osc_port)
-      : m_device{std::make_unique<ossia::oscquery::oscquery_mirror_protocol>(host, local_osc_port), std::move(name)}
-      , m_oscquery_protocol{static_cast<ossia::oscquery::oscquery_mirror_protocol&>(
-            m_device.get_protocol())}
+  ossia_oscquery_device(
+      std::string name, std::string host, uint16_t local_osc_port)
+      : m_device{[&]() -> ossia::net::generic_device {
+          ExceptionContext ctx;
+          ctx.operation = "constructor";
+          ctx.object_type = "OSCQueryDevice";
+          ctx.object_name = name;
+          ctx.parameters["host"] = host;
+          ctx.parameters["local_osc_port"] = std::to_string(local_osc_port);
+
+          try {
+            return ossia::net::generic_device{
+              std::make_unique<ossia::oscquery::oscquery_mirror_protocol>(
+                host, local_osc_port),
+              std::move(name)
+            };
+          } catch (const std::exception& e) {
+            throw OssiaNetworkError(ctx.format_message(e.what()));
+          } catch (...) {
+            throw OssiaNetworkError(ctx.format_message("Unknown error occurred"));
+          }
+        }()}
+      , m_oscquery_protocol{
+            static_cast<ossia::oscquery::oscquery_mirror_protocol&>(
+                m_device.get_protocol())}
   {
   }
 
   operator ossia::net::generic_device&() { return m_device; }
 
-  bool update() { return m_oscquery_protocol.update(m_device.get_root_node()); }
+  bool update()
+  {
+    ExceptionContext ctx;
+    ctx.operation = "update";
+    ctx.object_type = "OSCQueryDevice";
+    ctx.object_name = m_device.get_name();
+
+    try {
+      return m_oscquery_protocol.update(m_device.get_root_node());
+    } catch (const std::exception& e) {
+      throw OssiaNetworkError(ctx.format_message(e.what()));
+    } catch (...) {
+      throw OssiaNetworkError(ctx.format_message("Unknown error occurred"));
+    }
+  }
 
   ossia::net::node_base* find_node(const std::string& address)
   {
-    return ossia::net::find_node(m_device.get_root_node(), address);
+    ExceptionContext ctx;
+    ctx.operation = "find_node";
+    ctx.object_type = "OSCQueryDevice";
+    ctx.object_name = m_device.get_name();
+    ctx.parameters["address"] = address;
+
+    try {
+      return ossia::net::find_node(m_device.get_root_node(), address);
+    } catch (const std::exception& e) {
+      throw OssiaParameterError(ctx.format_message(e.what()));
+    } catch (...) {
+      throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+    }
   }
 
   ossia::net::node_base* get_root_node() { return &m_device.get_root_node(); }
@@ -367,18 +543,66 @@ class ossia_minuit_device
 public:
   ossia_minuit_device(
       std::string name, std::string host, uint16_t remote_port, uint16_t local_port)
-      : m_device{std::make_unique<ossia::net::minuit_protocol>(name, host, remote_port, local_port), name}
-      , m_protocol{static_cast<ossia::net::minuit_protocol&>(m_device.get_protocol())}
+      : m_device{[&]() -> ossia::net::generic_device {
+          ExceptionContext ctx;
+          ctx.operation = "constructor";
+          ctx.object_type = "MinuitDevice";
+          ctx.object_name = name;
+          ctx.parameters["host"] = host;
+          ctx.parameters["remote_port"] = std::to_string(remote_port);
+          ctx.parameters["local_port"] = std::to_string(local_port);
+
+          try {
+            return ossia::net::generic_device{
+              std::make_unique<ossia::net::minuit_protocol>(
+                name, host, remote_port, local_port),
+              name
+            };
+          } catch (const std::exception& e) {
+            throw OssiaNetworkError(ctx.format_message(e.what()));
+          } catch (...) {
+            throw OssiaNetworkError(ctx.format_message("Unknown error occurred"));
+          }
+        }()}
+      , m_protocol{
+            static_cast<ossia::net::minuit_protocol&>(
+                m_device.get_protocol())}
   {
   }
 
   operator ossia::net::generic_device&() { return m_device; }
 
-  bool update() { return m_protocol.update(m_device.get_root_node()); }
+  bool update()
+  {
+    ExceptionContext ctx;
+    ctx.operation = "update";
+    ctx.object_type = "MinuitDevice";
+    ctx.object_name = m_device.get_name();
+
+    try {
+      return m_protocol.update(m_device.get_root_node());
+    } catch (const std::exception& e) {
+      throw OssiaNetworkError(ctx.format_message(e.what()));
+    } catch (...) {
+      throw OssiaNetworkError(ctx.format_message("Unknown error occurred"));
+    }
+  }
 
   ossia::net::node_base* find_node(const std::string& address)
   {
-    return ossia::net::find_node(m_device.get_root_node(), address);
+    ExceptionContext ctx;
+    ctx.operation = "find_node";
+    ctx.object_type = "MinuitDevice";
+    ctx.object_name = m_device.get_name();
+    ctx.parameters["address"] = address;
+
+    try {
+      return ossia::net::find_node(m_device.get_root_node(), address);
+    } catch (const std::exception& e) {
+      throw OssiaParameterError(ctx.format_message(e.what()));
+    } catch (...) {
+      throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+    }
   }
 
   ossia::net::node_base* get_root_node() { return &m_device.get_root_node(); }
@@ -398,75 +622,181 @@ class ossia_osc_device
 public:
   ossia_osc_device(
       std::string name, std::string ip, uint16_t remote_port, uint16_t local_port)
-      : m_device{std::make_unique<ossia::net::osc_protocol>(ip, remote_port, local_port), std::move(name)}
-      , m_osc_protocol{static_cast<ossia::net::osc_protocol&>(m_device.get_protocol())}
+      : m_device{[&]() -> ossia::net::generic_device {
+          ExceptionContext ctx;
+          ctx.operation = "constructor";
+          ctx.object_type = "OSCDevice";
+          ctx.object_name = name;
+          ctx.parameters["ip"] = ip;
+          ctx.parameters["remote_port"] = std::to_string(remote_port);
+          ctx.parameters["local_port"] = std::to_string(local_port);
+
+          try {
+            return ossia::net::generic_device{
+              std::make_unique<ossia::net::osc_protocol>(
+                ip, remote_port, local_port),
+              std::move(name)
+            };
+          } catch (const std::exception& e) {
+            throw OssiaNetworkError(ctx.format_message(e.what()));
+          } catch (...) {
+            throw OssiaNetworkError(ctx.format_message("Unknown error occurred"));
+          }
+        }()}
+      , m_osc_protocol{
+            static_cast<ossia::net::osc_protocol&>(
+                m_device.get_protocol())}
   {
   }
 
   operator ossia::net::generic_device&() { return m_device; }
 
-  bool get_learning() { return m_osc_protocol.learning(); }
+  bool get_learning()
+  {
+    ExceptionContext ctx;
+    ctx.operation = "get_learning";
+    ctx.object_type = "OSCDevice";
+    ctx.object_name = m_device.get_name();
 
-  void set_learning(bool l) { m_osc_protocol.set_learning(l); }
+    try {
+      return m_osc_protocol.learning();
+    } catch (const std::exception& e) {
+      throw OssiaDeviceError(ctx.format_message(e.what()));
+    } catch (...) {
+      throw OssiaDeviceError(ctx.format_message("Unknown error occurred"));
+    }
+  }
+
+  void set_learning(bool l)
+  {
+    ExceptionContext ctx;
+    ctx.operation = "set_learning";
+    ctx.object_type = "OSCDevice";
+    ctx.object_name = m_device.get_name();
+    ctx.parameters["learning"] = l ? "true" : "false";
+
+    try {
+      m_osc_protocol.set_learning(l);
+    } catch (const std::exception& e) {
+      throw OssiaDeviceError(ctx.format_message(e.what()));
+    } catch (...) {
+      throw OssiaDeviceError(ctx.format_message("Unknown error occurred"));
+    }
+  }
 
   ossia::net::node_base* add_node(const std::string& address)
   {
-    return &ossia::net::find_or_create_node(m_device.get_root_node(), address);
+    ExceptionContext ctx;
+    ctx.operation = "add_node";
+    ctx.object_type = "OSCDevice";
+    ctx.object_name = m_device.get_name();
+    ctx.parameters["address"] = address;
+
+    try {
+      return &ossia::net::find_or_create_node(m_device.get_root_node(), address);
+    } catch (const std::exception& e) {
+      throw OssiaParameterError(ctx.format_message(e.what()));
+    } catch (...) {
+      throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+    }
   }
 
   ossia::net::node_base* find_node(const std::string& address)
   {
-    return ossia::net::find_node(m_device.get_root_node(), address);
+    ExceptionContext ctx;
+    ctx.operation = "find_node";
+    ctx.object_type = "OSCDevice";
+    ctx.object_name = m_device.get_name();
+    ctx.parameters["address"] = address;
+
+    try {
+      return ossia::net::find_node(m_device.get_root_node(), address);
+    } catch (const std::exception& e) {
+      throw OssiaParameterError(ctx.format_message(e.what()));
+    } catch (...) {
+      throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+    }
   }
 
   ossia::net::node_base* get_root_node() { return &m_device.get_root_node(); }
 };
 
-/**
- * @brief MIDI device class
- *
- * A MIDI device is required to deal with a controller using
- * MIDI protocol
- */
-std::vector<ossia::net::midi::midi_info> list_midi_devices()
-{
-  return ossia::net::midi::midi_protocol::scan();
-}
+// /**
+//  * @brief MIDI device class
+//  *
+//  * A MIDI device is required to deal with a controller using
+//  * MIDI protocol
+//  */
+// std::vector<ossia::net::midi::midi_info> list_midi_devices()
+// {
+//   ExceptionContext ctx;
+//   ctx.operation = "list_midi_devices";
+//   ctx.object_type = "MidiProtocol";
 
-struct ossia_network_context
-{
-  ossia_network_context()
-      : context{ossia::net::create_network_context()}
-  {
-  }
-  void poll() { ossia::net::poll_network_context(*context); }
-  ossia::net::network_context_ptr context;
-};
+//   try {
+//     ossia::net::midi::midi_protocol midi_protocol{};
+//     return midi_protocol.scan();
+//   } catch (const std::exception& e) {
+//     throw OssiaDeviceError(ctx.format_message(e.what()));
+//   } catch (...) {
+//     throw OssiaDeviceError(ctx.format_message("Unknown error occurred"));
+//   }
+// }
 
-class ossia_midi_device
-{
-  ossia::net::midi::midi_device m_device;
-  ossia::net::midi::midi_protocol& m_protocol;
+// class ossia_midi_device
+// {
+//   ossia::net::midi::midi_device m_device;
+//   ossia::net::midi::midi_protocol& m_protocol;
 
-public:
-  ossia_midi_device(
-      ossia_network_context ctx, std::string name, ossia::net::midi::midi_info d)
-      : m_device{name, std::make_unique<ossia::net::midi::midi_protocol>(ctx.context, d)}
-      , m_protocol{
-            static_cast<ossia::net::midi::midi_protocol&>(m_device.get_protocol())}
-  {
-    m_device.create_full_tree();
-  }
+// public:
+//     ossia_midi_device(std::string name, ossia::net::midi::midi_info d)
+//     : m_device{[&]() -> ossia::net::midi::midi_device {
+//         ExceptionContext ctx;
+//         ctx.operation = "constructor";
+//         ctx.object_type = "MidiDevice";
+//         ctx.object_name = name;
+//         ctx.parameters["device"] = d.device;
+//         ctx.parameters["port"] = std::to_string(d.port);
 
-  operator ossia::net::midi::midi_device&() { return m_device; }
+//         try {
+//           ossia::net::midi::midi_device device{ std::make_unique<ossia::net::midi::midi_protocol>(d) };
+//           device.set_name(name);
+//           device.create_full_tree();
+//           return device;
+//         } catch (const std::exception& e) {
+//           throw OssiaDeviceError(ctx.format_message(e.what()));
+//         } catch (...) {
+//           throw OssiaDeviceError(ctx.format_message("Unknown error occurred"));
+//         }
+//       }()}
+//     , m_protocol{ static_cast<ossia::net::midi::midi_protocol&>(m_device.get_protocol()) }
+//   {
+//   }
 
-  ossia::net::node_base* find_node(const std::string& address)
-  {
-    return ossia::net::find_node(m_device.get_root_node(), address);
-  }
+//   operator ossia::net::midi::midi_device&() { return m_device; }
 
-  ossia::net::node_base* get_root_node() { return &m_device.get_root_node(); }
-};
+//   ossia::net::node_base* find_node(const std::string& address)
+//   {
+//     ExceptionContext ctx;
+//     ctx.operation = "find_node";
+//     ctx.object_type = "MidiDevice";
+//     ctx.object_name = m_device.get_name();
+//     ctx.parameters["address"] = address;
+
+//     try {
+//       return ossia::net::find_node(m_device.get_root_node(), address);
+//     } catch (const std::exception& e) {
+//       throw OssiaParameterError(ctx.format_message(e.what()));
+//     } catch (...) {
+//       throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+//     }
+//   }
+
+//   ossia::net::node_base* get_root_node()
+//   {
+//     return &m_device.get_root_node();
+//   }
+// };
 
 class ossia_device_callback : public Nano::Observer
 {
@@ -508,6 +838,42 @@ private:
   }
 };
 
+// Exception translator registration function
+void register_exception_translators(py::module& m) {
+    // Register custom exception classes and export them to Python module namespace
+    auto ossiaError = py::register_exception<OssiaError>(m, "OssiaError", PyExc_RuntimeError);
+    auto ossiaDeviceError = py::register_exception<OssiaDeviceError>(m, "OssiaDeviceError");
+    auto ossiaNetworkError = py::register_exception<OssiaNetworkError>(m, "OssiaNetworkError", PyExc_ConnectionError);
+    auto ossiaParameterError = py::register_exception<OssiaParameterError>(m, "OssiaParameterError", PyExc_ValueError);
+    auto ossiaPresetError = py::register_exception<OssiaPresetError>(m, "OssiaPresetError", PyExc_IOError);
+
+    // Export exception classes to module namespace for direct access
+    m.attr("OssiaError") = ossiaError;
+    m.attr("OssiaDeviceError") = ossiaDeviceError;
+    m.attr("OssiaNetworkError") = ossiaNetworkError;
+    m.attr("OssiaParameterError") = ossiaParameterError;
+    m.attr("OssiaPresetError") = ossiaPresetError;
+
+    // Register translators for standard C++ exceptions
+    py::register_exception_translator([](std::exception_ptr p) {
+        try {
+            if (p) std::rethrow_exception(p);
+        } catch (const std::bad_alloc& e) {
+            PyErr_SetString(PyExc_MemoryError, e.what());
+        } catch (const std::invalid_argument& e) {
+            PyErr_SetString(PyExc_ValueError, e.what());
+        } catch (const std::out_of_range& e) {
+            PyErr_SetString(PyExc_IndexError, e.what());
+        } catch (const std::ios_base::failure& e) {
+            PyErr_SetString(PyExc_IOError, e.what());
+        } catch (const std::exception& e) {
+            PyErr_SetString(PyExc_RuntimeError, e.what());
+        } catch (...) {
+            PyErr_SetString(PyExc_RuntimeError, "Unknown C++ exception occurred");
+        }
+    });
+}
+
 // to get children of a node
 PYBIND11_MAKE_OPAQUE(std::vector<ossia::net::node_base*>);
 
@@ -515,9 +881,8 @@ PYBIND11_MODULE(ossia_python, m)
 {
   m.doc() = "python binding of ossia library";
 
-  py::class_<ossia_network_context>(m, "NetworkContext")
-      .def(py::init<>())
-      .def("poll", &ossia_network_context::poll);
+  // Register exception translators
+  register_exception_translators(m);
 
   py::class_<ossia_local_device>(m, "LocalDevice")
       .def(py::init<std::string>())
@@ -571,7 +936,6 @@ PYBIND11_MODULE(ossia_python, m)
           "root_node", &ossia_osc_device::get_root_node,
           py::return_value_policy::reference);
 
-  m.def("list_midi_devices", &list_midi_devices);
 
   py::class_<ossia_midi_device>(m, "MidiDevice")
       .def(py::init<ossia_network_context, std::string, ossia::net::midi::midi_info>())
@@ -740,7 +1104,31 @@ PYBIND11_MODULE(ossia_python, m)
       .def(
           "create_parameter",
           [](ossia::net::node_base& node, int type) {
-    return node.create_parameter((ossia::val_type)type);
+            ExceptionContext ctx;
+            ctx.operation = "create_parameter";
+            ctx.object_type = "Node";
+            ctx.object_name = ossia::net::osc_parameter_string(node);
+            ctx.parameters["type"] = std::to_string(type);
+
+            try {
+              // Validate parameter type
+              if (type < 0 || type >= static_cast<int>(ossia::val_type::LIST) + 1) {
+                throw OssiaParameterError(ctx.format_message("Invalid parameter type: " + std::to_string(type)));
+              }
+              
+              auto param = node.create_parameter(static_cast<ossia::val_type>(type));
+              if (!param) {
+                throw OssiaParameterError(ctx.format_message("Failed to create parameter"));
+              }
+              
+              return param;
+            } catch (const OssiaParameterError&) {
+              throw; // Re-throw our custom exceptions
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
           },
           py::return_value_policy::reference)
       .def("children", &ossia::net::node_base::children_copy)
@@ -758,20 +1146,65 @@ PYBIND11_MODULE(ossia_python, m)
       .def_property(
           "value",
           [](ossia::net::parameter_base& addr) -> py::object {
-            return addr.fetch_value().apply(ossia::python::to_python_value{});
+            ExceptionContext ctx;
+            ctx.operation = "get_value";
+            ctx.object_type = "Parameter";
+            ctx.object_name = ossia::net::osc_parameter_string(addr.get_node());
+
+            try {
+              return addr.fetch_value().apply(ossia::python::to_python_value{});
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
           },
           [](ossia::net::parameter_base& addr, const py::object& v) {
-    addr.push_value(ossia::python::from_python_value(v.ptr()));
+            ExceptionContext ctx;
+            ctx.operation = "set_value";
+            ctx.object_type = "Parameter";
+            ctx.object_name = ossia::net::osc_parameter_string(addr.get_node());
+
+            try {
+              auto ossia_val = ossia::python::from_python_value(v.ptr());
+              addr.push_value(ossia_val);
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
           })
       .def_property(
           "default_value",
           [](ossia::net::parameter_base& addr) -> py::object {
-            ossia::value empty{};
-            return addr.get_default_value().value_or(empty).apply(
-                ossia::python::to_python_value{});
+            ExceptionContext ctx;
+            ctx.operation = "get_default_value";
+            ctx.object_type = "Parameter";
+            ctx.object_name = ossia::net::osc_parameter_string(addr.get_node());
+
+            try {
+              ossia::value empty{};
+              return addr.get_default_value().value_or(empty).apply(ossia::python::to_python_value{});
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
           },
           [](ossia::net::parameter_base& addr, const py::object& v) {
-    addr.set_default_value(ossia::python::from_python_value(v.ptr()));
+            ExceptionContext ctx;
+            ctx.operation = "set_default_value";
+            ctx.object_type = "Parameter";
+            ctx.object_name = ossia::net::osc_parameter_string(addr.get_node());
+
+            try {
+              auto ossia_val = ossia::python::from_python_value(v.ptr());
+              addr.set_default_value(ossia_val);
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
           })
       .def_property(
           "value_type", &ossia::net::parameter_base::get_value_type,
@@ -803,62 +1236,199 @@ PYBIND11_MODULE(ossia_python, m)
           })
       .def(
           "make_domain",
-          [](ossia::net::parameter_base& addr, const py::object& min,
-             const py::object& max) {
-    addr.set_domain(ossia::make_domain(
-        ossia::python::from_python_value(min.ptr()),
-        ossia::python::from_python_value(max.ptr())));
+          [](ossia::net::parameter_base& addr, const py::object& min, const py::object& max) {
+            ExceptionContext ctx;
+            ctx.operation = "make_domain";
+            ctx.object_type = "Parameter";
+            ctx.object_name = ossia::net::osc_parameter_string(addr.get_node());
+
+            try {
+              auto min_val = ossia::python::from_python_value(min.ptr());
+              auto max_val = ossia::python::from_python_value(max.ptr());
+              
+              // Validate that min and max are compatible with parameter type
+              auto param_type = addr.get_value_type();
+              if (min_val.get_type() != param_type || max_val.get_type() != param_type) {
+                throw OssiaParameterError(ctx.format_message("Domain values must match parameter type"));
+              }
+              
+              addr.set_domain(ossia::make_domain(min_val, max_val));
+            } catch (const OssiaParameterError&) {
+              throw; // Re-throw our custom exceptions
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
           })
       .def(
           "make_domain",
           [](ossia::net::parameter_base& addr, const std::vector<py::object>& values) {
-    auto dom = ossia::init_domain(addr.get_value_type());
+            ExceptionContext ctx;
+            ctx.operation = "make_domain";
+            ctx.object_type = "Parameter";
+            ctx.object_name = ossia::net::osc_parameter_string(addr.get_node());
+            ctx.parameters["values_count"] = std::to_string(values.size());
 
-    std::vector<ossia::value> vec;
-    vec.reserve(values.size());
+            try {
+              if (values.empty()) {
+                throw OssiaParameterError(ctx.format_message("Domain values list cannot be empty"));
+              }
 
-    for(auto& v : values)
-      vec.push_back(ossia::python::from_python_value(v.ptr()));
+              auto dom = ossia::init_domain(addr.get_value_type());
+              auto param_type = addr.get_value_type();
 
-    ossia::set_values(dom, vec);
-    addr.set_domain(dom);
+              std::vector<ossia::value> vec;
+              vec.reserve(values.size());
+
+              for (const auto& v : values) {
+                auto ossia_val = ossia::python::from_python_value(v.ptr());
+                
+                // Validate that each value is compatible with parameter type
+                if (ossia_val.get_type() != param_type) {
+                  throw OssiaParameterError(ctx.format_message("All domain values must match parameter type"));
+                }
+                
+                vec.push_back(ossia_val);
+              }
+
+              ossia::set_values(dom, vec);
+              addr.set_domain(dom);
+            } catch (const OssiaParameterError&) {
+              throw; // Re-throw our custom exceptions
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
           })
       .def(
           "apply_domain",
           [](ossia::net::parameter_base& addr) {
-    addr.push_value(
-        ossia::apply_domain(addr.get_domain(), addr.get_bounding(), addr.fetch_value()));
+            ExceptionContext ctx;
+            ctx.operation = "apply_domain";
+            ctx.object_type = "Parameter";
+            ctx.object_name = ossia::net::osc_parameter_string(addr.get_node());
+
+            try {
+              if (!addr.get_domain()) {
+                throw OssiaParameterError(ctx.format_message("Parameter has no domain to apply"));
+              }
+              
+              addr.push_value(ossia::apply_domain(
+                  addr.get_domain(), addr.get_bounding(), addr.fetch_value()));
+            } catch (const OssiaParameterError&) {
+              throw; // Re-throw our custom exceptions
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
           })
-      .def("pull_value", &ossia::net::parameter_base::pull_value)
+      .def("pull_value", [](ossia::net::parameter_base& addr) {
+            ExceptionContext ctx;
+            ctx.operation = "pull_value";
+            ctx.object_type = "Parameter";
+            ctx.object_name = ossia::net::osc_parameter_string(addr.get_node());
+
+            try {
+              return addr.pull_value();
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
+          })
       .def(
           "clone_value",
           [](ossia::net::parameter_base& addr) -> py::object {
-            return addr.value().apply(ossia::python::to_python_value{});
+            ExceptionContext ctx;
+            ctx.operation = "clone_value";
+            ctx.object_type = "Parameter";
+            ctx.object_name = ossia::net::osc_parameter_string(addr.get_node());
+
+            try {
+              return addr.value().apply(ossia::python::to_python_value{});
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
           })
       .def(
           "fetch_value",
           [](ossia::net::parameter_base& addr) -> py::object {
-            return addr.fetch_value().apply(ossia::python::to_python_value{});
+            ExceptionContext ctx;
+            ctx.operation = "fetch_value";
+            ctx.object_type = "Parameter";
+            ctx.object_name = ossia::net::osc_parameter_string(addr.get_node());
+
+            try {
+              return addr.fetch_value().apply(ossia::python::to_python_value{});
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
           })
       .def(
-          "push_value",
-          [](ossia::net::parameter_base& addr, const py::object& v) {
-    addr.push_value(ossia::python::from_python_value(v.ptr()));
+          "push_value", [](ossia::net::parameter_base& addr,
+                           const py::object& v) { 
+            ExceptionContext ctx;
+            ctx.operation = "push_value";
+            ctx.object_type = "Parameter";
+            ctx.object_name = ossia::net::osc_parameter_string(addr.get_node());
+
+            try {
+              auto ossia_val = ossia::python::from_python_value(v.ptr());
+              addr.push_value(ossia_val);
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
           })
       .def(
           "add_callback",
           [](ossia::net::parameter_base& addr,
              std::function<void(const py::object&)> clbk) {
-    addr.add_callback(
-        [=](const auto& val) { clbk(val.apply(ossia::python::to_python_value{})); });
+            ExceptionContext ctx;
+            ctx.operation = "add_callback";
+            ctx.object_type = "Parameter";
+            ctx.object_name = ossia::net::osc_parameter_string(addr.get_node());
+
+            try {
+              addr.add_callback([clbk, ctx] (const auto& val) {
+                safe_callback_wrapper([&]() {
+                  clbk(val.apply(ossia::python::to_python_value{}));
+                });
+              });
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
           })
       .def(
           "add_callback_param",
           [](ossia::net::parameter_base& addr,
              std::function<void(ossia::net::node_base&, const py::object&)> clbk) {
-    addr.add_callback([clbk, &addr](const ossia::value& val) {
-      clbk(addr.get_node(), val.apply(ossia::python::to_python_value{}));
-    });
+            ExceptionContext ctx;
+            ctx.operation = "add_callback_param";
+            ctx.object_type = "Parameter";
+            ctx.object_name = ossia::net::osc_parameter_string(addr.get_node());
+
+            try {
+              addr.add_callback([clbk, &addr, ctx] (const ossia::value& val) {
+                safe_callback_wrapper([&]() {
+                  clbk(addr.get_node(), val.apply(ossia::python::to_python_value{}));
+                });
+              });
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
           })
       .def("__str__", [](ossia::net::parameter_base& addr) -> std::string {
         return ossia::value_to_pretty_string(addr.value());
@@ -900,19 +1470,61 @@ PYBIND11_MODULE(ossia_python, m)
       .def(py::init())
       .def_property(
           "min",
-          [](ossia::domain& d) -> py::object {
-            return ossia::get_min(d).apply(ossia::python::to_python_value{});
+          [](ossia::domain& d) -> py::object { 
+            ExceptionContext ctx;
+            ctx.operation = "get_min";
+            ctx.object_type = "Domain";
+
+            try {
+              return ossia::get_min(d).apply(ossia::python::to_python_value{});
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
           },
           [](ossia::domain& d, const py::object& v) {
-    ossia::set_min(d, ossia::python::from_python_value(v.ptr()));
+            ExceptionContext ctx;
+            ctx.operation = "set_min";
+            ctx.object_type = "Domain";
+
+            try {
+              auto ossia_val = ossia::python::from_python_value(v.ptr());
+              ossia::set_min(d, ossia_val);
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
           })
       .def_property(
           "max",
-          [](ossia::domain& d) -> py::object {
-            return ossia::get_max(d).apply(ossia::python::to_python_value{});
+          [](ossia::domain& d) -> py::object { 
+            ExceptionContext ctx;
+            ctx.operation = "get_max";
+            ctx.object_type = "Domain";
+
+            try {
+              return ossia::get_max(d).apply(ossia::python::to_python_value{});
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
           },
           [](ossia::domain& d, const py::object& v) {
-    ossia::set_max(d, ossia::python::from_python_value(v.ptr()));
+            ExceptionContext ctx;
+            ctx.operation = "set_max";
+            ctx.object_type = "Domain";
+
+            try {
+              auto ossia_val = ossia::python::from_python_value(v.ptr());
+              ossia::set_max(d, ossia_val);
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
           });
 
   py::class_<ossia::net::instance_bounds>(m, "InstanceBounds")
@@ -925,109 +1537,187 @@ PYBIND11_MODULE(ossia_python, m)
       .def(py::init<ossia_osc_device&>())
       .def(py::init<ossia_oscquery_device&>())
       .def(py::init<ossia_minuit_device&>())
-      .def(py::init<ossia_midi_device&>())
-      .def(
-          "register",
-          [](ossia::message_queue& mq, ossia::net::parameter_base& p) { mq.reg(p); })
-      .def(
-          "unregister",
-          [](ossia::message_queue& mq, ossia::net::parameter_base& p) { mq.unreg(p); })
-      .def("pop", [](ossia::message_queue& mq) -> py::object {
-        ossia::received_value v;
-        bool res = mq.try_dequeue(v);
-        if(res)
-        {
-          return py::make_tuple(
-              py::cast(v.address), v.value.apply(ossia::python::to_python_value{}));
+    //   .def(py::init<ossia_midi_device&>())
+      .def("register", [] (ossia::message_queue& mq, ossia::net::parameter_base& p) {
+        ExceptionContext ctx;
+        ctx.operation = "register";
+        ctx.object_type = "MessageQueue";
+        ctx.object_name = ossia::net::osc_parameter_string(p.get_node());
+
+        try {
+          mq.reg(p);
+        } catch (const std::exception& e) {
+          throw OssiaParameterError(ctx.format_message(e.what()));
+        } catch (...) {
+          throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
         }
-        return py::none{};
-      });
+      })
+      .def("unregister", [] (ossia::message_queue& mq, ossia::net::parameter_base& p) {
+        ExceptionContext ctx;
+        ctx.operation = "unregister";
+        ctx.object_type = "MessageQueue";
+        ctx.object_name = ossia::net::osc_parameter_string(p.get_node());
+
+        try {
+          mq.unreg(p);
+        } catch (const std::exception& e) {
+          throw OssiaParameterError(ctx.format_message(e.what()));
+        } catch (...) {
+          throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+        }
+      })
+      .def("pop", [] (ossia::message_queue& mq) -> py::object {
+        ExceptionContext ctx;
+        ctx.operation = "pop";
+        ctx.object_type = "MessageQueue";
+
+        try {
+          ossia::received_value v;
+          bool res = mq.try_dequeue(v);
+          if (res)
+          {
+            return py::make_tuple(py::cast(v.address), v.value.apply(ossia::python::to_python_value{}));
+          }
+          return py::none{};
+        } catch (const std::exception& e) {
+          throw OssiaParameterError(ctx.format_message(e.what()));
+        } catch (...) {
+          throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+        }
+  });
 
   py::class_<ossia::global_message_queue>(m, "GlobalMessageQueue")
       .def(py::init<ossia_local_device&>())
       .def(py::init<ossia_osc_device&>())
       .def(py::init<ossia_oscquery_device&>())
       .def(py::init<ossia_minuit_device&>())
-      .def(py::init<ossia_midi_device&>())
-      .def("pop", [](ossia::global_message_queue& mq) -> py::object {
-        ossia::received_value v;
-        bool res = mq.try_dequeue(v);
-        if(res)
-        {
-          return py::make_tuple(
-              py::cast(v.address), v.value.apply(ossia::python::to_python_value{}));
-        }
-        return py::none{};
-      });
+    //   .def(py::init<ossia_midi_device&>())
+      .def("pop", [] (ossia::global_message_queue& mq) -> py::object {
+        ExceptionContext ctx;
+        ctx.operation = "pop";
+        ctx.object_type = "GlobalMessageQueue";
 
-  m.def(
-      "list_node_pattern",
-      [](const std::vector<py::object>& start_nodes,
-         std::string pattern) -> std::vector<py::object> {
+        try {
+          ossia::received_value v;
+          bool res = mq.try_dequeue(v);
+          if(res)
+          {
+            return py::make_tuple(py::cast(v.address), v.value.apply(ossia::python::to_python_value{}));
+          }
+          return py::none{};
+        } catch (const std::exception& e) {
+          throw OssiaParameterError(ctx.format_message(e.what()));
+        } catch (...) {
+          throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+        }
+        });
+
+  m.def("list_node_pattern",
+    [] (const std::vector<py::object>& start_nodes, std::string pattern) -> std::vector<py::object> {
+      ExceptionContext ctx;
+      ctx.operation = "list_node_pattern";
+      ctx.object_type = "NodePattern";
+      ctx.parameters["pattern"] = pattern;
+      ctx.parameters["node_count"] = std::to_string(start_nodes.size());
+
+      try {
+        if (pattern.empty()) {
+          throw std::invalid_argument("Pattern cannot be empty");
+        }
+
         std::vector<ossia::net::node_base*> vec;
         vec.reserve(start_nodes.size());
-        for(auto node : start_nodes)
+        for (auto node : start_nodes) {
+          if (node.is_none()) {
+            throw std::invalid_argument("Node cannot be None");
+          }
           vec.push_back(node.cast<ossia::net::node_base*>());
+        }
 
-        if(auto path = ossia::traversal::make_path(pattern))
+        if (auto path = ossia::traversal::make_path(pattern)) {
           ossia::traversal::apply(*path, vec);
+        } else {
+          throw std::invalid_argument("Invalid pattern syntax");
+        }
 
         std::vector<py::object> res;
-        for(auto node : vec)
+        for (auto node : vec)
           res.push_back(py::cast(node));
 
         return res;
-      });
+      } catch (const std::exception& e) {
+        throw OssiaParameterError(ctx.format_message(e.what()));
+      } catch (...) {
+        throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+      }
+    });
 
-  m.def(
-      "create_node_pattern",
-      [](const py::object& start_node, std::string pattern) -> std::vector<py::object> {
-        std::vector<ossia::net::node_base*> vec = ossia::net::create_nodes(
-            start_node.cast<ossia::net::node_base&>(), pattern);
+  m.def("create_node_pattern",
+    [] (const py::object& start_node, std::string pattern) -> std::vector<py::object> {
+      ExceptionContext ctx;
+      ctx.operation = "create_node_pattern";
+      ctx.object_type = "NodePattern";
+      ctx.parameters["pattern"] = pattern;
+
+      try {
+        if (pattern.empty()) {
+          throw std::invalid_argument("Pattern cannot be empty");
+        }
+
+        if (start_node.is_none()) {
+          throw std::invalid_argument("Start node cannot be None");
+        }
+
+        std::vector<ossia::net::node_base*> vec = ossia::net::create_nodes(start_node.cast<ossia::net::node_base&>(), pattern);
 
         std::vector<py::object> res;
-        for(auto node : vec)
+        for (auto node : vec)
           res.push_back(py::cast(node));
 
         return res;
-      });
+      } catch (const std::exception& e) {
+        throw OssiaParameterError(ctx.format_message(e.what()));
+      } catch (...) {
+        throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+      }
+    });
 
-  m.def(
-      "save_preset",
-      [](const py::object& start_node, std::string filename, std::string name) -> void {
-        try
-        {
-          auto preset
-              = ossia::presets::make_preset(start_node.cast<ossia::net::node_base&>());
-          auto json = ossia::presets::write_json(name, preset);
-          ossia::presets::write_file(json, filename);
-        }
-        catch(std::ifstream::failure e)
-        {
-          ossia::logger().error("Can't open file {}, error: {}", filename, e.what());
-        }
+  m.def("save_preset", [] (const py::object& start_node, std::string filename, std::string name) -> void {
+      ExceptionContext ctx;
+      ctx.operation = "save_preset";
+      ctx.object_type = "Preset";
+      ctx.parameters["filename"] = filename;
+      ctx.parameters["name"] = name;
 
-        return;
-      });
+      try {
+        auto preset = ossia::presets::make_preset(start_node.cast<ossia::net::node_base&>());
+        auto json = ossia::presets::write_json(name, preset);
+        ossia::presets::write_file(json, filename);
+      } catch (const std::ios_base::failure& e) {
+        throw OssiaPresetError(ctx.format_message("File operation failed: " + std::string(e.what())));
+      } catch (const std::exception& e) {
+        throw OssiaPresetError(ctx.format_message(e.what()));
+      } catch (...) {
+        throw OssiaPresetError(ctx.format_message("Unknown error occurred"));
+      }
+    });
 
-  m.def("load_preset", [](const py::object& start_node, std::string filename) -> void {
-    try
-    {
-      auto json = ossia::presets::read_file(filename);
-      auto preset = ossia::presets::read_json(json);
-      ossia::presets::apply_preset(
-          start_node.cast<ossia::net::node_base&>(), preset,
-          ossia::presets::keep_arch_on, {}, true);
-    }
-    catch(std::ifstream::failure e)
-    {
-      ossia::logger().error("Can't open file {}, error: {}", filename, e.what());
-    }
-    catch(...)
-    {
-      ossia::logger().error("Can't apply preset to current node.");
-    }
+  m.def("load_preset", [] (const py::object& start_node, std::string filename) -> void {
+      ExceptionContext ctx;
+      ctx.operation = "load_preset";
+      ctx.object_type = "Preset";
+      ctx.parameters["filename"] = filename;
 
-    return;
-  });
+      try {
+        auto json = ossia::presets::read_file(filename);
+        auto preset = ossia::presets::read_json(json);
+        ossia::presets::apply_preset(start_node.cast<ossia::net::node_base&>(), preset,  ossia::presets::keep_arch_on, {}, true);
+      } catch (const std::ios_base::failure& e) {
+        throw OssiaPresetError(ctx.format_message("File operation failed: " + std::string(e.what())));
+      } catch (const std::exception& e) {
+        throw OssiaPresetError(ctx.format_message(e.what()));
+      } catch (...) {
+        throw OssiaPresetError(ctx.format_message("Unknown error occurred"));
+      }
+    });
 }
