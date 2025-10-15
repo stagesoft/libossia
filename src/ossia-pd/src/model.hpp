@@ -1,9 +1,7 @@
 #pragma once
 #include <ossia-pd/src/node_base.hpp>
 
-namespace ossia
-{
-namespace pd
+namespace ossia::pd
 {
 
 class model : public node_base
@@ -20,9 +18,8 @@ public:
 
   static void destroy(model* x);
   static void* create(t_symbol* name, int argc, t_atom* argv);
-  static t_pd_err notify(model*x, t_symbol*s, t_symbol* msg, void* sender, void* data);
+  static t_pd_err notify(model* x, t_symbol* s, t_symbol* msg, void* sender, void* data);
 
   static ossia::safe_set<model*>& quarantine();
 };
-}
 } // namespace

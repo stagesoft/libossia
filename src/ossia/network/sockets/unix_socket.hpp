@@ -1,12 +1,15 @@
 #pragma once
 #include <ossia/detail/logger.hpp>
+#include <ossia/network/context.hpp>
 #include <ossia/network/sockets/configuration.hpp>
+
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/udp.hpp>
-#include <boost/asio/write.hpp>
 #include <boost/asio/local/datagram_protocol.hpp>
 #include <boost/asio/local/stream_protocol.hpp>
 #include <boost/asio/placeholders.hpp>
+#include <boost/asio/strand.hpp>
+#include <boost/asio/write.hpp>
 
 #include <nano_signal_slot.hpp>
 
@@ -19,7 +22,9 @@ class unix_datagram_socket
 
 public:
   unix_datagram_socket(const fd_configuration& conf, boost::asio::io_context& ctx)
-      : m_context {ctx}, m_endpoint {conf.fd}, m_socket {ctx}
+      : m_context{ctx}
+      , m_endpoint{conf.fd}
+      , m_socket{boost::asio::make_strand(ctx)}
   {
   }
 
@@ -40,7 +45,14 @@ public:
   {
     if(m_socket.is_open())
     {
-      m_context.post([this] {
+      boost::asio::post(m_context, [this] {
+        try
+        {
+          m_socket.shutdown(boost::asio::ip::udp::socket::shutdown_both);
+        }
+        catch(...)
+        {
+        }
         m_socket.close();
         on_close();
       });
@@ -51,21 +63,21 @@ public:
   void receive(F f)
   {
     m_socket.async_receive_from(
-        boost::asio::buffer(m_data), m_endpoint,
+        boost::asio::mutable_buffer(&m_data[0], std::size(m_data)), m_endpoint,
         [this, f](boost::system::error_code ec, std::size_t sz) {
-          if (ec == boost::asio::error::operation_aborted)
-            return;
+      if(ec == boost::asio::error::operation_aborted)
+        return;
 
-          if (!ec && sz > 0)
-            try
-            {
-              f(m_data, sz);
-            }
-            catch (...)
-            {
-            }
+      if(!ec && sz > 0)
+        try
+        {
+          f(m_data, sz);
+        }
+        catch(...)
+        {
+        }
 
-          this->receive(f);
+      this->receive(f);
         });
   }
 
@@ -98,44 +110,49 @@ public:
 
   void close()
   {
+    // FIXME async?
+    try
+    {
+      m_socket.shutdown(boost::asio::ip::udp::socket::shutdown_both);
+    }
+    catch(...)
+    {
+    }
     m_socket.close();
   }
 
-  void write(const boost::asio::const_buffer& buf)
-  {
-    boost::asio::write(m_socket, buf);
-  }
+  void write(const boost::asio::const_buffer& buf) { boost::asio::write(m_socket, buf); }
 
-  void on_close()
-  {
+  void on_close() { }
 
-  }
-
-  void on_fail()
-  {
-
-  }
+  void on_fail() { }
 
   proto::socket m_socket;
 };
-
 
 class unix_stream_server
 {
 public:
   using proto = boost::asio::local::stream_protocol;
   using listener = unix_stream_listener;
-  [[no_unique_address]]
-  struct ensure_reuse {
-    explicit ensure_reuse(const proto::endpoint& endpoint) { ::unlink(endpoint.path().data()); }
+  [[no_unique_address]] struct ensure_reuse
+  {
+    explicit ensure_reuse(const proto::endpoint& endpoint)
+    {
+      ::unlink(endpoint.path().data());
+    }
   } m_ensure_reuse;
 
   unix_stream_server(const fd_configuration& conf, boost::asio::io_context& ctx)
       : m_ensure_reuse{conf.fd}
-      , m_context {ctx}
-      , m_acceptor {ctx, conf.fd}
+      , m_context{ctx}
+      , m_acceptor{boost::asio::make_strand(ctx), conf.fd}
   {
+  }
 
+  unix_stream_server(const fd_configuration& conf, ossia::net::network_context_ptr ctx)
+      : unix_stream_server{conf, ctx->context}
+  {
   }
 
   boost::asio::io_context& m_context;
@@ -149,7 +166,9 @@ public:
   using socket = typename proto::socket;
 
   unix_stream_client(const fd_configuration& conf, boost::asio::io_context& ctx)
-      : m_context {ctx}, m_endpoint {conf.fd}, m_socket {ctx}
+      : m_context{ctx}
+      , m_endpoint{conf.fd}
+      , m_socket{boost::asio::make_strand(ctx)}
   {
   }
 
@@ -159,14 +178,18 @@ public:
     on_open();
   }
 
-  bool connected() const
-  {
-    return m_connected;
-  }
+  bool connected() const { return m_connected; }
 
   void close()
   {
-    m_context.post([this] {
+    boost::asio::post(m_context, [this] {
+      try
+      {
+        m_socket.shutdown(boost::asio::ip::udp::socket::shutdown_both);
+      }
+      catch(...)
+      {
+      }
       m_socket.close();
       on_close();
     });

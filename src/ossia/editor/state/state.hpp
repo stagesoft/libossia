@@ -1,9 +1,9 @@
 #pragma once
 
+#include <ossia/detail/config.hpp>
+
 #include <ossia/detail/ptr_container.hpp>
 #include <ossia/editor/state/state_element_fwd.hpp>
-
-#include <ossia/detail/config.hpp>
 
 #include <memory>
 /**
@@ -23,39 +23,20 @@ namespace ossia
  */
 class OSSIA_EXPORT state
 {
+  using children_type = std::vector<state_element>;
+
 public:
   OSSIA_EXPORT friend bool operator==(const state& lhs, const state& rhs);
   OSSIA_EXPORT friend bool operator!=(const state& lhs, const state& rhs);
 
-  auto begin()
-  {
-    return m_children.begin();
-  }
-  auto end()
-  {
-    return m_children.end();
-  }
-  auto begin() const
-  {
-    return m_children.begin();
-  }
-  auto end() const
-  {
-    return m_children.end();
-  }
-  auto cbegin() const
-  {
-    return m_children.cbegin();
-  }
-  auto cend() const
-  {
-    return m_children.cend();
-  }
+  children_type::iterator begin() noexcept;
+  children_type::iterator end() noexcept;
+  children_type::const_iterator begin() const noexcept;
+  children_type::const_iterator end() const noexcept;
+  children_type::const_iterator cbegin() const noexcept;
+  children_type::const_iterator cend() const noexcept;
 
-  auto& children() const
-  {
-    return m_children;
-  }
+  const children_type& children() const noexcept;
 
   std::size_t size() const;
   bool empty() const;
@@ -66,17 +47,16 @@ public:
   void add(state_element&& e);
 
   template <class Optional_T>
-  auto add(Optional_T&& opt) -> decltype(
-      std::declval<typename std::remove_reference_t<Optional_T>::value_type>(),
-      void())
+  auto add(Optional_T&& opt)
+      -> decltype(std::declval<typename std::remove_reference_t<Optional_T>::value_type>(), void())
   {
-    if (opt)
+    if(opt)
       add(*std::forward<Optional_T>(opt));
   }
 
   void remove(const state_element& e);
-  void remove(std::vector<state_element>::iterator e);
-  void remove(std::vector<state_element>::const_iterator e);
+  void remove(children_type::iterator e);
+  void remove(children_type::const_iterator e);
 
   void reserve(std::size_t);
   void clear();
@@ -110,8 +90,7 @@ OSSIA_EXPORT void flatten_and_filter(state&, const state_element& element);
 OSSIA_EXPORT void flatten_and_filter(state&, state_element&& element);
 
 //! These will also merge single addresses.
-OSSIA_EXPORT void
-merge_flatten_and_filter(state&, const state_element& element);
+OSSIA_EXPORT void merge_flatten_and_filter(state&, const state_element& element);
 OSSIA_EXPORT void merge_flatten_and_filter(state&, state_element&& element);
 
 inline ossia::state_element& get_state_element(ossia::state_element* iterator)

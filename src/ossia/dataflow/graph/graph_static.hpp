@@ -4,12 +4,11 @@
 #include <ossia/dataflow/graph/graph_utils.hpp>
 #include <ossia/dataflow/graph/node_executors.hpp>
 #include <ossia/dataflow/graph/transitive_closure.hpp>
-#include <ossia/editor/scenario/execution_log.hpp>
 #include <ossia/detail/flat_map.hpp>
+#include <ossia/editor/scenario/execution_log.hpp>
 
 #include <boost/circular_buffer.hpp>
 #include <boost/graph/transitive_closure.hpp>
-
 
 #include <ossia-config.hpp>
 
@@ -17,18 +16,28 @@
 
 namespace ossia
 {
-
 template <typename UpdateImpl, typename TickImpl>
-struct graph_static final : public graph_util, public graph_base
+struct graph_static final
+    : public graph_util
+    , public graph_base
 {
 public:
-  UpdateImpl update_fun{*this};
+  UpdateImpl update_fun;
   TickImpl tick_fun{*this};
-
-  ~graph_static() override
+  std::vector<boost::default_color_type> m_color_map_cache;
+  std::vector<boost::detail::DFSVertexInfo<graph_t>> m_stack_cache;
+  explicit graph_static(const ossia::graph_setup_options& opt = {})
+      : update_fun{*this, opt}
   {
-    clear();
+#if !defined(OSSIA_FREESTANDING)
+    m_all_nodes.reserve(1024);
+    m_enabled_cache.reserve(1024);
+    m_topo_order_cache.reserve(1024);
+    m_color_map_cache.reserve(1024);
+    m_stack_cache.reserve(1024);
+#endif
   }
+  ~graph_static() override { clear(); }
 
   void sort_all_nodes(const graph_t& gr)
   {
@@ -41,10 +50,11 @@ public:
       // TODO this should be doable with a single vector
       m_topo_order_cache.clear();
       m_topo_order_cache.reserve(m_nodes.size());
-      boost::topological_sort(gr, std::back_inserter(m_topo_order_cache));
+      custom_topological_sort(
+          gr, std::back_inserter(m_topo_order_cache), m_color_map_cache, m_stack_cache);
 
       // First put the ones without any I/O (most likely states)
-      for (auto vtx : m_topo_order_cache)
+      for(auto vtx : m_topo_order_cache)
       {
         auto node = gr[vtx].get();
         assert(node);
@@ -54,7 +64,7 @@ public:
         }
       }
       // Then the others
-      for (auto vtx : m_topo_order_cache)
+      for(auto vtx : m_topo_order_cache)
       {
         auto node = gr[vtx].get();
         assert(node);
@@ -65,11 +75,13 @@ public:
         }
       }
     }
-    catch (...)
+    catch(...)
     {
+#if 0
       std::cout << "Error: graph isn't a DAG: ";
       print_graph(gr, std::cout);
       std::cout << std::endl;
+#endif
     }
   }
 
@@ -77,7 +89,7 @@ public:
   {
     try
     {
-      if (m_dirty)
+      if(m_dirty)
       {
         update_fun(*this, e.exec_devices());
         m_enabled_cache.clear();
@@ -85,19 +97,19 @@ public:
       }
 
       // Filter disabled nodes (through strict relationships).
-      m_enabled_cache.container.reserve(m_nodes.size());
+      m_enabled_cache.reserve(m_nodes.size());
 
-      for (auto node : m_all_nodes)
+      for(auto node : m_all_nodes)
       {
         ossia::graph_node& ptr = *node;
-        if (ptr.enabled())
+        if(ptr.enabled())
         {
           m_enabled_cache.insert(&ptr);
         }
         else
         {
           auto it = m_enabled_cache.find(&ptr);
-          if (it != m_enabled_cache.end())
+          if(it != m_enabled_cache.end())
             m_enabled_cache.erase(it);
         }
       }
@@ -110,31 +122,21 @@ public:
       auto log = g_exec_log.log_executed_nodes(m_graph, m_all_nodes);
 #endif
 
-
       finish_nodes(m_nodes);
     }
-    catch (const boost::not_a_dag&)
+    catch(const boost::not_a_dag&)
     {
       ossia::logger().error("Execution graph is not a DAG.");
       return;
     }
   }
 
-  const graph_t& impl() const
-  {
-    return m_graph;
-  }
-  graph_t& impl()
-  {
-    return m_graph;
-  }
+  [[nodiscard]] const graph_t& impl() const { return m_graph; }
+  graph_t& impl() { return m_graph; }
   std::vector<graph_node*> m_all_nodes;
 
 protected:
-  void print(std::ostream& stream) override
-  {
-    print_graph(m_graph, stream);
-  }
+  void print(std::ostream& stream) override { print_graph(m_graph, stream); }
 
 private:
   node_flat_set m_enabled_cache;
@@ -148,7 +150,8 @@ struct simple_update
 {
   ossia::graph_t& m_sub_graph;
   template <typename Graph_T>
-  simple_update(Graph_T& g) : m_sub_graph{g.m_graph}
+  simple_update(Graph_T& g, const ossia::graph_setup_options& opt)
+      : m_sub_graph{g.m_graph}
   {
   }
 
@@ -163,9 +166,9 @@ struct bfs_update
 {
 public:
   template <typename Graph_T>
-  bfs_update(Graph_T& g)
+  bfs_update(Graph_T& g, const ossia::graph_setup_options& opt)
       : m_color{boost::make_two_bit_color_map_fast(
-            0, boost::get(boost::vertex_index, g.m_graph))}
+          0, boost::get(boost::vertex_index, g.m_graph))}
   {
   }
 
@@ -183,29 +186,29 @@ public:
     g.sort_all_nodes(m_graph);
     // m_active_nodes is in topo order
 
-    for (std::size_t i = 0; i < N; i++)
+    for(std::size_t i = 0; i < N; i++)
     {
       ossia::graph_node* n1 = m_all_nodes[i];
-      for (std::size_t j = i + 1; j < N; j++)
+      for(std::size_t j = i + 1; j < N; j++)
       {
         ossia::graph_node* n2 = m_all_nodes[j];
 
         auto source_vtx = m_nodes.find(n1)->second;
         auto sink_vtx = m_nodes.find(n2)->second;
-        if (find_path(source_vtx, sink_vtx, m_sub_graph))
+        if(find_path(source_vtx, sink_vtx, m_sub_graph))
           continue;
-        if (find_path(sink_vtx, source_vtx, m_sub_graph))
+        if(find_path(sink_vtx, source_vtx, m_sub_graph))
           continue;
 
-        if (graph_util::find_address_connection(*n1, *n2, devices))
+        if(graph_util::find_address_connection(*n1, *n2, devices))
         {
           auto src_it = m_nodes.find(n1);
           auto sink_it = m_nodes.find(n2);
           assert(src_it != m_nodes.end());
           assert(sink_it != m_nodes.end());
-          auto edge = ossia::make_edge(
-              ossia::dependency_connection{}, ossia::outlet_ptr{},
-              ossia::inlet_ptr{}, src_it->first, sink_it->first);
+          auto edge = g.allocate_edge(
+              ossia::dependency_connection{}, ossia::outlet_ptr{}, ossia::inlet_ptr{},
+              src_it->first, sink_it->first);
           boost::add_edge(sink_it->second, src_it->second, edge, m_sub_graph);
 
 #if defined(OSSIA_GRAPH_DEBUG)
@@ -215,13 +218,13 @@ public:
           m_all_nodes = std::move(all_nodes_old);
 #endif
         }
-        else if (graph_util::find_address_connection(*n2, *n1, devices))
+        else if(graph_util::find_address_connection(*n2, *n1, devices))
         {
           auto src_it = m_nodes.find(n2);
           auto sink_it = m_nodes.find(n1);
-          auto edge = ossia::make_edge(
-              ossia::dependency_connection{}, ossia::outlet_ptr{},
-              ossia::inlet_ptr{}, src_it->first, sink_it->first);
+          auto edge = g.allocate_edge(
+              ossia::dependency_connection{}, ossia::outlet_ptr{}, ossia::inlet_ptr{},
+              src_it->first, sink_it->first);
           boost::add_edge(sink_it->second, src_it->second, edge, m_sub_graph);
 
 #if defined(OSSIA_GRAPH_DEBUG)
@@ -244,9 +247,9 @@ public:
     {
       graph_vertex_t node_to_find{};
       bool& ok;
-      bool discover_vertex(graph_vertex_t u, const graph_t&) const
+      bool discover_vertex(graph_vertex_t u, const graph_t&) const noexcept
       {
-        if (u == node_to_find)
+        if(u == node_to_find)
           ok = true;
         return ok;
       }
@@ -255,13 +258,12 @@ public:
     m_queue.clear();
 
     const auto N = boost::num_vertices(graph);
-    if (m_queue.capacity() <= N)
+    if(m_queue.capacity() <= N)
       m_queue.set_capacity(N);
 
     m_color.resize(N);
 
-    ossia::bfs::breadth_first_search_simple(
-        graph, source, to_find, m_queue, m_color);
+    ossia::bfs::breadth_first_search_simple(graph, source, to_find, m_queue, m_color);
     return ok;
   }
   graph_t m_sub_graph;
@@ -282,7 +284,7 @@ struct tc_update
 
 public:
   template <typename Graph_T>
-  tc_update(Graph_T& g)
+  tc_update(Graph_T& g, const ossia::graph_setup_options& opt)
   {
   }
   template <typename Graph_T, typename DevicesT>
@@ -294,8 +296,7 @@ public:
 
     impl.update(m_sub_graph);
 
-    tc_add_addresses(
-        g.m_graph, m_sub_graph, g.m_nodes, g.m_all_nodes, impl, devices);
+    tc_add_addresses(g, g.m_graph, m_sub_graph, g.m_nodes, g.m_all_nodes, impl, devices);
 
     g.sort_all_nodes(m_sub_graph);
   }
@@ -304,10 +305,10 @@ public:
 
 private:
   template <
-      typename BaseGraph, typename TCGraph, typename NodeMap,
-      typename AllNodes, typename TC, typename Devices>
+      typename BaseGraph, typename TCGraph, typename NodeMap, typename AllNodes,
+      typename TC, typename Devices>
   static void tc_add_addresses(
-      BaseGraph& m_graph, TCGraph& m_sub_graph, NodeMap& m_nodes,
+      auto& impl, BaseGraph& m_graph, TCGraph& m_sub_graph, NodeMap& m_nodes,
       AllNodes& m_all_nodes, TC& tc, Devices& devices)
   {
     // m_active_nodes is in topo order
@@ -332,27 +333,27 @@ private:
     // check if there is a path from one to the other. Problem: [a -> b]  [b ->
     // a] : which comes first ? one has to resolve the ambiguity manually.
 
-    for (std::size_t i = 0; i < m_all_nodes.size(); i++)
+    for(std::size_t i = 0; i < m_all_nodes.size(); i++)
     {
       ossia::graph_node* n1 = m_all_nodes[i];
-      for (std::size_t j = i + 1; j < m_all_nodes.size(); j++)
+      for(std::size_t j = i + 1; j < m_all_nodes.size(); j++)
       {
         ossia::graph_node* n2 = m_all_nodes[j];
 
         auto source_vtx = m_nodes.find(n1)->second;
         auto sink_vtx = m_nodes.find(n2)->second;
-        if (tc.has_edge(source_vtx, sink_vtx))
+        if(tc.has_edge(source_vtx, sink_vtx))
           continue;
-        if (tc.has_edge(sink_vtx, source_vtx))
+        if(tc.has_edge(sink_vtx, source_vtx))
           continue;
 
-        if (graph_util::find_address_connection(*n1, *n2, devices))
+        if(graph_util::find_address_connection(*n1, *n2, devices))
         {
           auto src_it = m_nodes.find(n1);
           auto sink_it = m_nodes.find(n2);
-          auto edge = ossia::make_edge(
-              ossia::dependency_connection{}, ossia::outlet_ptr{},
-              ossia::inlet_ptr{}, src_it->first, sink_it->first);
+          auto edge = impl.allocate_edge(
+              ossia::dependency_connection{}, ossia::outlet_ptr{}, ossia::inlet_ptr{},
+              src_it->first, sink_it->first);
           boost::add_edge(sink_it->second, src_it->second, edge, m_sub_graph);
           tc.update(m_sub_graph);
 
@@ -364,13 +365,13 @@ private:
           m_all_nodes = std::move(all_nodes_old);
 #endif
         }
-        else if (graph_util::find_address_connection(*n2, *n1, devices))
+        else if(graph_util::find_address_connection(*n2, *n1, devices))
         {
           auto src_it = m_nodes.find(n2);
           auto sink_it = m_nodes.find(n1);
-          auto edge = ossia::make_edge(
-              ossia::dependency_connection{}, ossia::outlet_ptr{},
-              ossia::inlet_ptr{}, src_it->first, sink_it->first);
+          auto edge = impl.allocate_edge(
+              ossia::dependency_connection{}, ossia::outlet_ptr{}, ossia::inlet_ptr{},
+              src_it->first, sink_it->first);
           boost::add_edge(sink_it->second, src_it->second, edge, m_sub_graph);
           tc.update(m_sub_graph);
 
@@ -392,7 +393,7 @@ public:
   using transitive_closure_t = boost::adjacency_list<
       boost::vecS, boost::vecS, boost::directedS, ossia::graph_node*, int64_t>;
 
-  bool has_edge(int source_vtx, int sink_vtx) const
+  [[nodiscard]] bool has_edge(int source_vtx, int sink_vtx) const
   {
     return boost::edge(source_vtx, sink_vtx, m_transitive_closure).second;
   }
@@ -403,7 +404,7 @@ public:
 
 #if defined(OSSIA_GRAPH_DEBUG)
     auto vertices = boost::vertices(sub_graph);
-    for (auto i = vertices.first; i != vertices.second; i++)
+    for(auto i = vertices.first; i != vertices.second; i++)
     {
       tclos[*i] = sub_graph[*i].get();
       assert(tclos[*i]);
@@ -421,7 +422,7 @@ public:
   using transitive_closure_t = boost::adjacency_list<
       boost::vecS, boost::vecS, boost::directedS, ossia::graph_node*, int64_t>;
 
-  bool has_edge(int source_vtx, int sink_vtx) const
+  [[nodiscard]] bool has_edge(int source_vtx, int sink_vtx) const
   {
     return boost::edge(source_vtx, sink_vtx, m_transitive_closure).second;
   }
@@ -433,7 +434,7 @@ public:
 
 #if defined(OSSIA_GRAPH_DEBUG)
     auto vertices = boost::vertices(sub_graph);
-    for (auto i = vertices.first; i != vertices.second; i++)
+    for(auto i = vertices.first; i != vertices.second; i++)
     {
       tclos[*i] = sub_graph[*i].get();
       assert(tclos[*i]);

@@ -4,7 +4,7 @@
 #include <ossia/network/base/protocol.hpp>
 #include <ossia/network/zeroconf/zeroconf.hpp>
 
-#include <tsl/hopscotch_map.h>
+#include <ossia/detail/hash_map.hpp>
 
 #include <atomic>
 #include <string>
@@ -20,12 +20,12 @@ template <typename T>
 class sender;
 class receiver;
 }
-namespace ossia
-{
-namespace net
+namespace ossia::net
 {
 struct osc_1_0_outbound_stream_visitor;
-class OSSIA_EXPORT osc_protocol final : public ossia::net::protocol_base
+
+class OSSIA_EXPORT OSSIA_DEPRECATED("Use make_osc_protocol") osc_protocol final
+    : public ossia::net::protocol_base
 {
 public:
   osc_protocol(
@@ -55,19 +55,20 @@ public:
 
   bool pull(ossia::net::parameter_base& parameter_base) override;
 
-  bool push(const ossia::net::parameter_base& parameter_base, const ossia::value& v) override;
   bool
-  push_raw(const ossia::net::full_parameter_data& parameter_base) override;
-  bool
-  push_bundle(const std::vector<const ossia::net::parameter_base*>&) override;
+  push(const ossia::net::parameter_base& parameter_base, const ossia::value& v) override;
+  bool push_raw(const ossia::net::full_parameter_data& parameter_base) override;
+  bool push_bundle(const std::vector<const ossia::net::parameter_base*>&) override;
   bool push_raw_bundle(const std::vector<full_parameter_data>&) override;
 
-  bool
-  observe(ossia::net::parameter_base& parameter_base, bool enable) override;
-  bool echo_incoming_message(const ossia::net::message_origin_identifier&, const ossia::net::parameter_base&, const ossia::value& v) override;
+  bool observe(ossia::net::parameter_base& parameter_base, bool enable) override;
+  bool echo_incoming_message(
+      const ossia::net::message_origin_identifier&, const ossia::net::parameter_base&,
+      const ossia::value& v) override;
 
   void enable_buffering(bool b) { m_buffering = b; }
   void send_buffer();
+
 private:
   void on_received_message(
       const oscpack::ReceivedMessage& m, const oscpack::IpEndpointName& ip);
@@ -88,18 +89,17 @@ private:
   ossia::net::device_base* m_device{};
   std::string m_ip;
 
-  uint16_t m_remote_port{}; /// the port that a remote device opens
-  uint16_t m_local_port{};  /// the port where a remote device sends OSC
-                           /// messages to (opened in this library)
+  uint16_t m_remote_port{};      /// the port that a remote device opens
+  uint16_t m_local_port{};       /// the port where a remote device sends OSC
+                                 /// messages to (opened in this library)
   std::atomic_bool m_learning{}; /// if the device is currently learning from
                                  /// inbound messages.
   std::optional<std::string> m_expose{};
 
   message_origin_identifier m_id;
 
-  bool m_buffering {};
+  bool m_buffering{};
   std::vector<ossia::net::full_parameter_data> m_buffer;
   std::mutex m_buffer_mutex;
 };
-}
 }

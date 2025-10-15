@@ -5,17 +5,17 @@
 #undef error
 #undef post
 
+#include <ossia/detail/fmt.hpp>
+#include <ossia/network/dataspace/dataspace_visitors.hpp>
+#include <ossia/network/domain/domain.hpp>
+
 #include <ossia-max/src/client.hpp>
 #include <ossia-max/src/model.hpp>
+#include <ossia-max/src/object_base.hpp>
 #include <ossia-max/src/ossia-max.hpp>
 #include <ossia-max/src/parameter.hpp>
 #include <ossia-max/src/remote.hpp>
 #include <ossia-max/src/view.hpp>
-#include <ossia-max/src/object_base.hpp>
-#include <ossia/network/domain/domain.hpp>
-
-#include <ossia/network/dataspace/dataspace_visitors.hpp>
-#include <ossia/detail/fmt.hpp>
 namespace ossia
 {
 namespace max_binding
@@ -34,14 +34,17 @@ std::vector<object_base*> find_children_to_register(
     t_object* object, t_object* patcher, t_symbol* classname, bool search_dev = false);
 
 /**
- * @brief register_objects_in_patcher_recursively : iterate over all patcher's objects and register them one by one recursively
+ * @brief register_objects_in_patcher_recursively : iterate over all patcher's objects
+ * and register them one by one recursively
  * @param root_patcher: starting patcher
  * @param caller: object that calls the function
  */
-void register_children_in_patcher_recursively(t_object* root_patcher, object_base* caller);
+void register_children_in_patcher_recursively(
+    t_object* root_patcher, object_base* caller);
 
 /**
- * @brief get_poly_index : return the instance number if patcher is loaded by a poly~, 0 otherwise
+ * @brief get_poly_index : return the instance number if patcher is loaded by a poly~, 0
+ * otherwise
  * @param caller: object that calls the function
  * @return poly~ instance number or 0
  */
@@ -63,13 +66,14 @@ void update_path_recursively(t_object* patcher);
 std::vector<std::string> parse_tags_symbol(t_symbol** tags_symbol, long size);
 
 /**
- * @brief get_all_devices: iterate over all ossia.device and ossia.client to get their generic_device
+ * @brief get_all_devices: iterate over all ossia.device and ossia.client to get their
+ * generic_device
  * @return a list of all known generic_devices*
  */
 std::vector<ossia::net::generic_device*> get_all_devices();
 
 /**
- * @brief get_parameter_type: return address type (relative, absolute or globale)
+ * @brief get_parameter_type: return address type (relative, absolute or global)
  * @param addr: the address to process
  * @return
  */
@@ -92,7 +96,7 @@ ossia::val_type symbol2val_type(t_symbol* s);
 t_symbol* val_type2symbol(ossia::val_type t);
 
 /**
- * @brief symbol2bounding_mode convert t_symbol* to corresponging ossia::bounding_mode
+ * @brief symbol2bounding_mode convert t_symbol* to corresponding ossia::bounding_mode
  * @param t_symbol* bounding_mode
  * @return ossia::bounding_mode
  */
@@ -108,7 +112,8 @@ t_symbol* access_mode2symbol(ossia::access_mode mode);
  * @param node
  * @return
  */
-std::vector<ossia::max_binding::matcher*> make_matchers_vector(object_base* x, const ossia::net::node_base* node);
+std::vector<ossia::max_binding::matcher*>
+make_matchers_vector(object_base* x, const ossia::net::node_base* node);
 
 ossia::value atom2value(t_symbol* s, int argc, t_atom* argv);
 
@@ -120,8 +125,10 @@ struct node_priority
   matcher* obj{};
   std::vector<ossia::net::priority> priorities;
 
-  friend std::ostream &operator<<( std::ostream &output, const node_priority &n ) {
-    output << object_classname(n.obj->get_owner())->s_name << "\t" << n.obj->get_node()->get_name() << "\t";
+  friend std::ostream& operator<<(std::ostream& output, const node_priority& n)
+  {
+    output << object_classname(n.obj->get_owner())->s_name << "\t"
+           << n.obj->get_node()->get_name() << "\t";
     for(auto p : n.priorities)
       output << p << " ";
     return output;
@@ -133,139 +140,15 @@ struct node_priority
  * @param priority_graph: vector of node_priority to sort and fire
  * @param only_default: only output default values
  */
-void fire_values_by_priority(std::vector<node_priority>& priority_graph, bool only_default);
-
+void fire_values_by_priority(
+    std::vector<node_priority>& priority_graph, bool only_default);
 
 /**
-* @brief fire_all_values_by_priority: output every parameter's values by priority order
-* @param patcher: the patcher in which to look for object
-* @param only_default: output only default value
-*/
+ * @brief fire_all_values_by_priority: output every parameter's values by priority order
+ * @param patcher: the patcher in which to look for object
+ * @param only_default: output only default value
+ */
 void output_all_values(t_object* patcher, bool only_default);
-
-// put templates after prototype so we can use them
-template<typename T>
-std::vector<T*> get_objects(typename T::is_model* = nullptr)
-{
-  return ossia_max::instance().models.copy();
-}
-
-template<typename T>
-std::vector<T*> get_objects(typename T::is_device* = nullptr)
-{
-  return ossia_max::instance().devices.copy();
-}
-
-template<typename T>
-std::vector<T*> get_objects(typename T::is_client* = nullptr)
-{
-  return ossia_max::instance().clients.copy();
-}
-
-template<typename T>
-std::vector<T*> get_objects(typename T::is_attribute* = nullptr)
-{
-  return ossia_max::instance().attributes.copy();
-}
-
-template<typename T>
-std::vector<T*> get_objects(typename T::is_parameter* = nullptr)
-{
-  return ossia_max::instance().parameters.copy();
-}
-
-template<typename T>
-std::vector<T*> get_objects(typename T::is_remote* = nullptr)
-{
-  return ossia_max::instance().remotes.copy();
-}
-
-template<typename T>
-std::vector<T*> get_objects(typename T::is_view* = nullptr)
-{
-  return ossia_max::instance().views.copy();
-}
-
-/**
- * @brief             Find the first box of classname beside or above (in a
- * parent patcher) context.
- * @details           The function iterate all objects at the same level or
- * above x and return the first instance of classname found.
- * @param object      The Max object instance around which to search.
- * @param classname   The class name of the box object we are looking for.
- * @param start_level Level above current object where to start. 0 for current
- * patcher, 1 start searching in parent canvas.
- * @param level       Return level of the found object
- * @return The instance of the parent box if exists. Otherwise returns nullptr.
- */
-template<typename T>
-T* find_parent_box(
-    object_base* x, int start_level, int* level)
-{
-  if (start_level > x->m_patcher_hierarchy.size())
-    return nullptr; // if we can't reach start level (because we reach the root
-                    // canvas before the start_level) then abort
-
-  std::vector<T*> objects = get_objects<T>();
-
-  // first remove objects that are deeper in the patcher
-  objects.erase(
-        ossia::remove_if(objects, [&](T* obj){
-          return obj->m_patcher_hierarchy.size() > x->m_patcher_hierarchy.size(); }),
-            objects.end());
-
-  // then remove the object itself
-  ossia::remove_one(objects, x);
-
-  // and sort objects by hierarchy size
-  // because the first parent might have the same hierarchy depth
-  ossia::sort(objects, [](auto o1, auto o2){
-    return o1->m_patcher_hierarchy.size() > o2->m_patcher_hierarchy.size();});
-
-  for (int i = start_level; i < x->m_patcher_hierarchy.size(); i++)
-  {
-    // remove objects that are deeper than the expected level
-    auto size = x->m_patcher_hierarchy.size() - i;
-    objects.erase(
-          ossia::remove_if(objects, [&](T* obj){
-            return obj->m_patcher_hierarchy.size() > size; }),
-              objects.end());
-
-    for (auto o : objects)
-    {
-      if (!o->m_patcher_hierarchy.empty() && x->m_patcher_hierarchy[i] == o->m_patcher_hierarchy[0])
-      {
-        return o;
-      }
-    }
-  }
-  return nullptr;
-}
-
-
-/**
- * @brief find_parent_box_alive
- * @details Find a parent that is not being removed soon
- * @param object      The Max object instance around which to search.
- * @param classname
- * @param start_level
- * @return
- */
-template<typename T>
-static inline T* find_parent_box_alive(
-    object_base* object, int start_level, int* level)
-{
-  T* parent
-      = find_parent_box<T>(object, start_level, level);
-
-  while (parent && parent->m_dead)
-  {
-    parent
-        = find_parent_box_alive<T>(parent, 1, level);
-  }
-
-  return parent;
-}
 
 template <typename T>
 void address_mess_cb(T* x, t_symbol* address)
@@ -303,24 +186,28 @@ void address_mess_cb(T* x, t_symbol* address)
   }
 }
 
-struct domain_visitor {
+struct domain_visitor
+{
   parameter_base* x;
 
-  template<typename T>
+  template <typename T>
   void operator()(ossia::domain_base<T>& d)
   {
-    if(d.min && d.max) {
+    if(d.min && d.max)
+    {
       x->m_range_size = 2;
       A_SETFLOAT(x->m_range, *d.min);
-      A_SETFLOAT(x->m_range+1, *d.max);
+      A_SETFLOAT(x->m_range + 1, *d.max);
     }
 
-    if (d.min) {
+    if(d.min)
+    {
       x->m_min_size = 1;
       A_SETFLOAT(x->m_min, *d.min);
     }
 
-    if (d.max) {
+    if(d.max)
+    {
       x->m_max_size = 1;
       A_SETFLOAT(x->m_max, *d.max);
     }
@@ -337,12 +224,14 @@ struct domain_visitor {
   {
     if(!d.values.empty())
     {
-      x->m_range_size = d.values.size() > OSSIA_MAX_MAX_ATTR_SIZE ? OSSIA_MAX_MAX_ATTR_SIZE : d.values.size();
-      int i=0;
+      x->m_range_size = d.values.size() > OSSIA_MAX_MAX_ATTR_SIZE
+                            ? OSSIA_MAX_MAX_ATTR_SIZE
+                            : d.values.size();
+      int i = 0;
       for(const auto& s : d.values)
       {
         auto sym = gensym(s.c_str());
-        A_SETSYM(x->m_range+i, sym);
+        A_SETSYM(x->m_range + i, sym);
         i++;
         if(i == x->m_range_size)
           break;
@@ -352,35 +241,43 @@ struct domain_visitor {
   void operator()(ossia::domain_base<ossia::value> d)
   {
     // TODO
-    if(d.min) { }
-    if(d.max) { }
-    if(!d.values.empty()) { }
+    if(d.min)
+    {
+    }
+    if(d.max)
+    {
+    }
+    if(!d.values.empty())
+    {
+    }
   }
 
-  template<std::size_t N>
+  template <std::size_t N>
   void operator()(ossia::vecf_domain<N>& d)
   {
-    x->m_min_size = d.min.size() > OSSIA_MAX_MAX_ATTR_SIZE ? OSSIA_MAX_MAX_ATTR_SIZE : d.min.size();
-    x->m_max_size = d.max.size() > OSSIA_MAX_MAX_ATTR_SIZE ? OSSIA_MAX_MAX_ATTR_SIZE : d.max.size();
+    x->m_min_size = d.min.size() > OSSIA_MAX_MAX_ATTR_SIZE ? OSSIA_MAX_MAX_ATTR_SIZE
+                                                           : d.min.size();
+    x->m_max_size = d.max.size() > OSSIA_MAX_MAX_ATTR_SIZE ? OSSIA_MAX_MAX_ATTR_SIZE
+                                                           : d.max.size();
 
-    for (int i=0; i<x->m_max_size; i++)
+    for(int i = 0; i < x->m_max_size; i++)
       atom_setfloat(&x->m_max[i], *d.max[i]);
 
-    for (int i=0; i<x->m_min_size; i++)
+    for(int i = 0; i < x->m_min_size; i++)
       atom_setfloat(&x->m_min[i], *d.min[i]);
 
     x->m_range_size = 0;
-    if ( x->m_min_size == x->m_max_size && x->m_min_size > 1 )
+    if(x->m_min_size == x->m_max_size && x->m_min_size > 1)
     {
       bool flag = true;
-      for (int i=1; i < x->m_min_size && flag; i++)
+      for(int i = 1; i < x->m_min_size && flag; i++)
       {
         flag |= *d.min[0] == *d.min[i];
         flag |= *d.max[0] == *d.max[i];
-        if (!flag)
+        if(!flag)
           break;
       }
-      if (flag)
+      if(flag)
       {
         x->m_range_size = 2;
         atom_setfloat(&x->m_range[0], *d.min[0]);
@@ -391,29 +288,27 @@ struct domain_visitor {
 
   void operator()(ossia::vector_domain& d)
   {
-    x->m_min_size = d.min.size() > OSSIA_MAX_MAX_ATTR_SIZE ? OSSIA_MAX_MAX_ATTR_SIZE : d.min.size();
-    x->m_max_size = d.max.size() > OSSIA_MAX_MAX_ATTR_SIZE ? OSSIA_MAX_MAX_ATTR_SIZE : d.max.size();
+    x->m_min_size = d.min.size() > OSSIA_MAX_MAX_ATTR_SIZE ? OSSIA_MAX_MAX_ATTR_SIZE
+                                                           : d.min.size();
+    x->m_max_size = d.max.size() > OSSIA_MAX_MAX_ATTR_SIZE ? OSSIA_MAX_MAX_ATTR_SIZE
+                                                           : d.max.size();
 
     std::vector<t_atom> vamin, vamax;
     value2atom minvisitor{vamin}, maxvisitor{vamax};
-    for (const auto& v : d.min)
+    for(const auto& v : d.min)
       v.apply(minvisitor);
-    for (int i=0; i < vamin.size(); i++)
+    for(int i = 0; i < vamin.size(); i++)
       x->m_min[i] = vamin[i];
 
-    for (const auto& v : d.max)
+    for(const auto& v : d.max)
       v.apply(maxvisitor);
-    for (int i=0; i < vamax.size(); i++)
+    for(int i = 0; i < vamax.size(); i++)
       x->m_max[i] = vamax[i];
 
     // TODO range
     x->m_range_size = 0;
-
   }
-  void operator()()
-  {
-
-  }
+  void operator()() { }
 };
 
 } // namespace max

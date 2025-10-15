@@ -23,42 +23,34 @@
 namespace ossia
 {
 using json_writer = rapidjson::Writer<
-  rapidjson::StringBuffer,
-  rapidjson::UTF8<>,
-  rapidjson::UTF8<>,
-  rapidjson::CrtAllocator,
-  rapidjson::WriteFlag::kWriteNanAndInfFlag
->;
+    rapidjson::StringBuffer, rapidjson::UTF8<>, rapidjson::UTF8<>,
+    rapidjson::CrtAllocator, rapidjson::WriteFlag::kWriteNanAndInfFlag>;
 }
 inline std::string get_string(const rapidjson::Value& val)
 {
   return std::string{val.GetString(), val.GetStringLength()};
 }
-inline ossia::string_view get_string_view(const rapidjson::Value& val)
+inline std::string_view get_string_view(const rapidjson::Value& val)
 {
-  return ossia::string_view{val.GetString(), val.GetStringLength()};
+  return std::string_view{val.GetString(), val.GetStringLength()};
 }
 
-inline void write_json_key(
-    ossia::json_writer& writer, ossia::string_view k)
+inline void write_json_key(ossia::json_writer& writer, std::string_view k)
 {
   writer.Key(k.data(), k.size());
 }
 
-inline void write_json(
-    ossia::json_writer& writer, ossia::string_view k)
+inline void write_json(ossia::json_writer& writer, std::string_view k)
 {
   writer.String(k.data(), k.size());
 }
 
-inline void
-write_json(ossia::json_writer& writer, char c)
+inline void write_json(ossia::json_writer& writer, char c)
 {
   writer.String(&c, 1);
 }
 
 inline std::string json_to_str(const rapidjson::StringBuffer& other)
 {
-  return std::string(other.GetString(), other.GetSize());
+  return {other.GetString(), other.GetSize()};
 }
-

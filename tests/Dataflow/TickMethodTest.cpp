@@ -2,9 +2,9 @@
 
 #include <ossia/dataflow/graph/tick_methods.hpp>
 
-#include <catch.hpp>
+#include "include_catch.hpp"
 
-TEST_CASE ("test_cuts", "test_cuts")
+TEST_CASE("test_cuts", "test_cuts")
 {
   using namespace ossia;
 
@@ -21,6 +21,4 @@ TEST_CASE ("test_cuts", "test_cuts")
   // from 7 to 9
   // from 9 to 10
   // from 10
-
-
 }

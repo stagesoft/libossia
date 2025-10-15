@@ -1,7 +1,9 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check it.
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 #include "qt_property_node.hpp"
+
 #include <ossia-qt/js_utilities.hpp>
+
 #include <wobjectimpl.h>
 W_OBJECT_IMPL(ossia::qt::qt_property_node)
 namespace ossia
@@ -9,97 +11,94 @@ namespace ossia
 namespace qt
 {
 
-static tsl::hopscotch_map<int, QMetaMethod>& methods()
+static ossia::hash_map<int, QMetaMethod>& methods()
 {
   static const auto method_offset
-      = qt_property_node::staticMetaObject.indexOfMethod(
-          "qtBoolValueChanged(bool)");
-  static tsl::hopscotch_map<int, QMetaMethod> m{
-      {QVariant::Bool,
+      = qt_property_node::staticMetaObject.indexOfMethod("qtBoolValueChanged(bool)");
+  static ossia::hash_map<int, QMetaMethod> m{
+      {QMetaType::Type::Bool,
        qt_property_node::staticMetaObject.method(method_offset + 0)},
-      {QVariant::Time,
+      {QMetaType::Type::QTime,
        qt_property_node::staticMetaObject.method(method_offset + 1)},
-      {QVariant::Int,
+      {QMetaType::Type::Int,
        qt_property_node::staticMetaObject.method(method_offset + 2)},
-      {QVariant::UInt,
+      {QMetaType::Type::UInt,
        qt_property_node::staticMetaObject.method(method_offset + 3)},
-      {QVariant::ULongLong,
+      {QMetaType::Type::ULongLong,
        qt_property_node::staticMetaObject.method(method_offset + 4)},
-      {QVariant::Char,
+      {QMetaType::Type::Char,
        qt_property_node::staticMetaObject.method(method_offset + 5)},
-      {QVariant::String,
+      {QMetaType::Type::QString,
        qt_property_node::staticMetaObject.method(method_offset + 6)},
-      {QVariant::ByteArray,
+      {QMetaType::Type::QByteArray,
        qt_property_node::staticMetaObject.method(method_offset + 7)},
-      {QVariant::Double,
+      {QMetaType::Type::Double,
        qt_property_node::staticMetaObject.method(method_offset + 8)},
-      {QVariant::Color,
+      {QMetaType::Type::QColor,
        qt_property_node::staticMetaObject.method(method_offset + 9)},
-      {QVariant::Point,
+      {QMetaType::Type::QPoint,
        qt_property_node::staticMetaObject.method(method_offset + 10)},
-      {QVariant::PointF,
+      {QMetaType::Type::QPointF,
        qt_property_node::staticMetaObject.method(method_offset + 11)},
-      {QVariant::Vector2D,
+      {QMetaType::Type::QVector2D,
        qt_property_node::staticMetaObject.method(method_offset + 12)},
-      {QVariant::Vector3D,
+      {QMetaType::Type::QVector3D,
        qt_property_node::staticMetaObject.method(method_offset + 13)},
-      {QVariant::Vector4D,
+      {QMetaType::Type::QVector4D,
        qt_property_node::staticMetaObject.method(method_offset + 14)},
-      {QVariant::Quaternion,
+      {QMetaType::Type::QQuaternion,
        qt_property_node::staticMetaObject.method(method_offset + 15)},
-      {QVariant::Line,
+      {QMetaType::Type::QLine,
        qt_property_node::staticMetaObject.method(method_offset + 16)},
-      {QVariant::LineF,
+      {QMetaType::Type::QLineF,
        qt_property_node::staticMetaObject.method(method_offset + 17)},
-      {QVariant::Rect,
+      {QMetaType::Type::QRect,
        qt_property_node::staticMetaObject.method(method_offset + 18)},
-      {QVariant::RectF,
+      {QMetaType::Type::QRectF,
        qt_property_node::staticMetaObject.method(method_offset + 19)},
-      {QVariant::Size,
+      {QMetaType::Type::QSize,
        qt_property_node::staticMetaObject.method(method_offset + 20)},
-      {QVariant::SizeF,
+      {QMetaType::Type::QSizeF,
        qt_property_node::staticMetaObject.method(method_offset + 21)},
-      {QVariant::List,
+      {QMetaType::Type::QVariantList,
        qt_property_node::staticMetaObject.method(method_offset + 22)},
-      {QVariant::StringList,
+      {QMetaType::Type::QStringList,
        qt_property_node::staticMetaObject.method(method_offset + 23)},
-      {QVariant::Date,
+      {QMetaType::Type::QDate,
        qt_property_node::staticMetaObject.method(method_offset + 24)},
-      {QVariant::Invalid,
-       qt_property_node::staticMetaObject.method(
-           method_offset + 25)} // impulse
+      {QMetaType::Type::UnknownType,
+       qt_property_node::staticMetaObject.method(method_offset + 25)} // impulse
   };
 
   return m;
 }
 
 qt_property_node::qt_property_node(
-    QObject& obj, QMetaProperty p, net::device_base& device,
-    net::node_base& parent)
+    QObject& obj, QMetaProperty p, net::device_base& device, net::node_base& parent)
     : generic_node_base{p.name(), device, parent}
     , generic_parameter{parent}
     , m_obj{obj}
     , m_prop{p}
 {
-  if (p.hasNotifySignal())
+  if(p.hasNotifySignal())
   {
     connectSignalToMatchingMethod(p.notifySignal(), methods(), &obj, this);
   }
 
-  set_parameter_type(p.type(), *this);
+  set_parameter_type((QMetaType::Type)p.typeId(), *this);
   ossia::net::generic_parameter::set_value_quiet(qt_to_ossia{}(p.read(&obj)));
   ;
 
   connect(
-      this, &qt_property_node::setValue_sig, this,
-      &qt_property_node::setValue_slot, Qt::QueuedConnection);
+      this, &qt_property_node::setValue_sig, this, &qt_property_node::setValue_slot,
+      Qt::QueuedConnection);
 }
 
 void qt_property_node::setValue_slot(const ossia::value& ossia_val)
 {
   auto cur = m_prop.read(&m_obj);
-  auto next = ossia_to_qvariant{}(m_prop.type(), ossia_val);
-  if (cur != next)
+  auto next = ossia_to_qvariant{}((QMetaType::Type)m_prop.typeId(), ossia_val);
+  if(cur != next)
     m_prop.write(&m_obj, next);
 }
 
@@ -113,7 +112,7 @@ ossia::value qt_property_node::set_value_quiet(const ossia::value& ossia_val)
 }
 ossia::value qt_property_node::set_value_quiet(ossia::value&& ossia_val)
 {
-  auto v= ossia::net::generic_parameter::set_value_quiet(std::move(ossia_val));
+  auto v = ossia::net::generic_parameter::set_value_quiet(std::move(ossia_val));
 
   setValue_sig(ossia_val);
 
@@ -135,14 +134,11 @@ bool qt_property_node::remove_parameter()
   return false;
 }
 
-std::unique_ptr<net::node_base>
-qt_property_node::make_child(const std::string& name)
+std::unique_ptr<net::node_base> qt_property_node::make_child(const std::string& name)
 {
   return nullptr;
 }
 
-void qt_property_node::removing_child(net::node_base&)
-{
-}
+void qt_property_node::removing_child(net::node_base&) { }
 }
 }

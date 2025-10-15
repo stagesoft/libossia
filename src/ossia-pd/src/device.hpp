@@ -2,16 +2,14 @@
 #include "device_base.hpp"
 #include "m_pd.h" // for post()
 
-namespace ossia
-{
-namespace pd
+namespace ossia::pd
 {
 
 namespace Protocol_Settings
 {
 struct minuit
 {
-  std::string remoteip{"locahost"};
+  std::string remoteip{"localhost"};
   unsigned int remoteport = 13579;
   unsigned int localport = 9998;
 };
@@ -75,9 +73,7 @@ public:
   static void get_mess_cb(device* x, t_symbol* s);
   static void get_protocols(device* x);
   static void get_oscq_clients(device* x);
-  static void stop_expose(device*x, float index);
-
+  static void stop_expose(device* x, float index);
 };
 
-}
 } // namespace

@@ -1,35 +1,30 @@
 #pragma once
 
+#include <ossia/detail/config.hpp>
+
 #include <ossia/editor/expression/expression_fwd.hpp>
 #include <ossia/editor/expression/operators.hpp>
-
-#include <ossia/detail/config.hpp>
 
 #include <memory>
 
 /**
  * \file expression_composition.hpp
  */
-namespace ossia
-{
-namespace expressions
+namespace ossia::expressions
 {
 /**
  * @brief expression_composition : logical composition (and, or, xor)
  * @see expression.hpp
  */
-class OSSIA_EXPORT expression_composition final
-    : public expression_callback_container
+class OSSIA_EXPORT expression_composition final : public expression_callback_container
 {
 public:
-  expression_composition(
-      expression_ptr expr1, binary_operator op, expression_ptr expr2);
+  expression_composition(expression_ptr expr1, binary_operator op, expression_ptr expr2);
   expression_composition(expression_composition&& other) = delete;
   expression_composition& operator=(expression_composition&& other) = delete;
 
   expression_composition(const expression_composition& other) = delete;
-  expression_composition& operator=(const expression_composition& other)
-      = delete;
+  expression_composition& operator=(const expression_composition& other) = delete;
 
   virtual ~expression_composition();
 
@@ -59,5 +54,4 @@ private:
 
   binary_operator m_operator{};
 };
-}
 }

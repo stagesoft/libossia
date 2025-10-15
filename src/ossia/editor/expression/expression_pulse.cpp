@@ -2,13 +2,12 @@
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 #include <ossia/editor/expression/expression_pulse.hpp>
 #include <ossia/network/value/destination.hpp>
-namespace ossia
-{
-namespace expressions
+namespace ossia::expressions
 {
 
 expression_pulse::expression_pulse(const ossia::destination& destination)
-    : m_destination(destination), m_result(false)
+    : m_destination(destination)
+    , m_result(false)
 {
   // start destination observation
   m_callback = m_destination.address().add_callback(
@@ -38,13 +37,9 @@ void expression_pulse::reset()
   m_result = false;
 }
 
-void expression_pulse::on_first_callback_added()
-{
-}
+void expression_pulse::on_first_callback_added() { }
 
-void expression_pulse::on_removing_last_callback()
-{
-}
+void expression_pulse::on_removing_last_callback() { }
 
 const destination& expression_pulse::get_destination() const
 {
@@ -55,6 +50,5 @@ void expression_pulse::destination_callback(const ossia::value& value)
 {
   m_result = true;
   send(true);
-}
 }
 }

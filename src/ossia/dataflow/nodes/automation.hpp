@@ -1,17 +1,16 @@
 #pragma once
+#include <ossia/detail/config.hpp>
+
+#include <ossia/dataflow/control_inlets.hpp>
 #include <ossia/dataflow/graph_node.hpp>
 #include <ossia/dataflow/node_process.hpp>
 #include <ossia/dataflow/port.hpp>
-#include <ossia/dataflow/control_inlets.hpp>
 #include <ossia/editor/automation/curve_value_visitor.hpp>
 #include <ossia/editor/curve/behavior.hpp>
-
-#include <ossia/detail/config.hpp>
 
 /**
  * \file automation.hpp
  */
-
 
 namespace ossia::nodes
 {
@@ -40,43 +39,27 @@ namespace ossia::nodes
 class automation final : public ossia::nonowning_graph_node
 {
 public:
-  automation()
-  {
-    m_outlets.push_back(&value_out);
-  }
+  automation() { m_outlets.push_back(&value_out); }
 
-  ~automation() override
-  {
-  }
+  ~automation() override = default;
 
-  std::string label() const noexcept override
-  {
-    return "automation";
-  }
+  [[nodiscard]] std::string label() const noexcept override { return "automation"; }
 
-  void set_behavior(const ossia::behavior& b)
-  {
-    m_drive = b;
-  }
+  void set_behavior(const ossia::behavior& b) { m_drive = b; }
 
-  void reset_drive()
-  {
-    m_drive.reset();
-  }
+  void reset_drive() { m_drive.reset(); }
 
 private:
-  void
-  run(const ossia::token_request& t, ossia::exec_state_facade e) noexcept override
+  void run(const ossia::token_request& t, ossia::exec_state_facade e) noexcept override
   {
-    if (!m_drive)
+    if(!m_drive)
       return;
     const auto [tick_start, d] = e.timings(t);
 
     ossia::value_port& vp = *value_out;
     vp.write_value(
         ossia::apply(
-            ossia::detail::compute_value_visitor{t.position(),
-                                                 ossia::val_type::FLOAT},
+            ossia::detail::compute_value_visitor{t.position(), ossia::val_type::FLOAT},
             m_drive),
         tick_start);
   }
@@ -88,33 +71,18 @@ private:
 class float_automation final : public ossia::nonowning_graph_node
 {
 public:
-  float_automation()
-  {
-    m_outlets.push_back(&value_out);
-  }
+  float_automation() { m_outlets.push_back(&value_out); }
 
-  ~float_automation() override
-  {
-  }
+  ~float_automation() override = default;
 
-  std::string label() const noexcept override
-  {
-    return "automation (float)";
-  }
+  std::string label() const noexcept override { return "automation (float)"; }
 
-  void set_behavior(ossia::curve<double, float> b)
-  {
-    m_drive = std::move(b);
-  }
+  void set_behavior(ossia::curve<double, float> b) { m_drive = std::move(b); }
 
-  void reset_drive()
-  {
-    m_drive.reset();
-  }
+  void reset_drive() { m_drive.reset(); }
 
 private:
-  void
-  run(const ossia::token_request& t, ossia::exec_state_facade e) noexcept override
+  void run(const ossia::token_request& t, ossia::exec_state_facade e) noexcept override
   {
     const auto [tick_start, d] = e.timings(t);
 
@@ -125,6 +93,8 @@ private:
   ossia::curve<double, float> m_drive;
   ossia::minmax_float_outlet value_out;
 };
+
+#if defined(OSSIA_SCENARIO_DATAFLOW)
 class automation_process final : public ossia::node_process
 {
 public:
@@ -134,4 +104,5 @@ public:
     static_cast<ossia::nodes::automation*>(node.get())->reset_drive();
   }
 };
+#endif
 }

@@ -1,4 +1,6 @@
 #pragma once
+#include <ossia/detail/nullable_variant.hpp>
+
 #include <utility>
 
 namespace ossia
@@ -11,8 +13,7 @@ struct state_execution_visitor
     std::forward<T>(m).launch();
   }
 
-  void operator()()
-  {
-  }
+  void operator()(ossia::monostate) { }
+  void operator()() { }
 };
 }

@@ -2,6 +2,8 @@
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 #include "query_parser.hpp"
 
+#include <ossia/detail/hash_map.hpp>
+#include <ossia/detail/parse_strict.hpp>
 #include <ossia/detail/small_vector.hpp>
 #include <ossia/network/base/node.hpp>
 #include <ossia/network/base/parameter_data.hpp>
@@ -12,25 +14,19 @@
 
 #include <boost/algorithm/string.hpp>
 #include <boost/container/static_vector.hpp>
-#include <boost/lexical_cast.hpp>
-
-#include <tsl/hopscotch_map.h>
 
 #include <string>
 #include <vector>
 
-namespace ossia
-{
-namespace oscquery
+namespace ossia::oscquery
 {
 
-string_map<std::string>
-query_parser::parse_http_methods(ossia::string_view str)
+string_map<std::string> query_parser::parse_http_methods(std::string_view str)
 {
   string_map<std::string> res;
   auto methods = ossia::net::parse_http_methods_encoded(str);
 
-  for (auto& e : methods)
+  for(auto& e : methods)
   {
     std::string key_clean;
     key_clean.reserve(16);
@@ -45,40 +41,23 @@ query_parser::parse_http_methods(ossia::string_view str)
 }
 
 void query_parser::parse(
-    net::access_mode_attribute, const std::string& data,
-    net::parameter_data& res)
+    net::access_mode_attribute, const std::string& data, net::parameter_data& res)
 {
-  try
-  {
-    auto i = boost::lexical_cast<int>(data);
-    switch (i)
-    {
-      case 1:
-        res.access = ossia::access_mode::GET;
-        break;
-      case 2:
-        res.access = ossia::access_mode::SET;
-        break;
-      case 3:
-        res.access = ossia::access_mode::BI;
-        break;
-      default:
-        break;
-    }
-  }
-  catch (...)
-  {
-  }
+  if(data == "1")
+    res.access = ossia::access_mode::GET;
+  else if(data == "2")
+    res.access = ossia::access_mode::SET;
+  else if(data == "3")
+    res.access = ossia::access_mode::BI;
 }
 
 void query_parser::parse(
-    net::bounding_mode_attribute, const std::string& data,
-    net::parameter_data& res)
+    net::bounding_mode_attribute, const std::string& data, net::parameter_data& res)
 {
-  if (data.size() > 2)
+  if(data.size() > 2)
   {
     // we compare with the first unique letter
-    switch (data[2])
+    switch(data[2])
     {
       case 'n':
         res.bounding = ossia::bounding_mode::FREE;
@@ -87,10 +66,10 @@ void query_parser::parse(
         res.bounding = ossia::bounding_mode::CLIP;
         break;
       case 'w':
-        res.bounding = ossia::bounding_mode::LOW;
+        res.bounding = ossia::bounding_mode::CLAMP_LOW;
         break;
       case 'g':
-        res.bounding = ossia::bounding_mode::HIGH;
+        res.bounding = ossia::bounding_mode::CLAMP_HIGH;
         break;
       case 'a':
         res.bounding = ossia::bounding_mode::WRAP;
@@ -106,9 +85,9 @@ void query_parser::parse(
 
 bool query_parser::parse_bool(const std::string& data)
 {
-  if (data.size() > 0)
+  if(data.size() > 0)
   {
-    switch (data[0])
+    switch(data[0])
     {
       case 't':
       case 'T':
@@ -125,138 +104,108 @@ bool query_parser::parse_bool(const std::string& data)
 }
 
 void query_parser::parse(
-    net::repetition_filter_attribute, const std::string& data,
-    net::parameter_data& res)
+    net::repetition_filter_attribute, const std::string& data, net::parameter_data& res)
 {
   try
   {
     bool b = parse_bool(data);
-    res.rep_filter
-        = b ? ossia::repetition_filter::ON : ossia::repetition_filter::OFF;
+    res.rep_filter = b ? ossia::repetition_filter::ON : ossia::repetition_filter::OFF;
   }
-  catch (...)
+  catch(...)
   {
   }
 }
 
 void query_parser::parse(
-    net::refresh_rate_attribute attr, const std::string& data,
-    net::parameter_data& res)
+    net::refresh_rate_attribute attr, const std::string& data, net::parameter_data& res)
 {
-  try
-  {
-    using type = decltype(attr)::type;
-    auto i = boost::lexical_cast<type>(data);
-    attr.setter(res, i);
-  }
-  catch (...)
-  {
-  }
+  using type = decltype(attr)::type;
+  if(auto i = parse_strict<type>(data))
+    attr.setter(res, *i);
 }
 
 void query_parser::parse(
-    net::priority_attribute attr, const std::string& data,
-    net::parameter_data& res)
+    net::priority_attribute attr, const std::string& data, net::parameter_data& res)
 {
-  try
-  {
-    using type = decltype(attr)::type;
-    auto i = boost::lexical_cast<type>(data);
-    attr.setter(res, i);
-  }
-  catch (...)
-  {
-  }
+  using type = decltype(attr)::type;
+  if(auto i = parse_strict<type>(data))
+    attr.setter(res, *i);
 }
 
 void query_parser::parse(
     net::value_step_size_attribute attr, const std::string& data,
     net::parameter_data& res)
 {
-  try
-  {
-    using type = decltype(attr)::type;
-    auto i = boost::lexical_cast<type>(data);
-    attr.setter(res, i);
-  }
-  catch (...)
-  {
-  }
+  using type = decltype(attr)::type;
+  if(auto i = parse_strict<type>(data))
+    attr.setter(res, *i);
 }
 
 void query_parser::parse(
-    net::critical_attribute attr, const std::string& data,
-    net::parameter_data& res)
+    net::critical_attribute attr, const std::string& data, net::parameter_data& res)
 {
   try
   {
     bool b = parse_bool(data);
     attr.setter(res, b);
   }
-  catch (...)
+  catch(...)
   {
   }
 }
 
 void query_parser::parse(
-    net::hidden_attribute attr, const std::string& data,
-    net::parameter_data& res)
+    net::hidden_attribute attr, const std::string& data, net::parameter_data& res)
 {
   try
   {
     bool b = parse_bool(data);
     attr.setter(res, b);
   }
-  catch (...)
+  catch(...)
   {
   }
 }
 
 void query_parser::parse(
-    net::disabled_attribute attr, const std::string& data,
-    net::parameter_data& res)
+    net::disabled_attribute attr, const std::string& data, net::parameter_data& res)
 {
   try
   {
     bool b = parse_bool(data);
     attr.setter(res, b);
   }
-  catch (...)
+  catch(...)
   {
   }
 }
 
 void query_parser::parse(
-    net::description_attribute attr, const std::string& data,
-    net::parameter_data& res)
+    net::description_attribute attr, const std::string& data, net::parameter_data& res)
 {
   attr.setter(res, data);
 }
 
 void query_parser::parse(
-    net::app_name_attribute attr, const std::string& data,
-    net::parameter_data& res)
+    net::app_name_attribute attr, const std::string& data, net::parameter_data& res)
 {
   attr.setter(res, data);
 }
 
 void query_parser::parse(
-    net::app_version_attribute attr, const std::string& data,
-    net::parameter_data& res)
+    net::app_version_attribute attr, const std::string& data, net::parameter_data& res)
 {
   attr.setter(res, data);
 }
 
 void query_parser::parse(
-    net::app_creator_attribute attr, const std::string& data,
-    net::parameter_data& res)
+    net::app_creator_attribute attr, const std::string& data, net::parameter_data& res)
 {
   attr.setter(res, data);
 }
 
 void query_parser::parse(
-    net::value_attribute attr, const std::string& data,
-    net::parameter_data& res)
+    net::value_attribute attr, const std::string& data, net::parameter_data& res)
 {
   // attr.setter(res, data);
   // Note : we can leverage the fact that this is called after the unit, type,
@@ -264,8 +213,7 @@ void query_parser::parse(
 }
 
 void query_parser::parse(
-    net::domain_attribute attr, const std::string& data,
-    net::parameter_data& res)
+    net::domain_attribute attr, const std::string& data, net::parameter_data& res)
 {
   // attr.setter(res, data);
 }
@@ -284,31 +232,26 @@ void query_parser::parse(
 }
 
 void query_parser::parse(
-    net::unit_attribute attr, const std::string& data,
-    net::parameter_data& res)
+    net::unit_attribute attr, const std::string& data, net::parameter_data& res)
 {
   res.unit = parse_pretty_unit(data);
 }
 
 void query_parser::parse(
-    net::extended_type_attribute attr, const std::string& data,
-    net::parameter_data& res)
+    net::extended_type_attribute attr, const std::string& data, net::parameter_data& res)
 {
   attr.setter(res, data);
 }
 
 void query_parser::parse(
-    net::default_value_attribute attr, const std::string& data,
-    net::parameter_data& res)
+    net::default_value_attribute attr, const std::string& data, net::parameter_data& res)
 {
   attr.setter(res, data);
 }
 
 void query_parser::parse(
-    detail::typetag_attribute attr, const std::string& data,
-    net::parameter_data& res)
+    detail::typetag_attribute attr, const std::string& data, net::parameter_data& res)
 {
   res.type = get_type_from_osc_typetag(data);
-}
 }
 }

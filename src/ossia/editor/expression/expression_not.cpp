@@ -3,19 +3,18 @@
 #include <ossia/editor/expression/expression.hpp>
 #include <ossia/editor/expression/expression_not.hpp>
 
-namespace ossia
+namespace ossia::expressions
 {
-namespace expressions
+expression_not::expression_not(expression_ptr p)
+    : m_expression{std::move(p)}
 {
-expression_not::expression_not(expression_ptr p) : m_expression{std::move(p)}
-{
-  if (!m_expression)
-    throw std::runtime_error("An argument to expression_not is null");
+  if(!m_expression)
+    ossia_do_throw(std::runtime_error, "An argument to expression_not is null");
 }
 
 expression_not::~expression_not()
 {
-  if (!expression_callback_container::callbacks_empty())
+  if(!expression_callback_container::callbacks_empty())
     expression_callback_container::callbacks_clear();
 }
 
@@ -53,6 +52,5 @@ void expression_not::on_removing_last_callback()
 void expression_not::result_callback(bool result)
 {
   send(!result);
-}
 }
 }

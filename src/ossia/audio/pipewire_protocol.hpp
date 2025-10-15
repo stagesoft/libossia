@@ -1,27 +1,29 @@
 #pragma once
 #include <ossia/detail/config.hpp>
 
+#if defined(OSSIA_ENABLE_PIPEWIRE)
 #if __has_include(<pipewire/pipewire.h>) && __has_include(<spa/param/latency-utils.h>)
 #define OSSIA_AUDIO_PIPEWIRE 1
 #include <ossia/audio/audio_engine.hpp>
-#include <ossia/detail/logger.hpp>
 #include <ossia/detail/dylib_loader.hpp>
+#include <ossia/detail/hash_map.hpp>
+#include <ossia/detail/logger.hpp>
+#include <ossia/detail/thread.hpp>
 
+#include <pipewire/core.h>
+#include <pipewire/filter.h>
+#include <pipewire/pipewire.h>
 #include <spa/pod/builder.h>
 #include <spa/utils/result.h>
-#include <spa/param/latency-utils.h>
 
-#include <pipewire/pipewire.h>
-#include <pipewire/filter.h>
-#include <pipewire/core.h>
-
-#include <cstdio>
-#include <cerrno>
 #include <cmath>
-#include <cassert>
-#include <stdexcept>
-#include <iostream>
 
+#include <cassert>
+#include <cerrno>
+#include <cstdio>
+#include <stdexcept>
+
+#include <spa/param/latency-utils.h>
 
 namespace ossia
 {
@@ -58,9 +60,10 @@ public:
   decltype(&::pw_filter_connect) filter_connect{};
   decltype(&::pw_filter_get_dsp_buffer) filter_get_dsp_buffer{};
 
-  static const libpipewire& instance() {
-      static const libpipewire self;
-      return self;
+  static const libpipewire& instance()
+  {
+    static const libpipewire self;
+    return self;
   }
 
 private:
@@ -76,31 +79,43 @@ private:
     deinit = library.symbol<decltype(&::pw_deinit)>("pw_deinit");
 
     context_new = library.symbol<decltype(&::pw_context_new)>("pw_context_new");
-    context_connect = library.symbol<decltype(&::pw_context_connect)>("pw_context_connect");
-    context_destroy = library.symbol<decltype(&::pw_context_destroy)>("pw_context_destroy");
+    context_connect
+        = library.symbol<decltype(&::pw_context_connect)>("pw_context_connect");
+    context_destroy
+        = library.symbol<decltype(&::pw_context_destroy)>("pw_context_destroy");
 
-    core_disconnect = library.symbol<decltype(&::pw_core_disconnect)>("pw_core_disconnect");
+    core_disconnect
+        = library.symbol<decltype(&::pw_core_disconnect)>("pw_core_disconnect");
 
-    proxy_add_listener = library.symbol<decltype(&::pw_proxy_add_listener)>("pw_proxy_add_listener");
+    proxy_add_listener
+        = library.symbol<decltype(&::pw_proxy_add_listener)>("pw_proxy_add_listener");
     proxy_destroy = library.symbol<decltype(&::pw_proxy_destroy)>("pw_proxy_destroy");
 
     main_loop_new = library.symbol<decltype(&::pw_main_loop_new)>("pw_main_loop_new");
-    main_loop_destroy = library.symbol<decltype(&::pw_main_loop_destroy)>("pw_main_loop_destroy");
+    main_loop_destroy
+        = library.symbol<decltype(&::pw_main_loop_destroy)>("pw_main_loop_destroy");
     main_loop_quit = library.symbol<decltype(&::pw_main_loop_quit)>("pw_main_loop_quit");
     main_loop_run = library.symbol<decltype(&::pw_main_loop_run)>("pw_main_loop_run");
-    main_loop_get_loop = library.symbol<decltype(&::pw_main_loop_get_loop)>("pw_main_loop_get_loop");
+    main_loop_get_loop
+        = library.symbol<decltype(&::pw_main_loop_get_loop)>("pw_main_loop_get_loop");
 
     properties_new = library.symbol<decltype(&::pw_properties_new)>("pw_properties_new");
-    properties_free = library.symbol<decltype(&::pw_properties_free)>("pw_properties_free");
+    properties_free
+        = library.symbol<decltype(&::pw_properties_free)>("pw_properties_free");
     properties_get = library.symbol<decltype(&::pw_properties_get)>("pw_properties_get");
 
-    filter_new_simple = library.symbol<decltype(&::pw_filter_new_simple)>("pw_filter_new_simple");
-    filter_get_node_id = library.symbol<decltype(&::pw_filter_get_node_id)>("pw_filter_get_node_id");
-    filter_get_properties = library.symbol<decltype(&::pw_filter_get_properties)>("pw_filter_get_properties");
-    filter_add_port = library.symbol<decltype(&::pw_filter_add_port)>("pw_filter_add_port");
+    filter_new_simple
+        = library.symbol<decltype(&::pw_filter_new_simple)>("pw_filter_new_simple");
+    filter_get_node_id
+        = library.symbol<decltype(&::pw_filter_get_node_id)>("pw_filter_get_node_id");
+    filter_get_properties = library.symbol<decltype(&::pw_filter_get_properties)>(
+        "pw_filter_get_properties");
+    filter_add_port
+        = library.symbol<decltype(&::pw_filter_add_port)>("pw_filter_add_port");
     filter_destroy = library.symbol<decltype(&::pw_filter_destroy)>("pw_filter_destroy");
     filter_connect = library.symbol<decltype(&::pw_filter_connect)>("pw_filter_connect");
-    filter_get_dsp_buffer = library.symbol<decltype(&::pw_filter_get_dsp_buffer)>("pw_filter_get_dsp_buffer");
+    filter_get_dsp_buffer = library.symbol<decltype(&::pw_filter_get_dsp_buffer)>(
+        "pw_filter_get_dsp_buffer");
 
     assert(init);
     assert(deinit);
@@ -138,13 +153,14 @@ struct pipewire_context
   pw_main_loop* main_loop{};
   pw_loop* lp{};
 
-  pw_context *context{};
-  pw_core *core{};
+  pw_context* context{};
+  pw_core* core{};
 
-  pw_registry *registry{};
+  pw_registry* registry{};
   spa_hook registry_listener{};
 
-  struct listened_port {
+  struct listened_port
+  {
     uint32_t id{};
     pw_port* port{};
     std::unique_ptr<spa_hook> listener;
@@ -176,12 +192,13 @@ struct pipewire_context
 
   struct graph
   {
-    std::unordered_map<uint32_t, node> physical_audio;
-    std::unordered_map<uint32_t, node> physical_midi;
-    std::unordered_map<uint32_t, node> software_audio;
-    std::unordered_map<uint32_t, node> software_midi;
+    ossia::hash_map<uint32_t, node> physical_audio;
+    ossia::hash_map<uint32_t, node> physical_midi;
+    ossia::hash_map<uint32_t, node> software_audio;
+    ossia::hash_map<uint32_t, node> software_midi;
 
-    void for_each_port(auto func) {
+    void for_each_port(auto func)
+    {
       for(auto& map : {physical_audio, physical_midi, software_audio, software_midi})
       {
         for(auto& [id, node] : map)
@@ -194,13 +211,16 @@ struct pipewire_context
       }
     }
 
-    void remove_port(uint32_t id) {
+    void remove_port(uint32_t id)
+    {
       for(auto map : {&physical_audio, &physical_midi, &software_audio, &software_midi})
       {
         for(auto& [_, node] : *map)
         {
-          ossia::remove_erase_if(node.inputs, [id] (const port_info& p) { return p.id == id; });
-          ossia::remove_erase_if(node.outputs, [id] (const port_info& p) { return p.id == id; });
+          ossia::remove_erase_if(
+              node.inputs, [id](const port_info& p) { return p.id == id; });
+          ossia::remove_erase_if(
+              node.outputs, [id](const port_info& p) { return p.id == id; });
         }
       }
     }
@@ -208,90 +228,100 @@ struct pipewire_context
 
   int sync{};
 
-  static const inline libpipewire& pw = libpipewire::instance();
+  const libpipewire& pw = libpipewire::instance();
   explicit pipewire_context()
   {
     /// Initialize the PipeWire main loop, context, etc.
     int argc = 0;
-    char* argv[] = { NULL };
+    char* argv[] = {NULL};
     char** aa = argv;
     pw.init(&argc, &aa);
 
     this->main_loop = pw.main_loop_new(nullptr);
-    if(!this->main_loop) {
+    if(!this->main_loop)
+    {
       ossia::logger().error("PipeWire: main_loop_new failed!");
       return;
     }
 
     this->lp = pw.main_loop_get_loop(this->main_loop);
-    if(!lp) {
+    if(!lp)
+    {
       ossia::logger().error("PipeWire: main_loop_get_loop failed!");
       return;
     }
 
     this->context = pw.context_new(lp, nullptr, 0);
-    if(!this->context) {
+    if(!this->context)
+    {
       ossia::logger().error("PipeWire: context_new failed!");
       return;
     }
 
     this->core = pw.context_connect(this->context, nullptr, 0);
-    if(!this->core) {
+    if(!this->core)
+    {
       ossia::logger().error("PipeWire: context_connect failed!");
       return;
     }
 
     this->registry = pw_core_get_registry(this->core, PW_VERSION_REGISTRY, 0);
-    if(!this->core) {
+    if(!this->registry)
+    {
       ossia::logger().error("PipeWire: core_get_registry failed!");
       return;
     }
 
     // Register a listener which will listen on when ports are added / removed
     spa_zero(registry_listener);
-    static constexpr const struct pw_port_events port_events = {
-      .version = PW_VERSION_PORT_EVENTS,
-      .info = [] (void* object, const pw_port_info *info) {
-        ((pipewire_context*) object)->register_port(info);
-      },
-    };
+    static constexpr const struct pw_port_events port_events
+        = {.version = PW_VERSION_PORT_EVENTS,
+           .info =
+               [](void* object, const pw_port_info* info) {
+      ((pipewire_context*)object)->register_port(info);
+    },
+           .param = {}};
 
     static constexpr const struct pw_registry_events registry_events = {
-      .version = PW_VERSION_REGISTRY_EVENTS,
-      .global = [] (void* object, uint32_t id,
-          uint32_t /*permissions*/, const char *type,
-          uint32_t /*version*/, const struct spa_dict * /*props*/) {
-        pipewire_context& self = *(pipewire_context*) object;
+        .version = PW_VERSION_REGISTRY_EVENTS,
+        .global =
+            [](void* object, uint32_t id, uint32_t /*permissions*/, const char* type,
+               uint32_t /*version*/, const struct spa_dict* /*props*/) {
+      pipewire_context& self = *(pipewire_context*)object;
 
-        // When a port is added:
-        if (strcmp(type, PW_TYPE_INTERFACE_Port) == 0) {
-          auto port = (pw_port*)pw_registry_bind(self.registry, id, type, PW_VERSION_PORT, 0);
-          self.port_listener.push_back({id, port, std::make_unique<spa_hook>()});
-          auto& l = self.port_listener.back();
+      // When a port is added:
+      if(strcmp(type, PW_TYPE_INTERFACE_Port) == 0)
+      {
+        auto port
+            = (pw_port*)pw_registry_bind(self.registry, id, type, PW_VERSION_PORT, 0);
+        self.port_listener.push_back({id, port, std::make_unique<spa_hook>()});
+        auto& l = self.port_listener.back();
 
-          pw_port_add_listener(l.port, l.listener.get(), &port_events, &self);
-        }
-      },
-      .global_remove = [] (void* object, uint32_t id) {
-        pipewire_context& self = *(pipewire_context*) object;
+        pw_port_add_listener(l.port, l.listener.get(), &port_events, &self);
+      }
+        },
+        .global_remove =
+            [](void* object, uint32_t id) {
+      pipewire_context& self = *(pipewire_context*)object;
 
-        // When a port is removed:
-        // Remove from the graph
-        self.current_graph.remove_port(id);
+      // When a port is removed:
+      // Remove from the graph
+      self.current_graph.remove_port(id);
 
-        // Remove from the listeners
-        auto it = ossia::find_if(self.port_listener, [&] (const listened_port& l) { return l.id == id; });
-        if(it != self.port_listener.end())
-        {
-          pw.proxy_destroy((pw_proxy*)it->port);
-          self.port_listener.erase(it);
-        }
-      },
-    };
+      // Remove from the listeners
+      auto it = ossia::find_if(
+          self.port_listener, [&](const listened_port& l) { return l.id == id; });
+      if(it != self.port_listener.end())
+      {
+        libpipewire::instance().proxy_destroy((pw_proxy*)it->port);
+        self.port_listener.erase(it);
+      }
+        },
+        };
 
     // Start listening
-    pw_registry_add_listener(this->registry, &this->registry_listener,
-                             &registry_events, this);
+    pw_registry_add_listener(
+        this->registry, &this->registry_listener, &registry_events, this);
 
     synchronize();
   }
@@ -302,25 +332,41 @@ struct pipewire_context
   {
     pending = 0;
     done = 0;
+
+    if(!core)
+      return;
+
     spa_hook core_listener;
 
     static constexpr struct pw_core_events core_events = {
-      .version = PW_VERSION_CORE_EVENTS,
-      .done = [] (void *object, uint32_t id, int seq) {
-        auto& self = *(pipewire_context*) object;
-        if (id == PW_ID_CORE && seq == self.pending)
-        {
-          self.done = 1;
-          pw.main_loop_quit(self.main_loop);
-        }
-      },
+        .version = PW_VERSION_CORE_EVENTS,
+        .info = {},
+        .done =
+            [](void* object, uint32_t id, int seq) {
+      auto& self = *(pipewire_context*)object;
+      if(id == PW_ID_CORE && seq == self.pending)
+      {
+        self.done = 1;
+        libpipewire::instance().main_loop_quit(self.main_loop);
+      }
+    },
+        .ping = {},
+        .error = {},
+        .remove_id = {},
+        .bound_id = {},
+        .add_mem = {},
+        .remove_mem = {},
+#if defined(PW_CORE_EVENT_BOUND_PROPS)
+        .bound_props = {},
+#endif
     };
 
     spa_zero(core_listener);
     pw_core_add_listener(core, &core_listener, &core_events, this);
 
     pending = pw_core_sync(core, PW_ID_CORE, 0);
-    while (!done) {
+    while(!done)
+    {
       pw.main_loop_run(this->main_loop);
     }
     spa_hook_remove(&core_listener);
@@ -329,22 +375,17 @@ struct pipewire_context
   pw_proxy* link_ports(uint32_t out_port, uint32_t in_port)
   {
     auto props = pw.properties_new(
-          PW_KEY_LINK_OUTPUT_PORT, std::to_string(out_port).c_str(),
-          PW_KEY_LINK_INPUT_PORT, std::to_string(in_port).c_str(),
-          nullptr
-    );
+        PW_KEY_LINK_OUTPUT_PORT, std::to_string(out_port).c_str(),
+        PW_KEY_LINK_INPUT_PORT, std::to_string(in_port).c_str(), nullptr);
 
-    spa_hook listener{};
-    spa_zero(listener);
-
-    auto proxy = (pw_proxy*)pw_core_create_object(this->core,
-        "link-factory",
-        PW_TYPE_INTERFACE_Link,
-        PW_VERSION_LINK,
+    auto proxy = (pw_proxy*)pw_core_create_object(
+        this->core, "link-factory", PW_TYPE_INTERFACE_Link, PW_VERSION_LINK,
         &props->dict, 0);
 
-    if (!proxy) {
+    if(!proxy)
+    {
       ossia::logger().error("PipeWire: could not allocate link");
+      pw.properties_free(props);
       return nullptr;
     }
 
@@ -353,7 +394,7 @@ struct pipewire_context
     return proxy;
   }
 
-  void register_port(const pw_port_info *info)
+  void register_port(const pw_port_info* info)
   {
     const spa_dict_item* item{};
 
@@ -363,15 +404,24 @@ struct pipewire_context
     spa_dict_for_each(item, info->props)
     {
       std::string_view k{item->key}, v{item->value};
-      if(k == "format.dsp") p.format = v;
-      else if(k == "port.name") p.port_name = v;
-      else if(k == "port.alias") p.port_alias = v;
-      else if(k == "object.path") p.object_path = v;
-      else if(k == "port.id") p.port_id = v;
-      else if(k == "node.id") p.node_id = v;
-      else if(k == "port.physical" && v == "true") p.physical = true;
-      else if(k == "port.terminal" && v == "true") p.terminal = true;
-      else if(k == "port.monitor" && v == "true") p.monitor = true;
+      if(k == "format.dsp")
+        p.format = v;
+      else if(k == "port.name")
+        p.port_name = v;
+      else if(k == "port.alias")
+        p.port_alias = v;
+      else if(k == "object.path")
+        p.object_path = v;
+      else if(k == "port.id")
+        p.port_id = v;
+      else if(k == "node.id")
+        p.node_id = v;
+      else if(k == "port.physical" && v == "true")
+        p.physical = true;
+      else if(k == "port.terminal" && v == "true")
+        p.terminal = true;
+      else if(k == "port.monitor" && v == "true")
+        p.monitor = true;
       else if(k == "port.direction")
       {
         if(v == "out")
@@ -439,8 +489,8 @@ struct pipewire_context
       return -1;
 
     auto spa_callbacks = this->lp->control->iface.cb;
-    auto spa_loop_methods = (const spa_loop_control_methods*) spa_callbacks.funcs;
-    if (spa_loop_methods->get_fd)
+    auto spa_loop_methods = (const spa_loop_control_methods*)spa_callbacks.funcs;
+    if(spa_loop_methods->get_fd)
       return spa_loop_methods->get_fd(spa_callbacks.data);
     else
       return -1;
@@ -480,78 +530,96 @@ struct audio_setup
 class pipewire_audio_protocol : public audio_engine
 {
 public:
-  struct port {
+  struct port
+  {
   };
 
   std::shared_ptr<pipewire_context> loop{};
   pw_filter* filter{};
   std::vector<pw_proxy*> links{};
 
-  explicit pipewire_audio_protocol(std::shared_ptr<pipewire_context> loop, const audio_setup& setup)
+  explicit pipewire_audio_protocol(
+      std::shared_ptr<pipewire_context> loop, const audio_setup& setup)
   {
     auto& pw = libpipewire::instance();
 
     static constexpr const struct pw_filter_events filter_events = {
-      .version = PW_VERSION_FILTER_EVENTS,
-      .process = on_process,
+        .version = PW_VERSION_FILTER_EVENTS,
+        .destroy = {},
+        .state_changed = {},
+        .io_changed = {},
+        .param_changed = {},
+        .add_buffer = {},
+        .remove_buffer = {},
+        .process = on_process,
+        .drained = {},
+#if PW_VERSION_CORE > 3
+        .command = {},
+#endif
     };
 
     this->loop = loop;
 
-
     auto lp = loop->lp;
-    // Create the filter (the main pipewire object which will represent the software)
-    auto filter_props = pw.properties_new(
-      PW_KEY_MEDIA_TYPE, "Audio",
-      PW_KEY_MEDIA_CATEGORY, "Duplex",
-      PW_KEY_MEDIA_ROLE, "DSP",
-      PW_KEY_MEDIA_NAME, "ossia",
-      PW_KEY_NODE_LATENCY, fmt::format("{}/{}", setup.buffer_size, setup.rate).c_str(),
-      PW_KEY_NODE_ALWAYS_PROCESS, "true",
-      PW_KEY_NODE_FORCE_RATE, "true",
-      PW_KEY_NODE_PAUSE_ON_IDLE, "false",
-      PW_KEY_NODE_SUSPEND_ON_IDLE, "false",
-    nullptr);
+    // clang-format off
+    // Create the filter (the main pipewire object which will represent the
+    // software)
+    auto filter_props{
+        pw.properties_new(
+            PW_KEY_MEDIA_TYPE, "Audio",
+            PW_KEY_MEDIA_CATEGORY, "Duplex",
+            PW_KEY_MEDIA_ROLE, "DSP",
+            PW_KEY_MEDIA_NAME, "ossia",
+            PW_KEY_NODE_NAME, "ossia",
+            PW_KEY_NODE_GROUP, "group.dsp.0",
+            PW_KEY_NODE_DESCRIPTION, "ossia score",
+            PW_KEY_NODE_LATENCY, fmt::format("{}/{}", setup.buffer_size, setup.rate).c_str(),
+            PW_KEY_NODE_FORCE_QUANTUM, fmt::format("{}", setup.buffer_size).c_str(),
+            PW_KEY_NODE_LOCK_QUANTUM, "true",
+            PW_KEY_NODE_TRANSPORT_SYNC, "true",
+            //PW_KEY_NODE_RATE, fmt::format("{}/{}", 1, setup.rate).c_str(),
+            PW_KEY_NODE_FORCE_RATE, fmt::format("{}", setup.rate).c_str(),
+            //PW_KEY_NODE_LOCK_RATE, "true",
+            //PW_KEY_NODE_ALWAYS_PROCESS, "true",
+            PW_KEY_NODE_PAUSE_ON_IDLE, "false",
+            PW_KEY_NODE_SUSPEND_ON_IDLE, "false",
+            nullptr)};
 
+    // clang-format on
     this->filter = pw.filter_new_simple(
-        lp, setup.name.c_str(),
-        filter_props, &filter_events,
-        this);
+        lp, setup.name.c_str(), filter_props, &filter_events, this);
+    if(!this->filter)
+    {
+      throw std::runtime_error("PipeWire: could not create filter instance");
+    }
 
     // Create the request ports
     for(std::size_t i = 0; i < setup.inputs.size(); i++)
     {
-      auto p = (port*) pw.filter_add_port(
-          this->filter,
-          PW_DIRECTION_INPUT,
-          PW_FILTER_PORT_FLAG_MAP_BUFFERS,
+      auto p = (port*)pw.filter_add_port(
+          this->filter, PW_DIRECTION_INPUT, PW_FILTER_PORT_FLAG_MAP_BUFFERS,
           sizeof(struct port),
           pw.properties_new(
-            PW_KEY_FORMAT_DSP, "32 bit float mono audio",
-            PW_KEY_PORT_NAME, setup.inputs[i].c_str(),
-            NULL),
+              PW_KEY_FORMAT_DSP, "32 bit float mono audio", PW_KEY_PORT_NAME,
+              setup.inputs[i].c_str(), NULL),
           NULL, 0);
       input_ports.push_back(p);
     }
 
     for(std::size_t i = 0; i < setup.outputs.size(); i++)
     {
-      auto p = (port*) pw.filter_add_port(
-          this->filter,
-          PW_DIRECTION_OUTPUT,
-          PW_FILTER_PORT_FLAG_MAP_BUFFERS,
+      auto p = (port*)pw.filter_add_port(
+          this->filter, PW_DIRECTION_OUTPUT, PW_FILTER_PORT_FLAG_MAP_BUFFERS,
           sizeof(struct port),
           pw.properties_new(
-            PW_KEY_FORMAT_DSP, "32 bit float mono audio",
-            PW_KEY_PORT_NAME, setup.outputs[i].c_str(),
-            NULL),
+              PW_KEY_FORMAT_DSP, "32 bit float mono audio", PW_KEY_PORT_NAME,
+              setup.outputs[i].c_str(), NULL),
           NULL, 0);
       output_ports.push_back(p);
     }
 
-    if (pw.filter_connect(this->filter,
-          PW_FILTER_FLAG_RT_PROCESS,
-          nullptr, 0) < 0) {
+    if(pw.filter_connect(this->filter, PW_FILTER_FLAG_RT_PROCESS, nullptr, 0) < 0)
+    {
       throw std::runtime_error("PipeWire: cannot connect");
     }
 
@@ -572,9 +640,10 @@ public:
       // Leave some time to resolve the ports
       k = 0;
       const auto num_local_ins = this->input_ports.size();
-      const auto num_local_outs = this->input_ports.size();
+      const auto num_local_outs = this->output_ports.size();
       auto& this_node = this->loop->current_graph.software_audio[node_id];
-      while(this_node.inputs.size() < num_local_ins && this_node.outputs.size() < num_local_outs)
+      while(this_node.inputs.size() < num_local_ins
+            || this_node.outputs.size() < num_local_outs)
       {
         this->loop->synchronize();
         if(k++; k > 100)
@@ -589,17 +658,16 @@ public:
     this->effective_outputs = setup.outputs.size();
   }
 
-  uint32_t filter_node_id()
-  {
-    return this->loop->pw.filter_get_node_id(this->filter);
-  }
+  uint32_t filter_node_id() { return this->loop->pw.filter_get_node_id(this->filter); }
 
   void autoconnect()
   {
     auto node_id = filter_node_id();
 
-    std::vector<std::pair<std::optional<uint32_t>, std::optional<uint32_t>>> phys_in_to_ossia;
-    std::vector<std::pair<std::optional<uint32_t>, std::optional<uint32_t>>> ossia_to_phys_out;
+    std::vector<std::pair<std::optional<uint32_t>, std::optional<uint32_t>>>
+        phys_in_to_ossia;
+    std::vector<std::pair<std::optional<uint32_t>, std::optional<uint32_t>>>
+        ossia_to_phys_out;
 
     // Link to the first physical soundcard we see
     for(auto& [node, ports] : loop->current_graph.physical_audio)
@@ -685,7 +753,7 @@ public:
 
     auto t0 = clk::now();
     auto t1 = clk::now();
-    while(duration_cast<milliseconds>(t1-t0).count() < ms)
+    while(duration_cast<milliseconds>(t1 - t0).count() < ms)
     {
       pw_loop_iterate(loop->lp, ms);
       t1 = clk::now();
@@ -699,47 +767,56 @@ public:
     return activated;
   }
 
-  ~pipewire_audio_protocol()
+  void stop() override
   {
+    audio_engine::stop();
+
+    if(!this->loop)
+      return;
+
+    if(!activated)
+      return;
+
     auto& pw = libpipewire::instance();
 
     for(auto link : this->links)
       pw.proxy_destroy(link);
 
     pw.filter_destroy(this->filter);
+
+    loop->synchronize();
+    activated = false;
   }
 
-  static void clear_buffers(pipewire_audio_protocol& self, uint32_t nframes, std::size_t outputs)
+  ~pipewire_audio_protocol() { stop(); }
+
+  static void
+  clear_buffers(pipewire_audio_protocol& self, uint32_t nframes, std::size_t outputs)
   {
     auto& pw = libpipewire::instance();
-    for (std::size_t i = 0; i < outputs; i++)
+    for(std::size_t i = 0; i < outputs; i++)
     {
       auto chan = (float*)pw.filter_get_dsp_buffer(self.output_ports[i], nframes);
       if(chan)
-        for (std::size_t j = 0; j < nframes; j++)
+        for(std::size_t j = 0; j < nframes; j++)
           chan[j] = 0.f;
     }
 
     return;
   }
 
-  static void on_process(void *userdata, struct spa_io_position *position)
+  void do_process(uint32_t nframes, double secs)
   {
-    if(!userdata)
-      return;
-
     const auto& pw = libpipewire::instance();
-    auto& self = *(pipewire_audio_protocol*)userdata;
-    const uint32_t nframes = position->clock.duration;
 
-    self.tick_start();
+    tick_start();
 
-    const auto inputs = self.input_ports.size();
-    const auto outputs = self.output_ports.size();
-    if (self.stop_processing)
+    const auto inputs = input_ports.size();
+    const auto outputs = output_ports.size();
+    if(stop_processing)
     {
-      self.tick_clear();
-      clear_buffers(self, nframes, outputs);
+      tick_clear();
+      clear_buffers(*this, nframes, outputs);
       return;
     }
 
@@ -748,27 +825,53 @@ public:
 
     auto float_input = (float**)alloca(sizeof(float*) * inputs);
     auto float_output = (float**)alloca(sizeof(float*) * outputs);
-    for (std::size_t i = 0; i < inputs; i++)
+    for(std::size_t i = 0; i < inputs; i++)
     {
-      float_input[i] = (float*)pw.filter_get_dsp_buffer(self.input_ports[i], nframes);
+      float_input[i] = (float*)pw.filter_get_dsp_buffer(input_ports[i], nframes);
       if(float_input[i] == nullptr)
         float_input[i] = dummy;
     }
-    for (std::size_t i = 0; i < outputs; i++)
+    for(std::size_t i = 0; i < outputs; i++)
     {
-      float_output[i] = (float*)pw.filter_get_dsp_buffer(self.output_ports[i], nframes);
+      float_output[i] = (float*)pw.filter_get_dsp_buffer(output_ports[i], nframes);
       if(float_output[i] == nullptr)
         float_output[i] = dummy;
     }
 
     // Actual execution
-    ossia::audio_tick_state ts{
-      float_input, float_output,
-          (int)inputs, (int)outputs,
-          nframes, 0
-    };
-    self.audio_tick(ts);
-    self.tick_end();
+    ossia::audio_tick_state ts{float_input,  float_output, (int)inputs,
+                               (int)outputs, nframes,      secs};
+    audio_tick(ts);
+    tick_end();
+  }
+
+  static void on_process(void* userdata, struct spa_io_position* position)
+  {
+    [[maybe_unused]]
+    static const thread_local auto _
+        = [] {
+      ossia::set_thread_name("ossia audio 0");
+      ossia::set_thread_pinned(thread_type::Audio, 0);
+      return 0;
+    }();
+
+    if(!userdata)
+      return;
+
+    auto& self = *(pipewire_audio_protocol*)userdata;
+    uint32_t nframes = position->clock.duration;
+    double current_time_ns = position->clock.nsec * 1e-9;
+    while(nframes >= self.effective_buffer_size)
+    {
+      self.do_process(self.effective_buffer_size, current_time_ns);
+      nframes -= self.effective_buffer_size;
+      current_time_ns += double(self.effective_buffer_size) / self.effective_sample_rate;
+    }
+
+    if(nframes > 0)
+    {
+      self.do_process(self.effective_buffer_size, current_time_ns);
+    }
   }
 
   std::vector<port*> input_ports;
@@ -777,4 +880,5 @@ public:
 };
 
 }
+#endif
 #endif

@@ -10,11 +10,18 @@ target_compile_definitions(ossia
   PUBLIC
     RAPIDJSON_HAS_STDSTRING=1
     TINYSPLINE_DOUBLE_PRECISION
+    BOOST_NO_RTTI=1
     BOOST_MATH_DISABLE_FLOAT128=1
-    BOOST_ASIO_DISABLE_CONCEPTS=1       # TODO boostorg/asio#312
     $<$<CONFIG:Debug>:BOOST_MULTI_INDEX_ENABLE_INVARIANT_CHECKING>
     $<$<CONFIG:Debug>:BOOST_MULTI_INDEX_ENABLE_SAFE_MODE>
   )
+
+if(Boost_VERSION VERSION_LESS 1.81)
+  target_compile_definitions(ossia
+    PUBLIC
+      BOOST_ASIO_DISABLE_CONCEPTS=1
+  )
+endif()
 
 # Workaround for boost being broken with clang 13 (at least until 1.77)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -22,6 +29,15 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_definitions(ossia
       PUBLIC
         BOOST_ASIO_HAS_STD_INVOKE_RESULT=1
+    )
+  endif()
+endif()
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 10.0)
+    target_compile_options(ossia
+      PUBLIC
+        -fconcepts
     )
   endif()
 endif()
@@ -52,7 +68,7 @@ if(WIN32)
     WIN32_LEAN_AND_MEAN
   )
 
-  target_link_libraries(ossia PRIVATE ws2_32 winmm)
+  target_link_libraries(ossia PRIVATE ws2_32 winmm bcrypt)
   if(MINGW)
       target_link_libraries(ossia PRIVATE mswsock)
   endif()
@@ -72,7 +88,7 @@ endif()
 
 set(THREADS_PREFER_PTHREAD_FLAG)
 find_package(Threads REQUIRED)
-target_link_libraries(ossia PUBLIC Threads::Threads)
+target_link_libraries(ossia PUBLIC $<BUILD_INTERFACE:Threads::Threads>)
 
 target_compile_options(ossia PRIVATE ${OSSIA_COMPILE_OPTIONS})
 target_link_libraries(ossia PRIVATE ${OSSIA_LINK_OPTIONS})
@@ -101,11 +117,19 @@ else()
 endif()
 
 if(OSSIA_HIDE_ALL_SYMBOLS)
-set_target_properties(ossia PROPERTIES
-    C_VISIBILITY_PRESET hidden
-    CXX_VISIBILITY_PRESET hidden
-    VISIBILITY_INLINES_HIDDEN 1
-    )
+  if("${OSSIA_HIDE_ALL_SYMBOLS}" MATCHES "(hidden|internal)")
+    set_target_properties(ossia PROPERTIES
+        C_VISIBILITY_PRESET "${OSSIA_HIDE_ALL_SYMBOLS}"
+        CXX_VISIBILITY_PRESET "${OSSIA_HIDE_ALL_SYMBOLS}"
+        VISIBILITY_INLINES_HIDDEN 1
+        )
+  else()
+    set_target_properties(ossia PROPERTIES
+        C_VISIBILITY_PRESET hidden
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN 1
+        )
+  endif()
 endif()
 
 include(GenerateStaticExport)
@@ -125,6 +149,7 @@ if(OSSIA_STATIC_EXPORT)
 else()
   generate_export_header(ossia BASE_NAME OSSIA)
 endif()
+
 configure_file(ossia-config.hpp.in ossia-config.hpp)
 
 target_include_directories(ossia
@@ -133,30 +158,37 @@ target_include_directories(ossia
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
 )
 
+target_link_libraries(ossia
+  PRIVATE
+    $<BUILD_INTERFACE:rapidfuzz::rapidfuzz>
+  PUBLIC
+    $<BUILD_INTERFACE:ctre::ctre>
+    $<BUILD_INTERFACE:fmt::fmt>
+    $<BUILD_INTERFACE:nanosignal::nanosignal>
+    $<BUILD_INTERFACE:mdspan::mdspan>
+    $<BUILD_INTERFACE:tuplet::tuplet>
+    $<BUILD_INTERFACE:readerwriterqueue::readerwriterqueue>
+    $<BUILD_INTERFACE:concurrentqueue::concurrentqueue>
+    $<BUILD_INTERFACE:websocketpp::websocketpp>
+    $<BUILD_INTERFACE:rapidjson::rapidjson>
+    $<BUILD_INTERFACE:re2::re2>
+    $<BUILD_INTERFACE:smallfun::smallfun>
+    $<BUILD_INTERFACE:span::span>
+    $<BUILD_INTERFACE:spdlog::spdlog>
+    $<BUILD_INTERFACE:tuplet::tuplet>
+    $<BUILD_INTERFACE:unordered_dense::unordered_dense>
+)
+
+if(OSSIA_DATAFLOW)
+  target_link_libraries(ossia
+    PUBLIC
+      $<BUILD_INTERFACE:dr_libs::dr_libs>
+      $<BUILD_INTERFACE:perlinnoise::perlinnoise>
+      $<BUILD_INTERFACE:rnd::rnd>
+  )
+endif()
+
 target_include_directories(ossia SYSTEM
   PUBLIC
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/variant/include>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/nano-signal-slot/include>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/spdlog/include>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/brigand/include>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/fmt/include>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/hopscotch-map/include>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/mdspan/include>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/GSL/include>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/tuplet/include>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/flat_hash_map>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/flat>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/readerwriterqueue>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/concurrentqueue>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/SmallFunction/smallfun/include>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/websocketpp>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/dr_libs>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/rnd/include>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/tuplet/include>
-
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/rapidjson/include>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/libremidi/include>
-      $<BUILD_INTERFACE:${OSSIA_3RDPARTY_FOLDER}/oscpack>
-
-      $<INSTALL_INTERFACE:include>
-  )
+    $<INSTALL_INTERFACE:include>
+)

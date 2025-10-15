@@ -1,11 +1,12 @@
 #pragma once
+#include <ossia/detail/config.hpp>
+
 #include <ossia/detail/ptr_container.hpp>
 #include <ossia/editor/expression/expression_fwd.hpp>
 #include <ossia/editor/scenario/time_value.hpp>
 
-#include <ossia/detail/config.hpp>
-
 #include <cstdint>
+#include <functional>
 #include <memory>
 
 /**
@@ -37,8 +38,8 @@ public:
   /*! event status */
   enum class status : uint8_t
   {
-    NONE     = 0b00000000,
-    PENDING  = 0b00000001,
+    NONE = 0b00000000,
+    PENDING = 0b00000001,
     HAPPENED = 0b00000010,
     DISPOSED = 0b00000011,
     FINISHED = 0b10000000
@@ -63,8 +64,7 @@ public:
 
 public:
   time_event(
-      time_event::exec_callback, time_sync& aTimeSync,
-      expression_ptr anExpression);
+      time_event::exec_callback, time_sync& aTimeSync, expression_ptr anExpression);
 
   /*! destructor */
   ~time_event();
@@ -76,22 +76,19 @@ public:
 
   void add_time_process(std::shared_ptr<time_process>);
   void remove_time_process(time_process*);
-  const std::vector<std::shared_ptr<time_process>>& get_time_processes() const
-  {
-    return m_processes;
-  }
+  [[nodiscard]] const auto& get_time_processes() const { return m_processes; }
 
-  void tick(ossia::time_value date, ossia::time_value offset);
+  void tick(ossia::time_value date, ossia::time_value offset, double speed);
 
   /*! get the #time_sync where the event is
    \return std::shared_ptr<#time_sync> */
-  time_sync& get_time_sync() const;
+  [[nodiscard]] time_sync& get_time_sync() const;
 
   void set_time_sync(time_sync&);
 
   /*! get the expression of the event
   \return std::shared_ptr<expression> */
-  const expression& get_expression() const;
+  [[nodiscard]] const expression& get_expression() const;
 
   /*! set the expression of the event
    \param std::shared_ptr<expression>
@@ -100,47 +97,38 @@ public:
 
   /*! get the status of the event
    \return #Status */
-  status get_status() const;
+  [[nodiscard]] status get_status() const;
 
   /**
    * @brief getOffsetValue Returns the value of the condition if
-   * we are offseting past this time event.
+   * we are offsetting past this time event.
    */
-  offset_behavior get_offset_behavior() const;
+  [[nodiscard]] offset_behavior get_offset_behavior() const;
 
   /**
-   * @brief setOffsetValue Sets the value of the condition if we are offseting
+   * @brief setOffsetValue Sets the value of the condition if we are offsetting
    * past this time event.
    */
   time_event& set_offset_behavior(offset_behavior);
 
-  /*! get previous time contraints attached to the event
+  /*! get previous time constraints attached to the event
    \return #Container<#time_interval> */
-  ptr_container<time_interval>& previous_time_intervals()
+  auto& previous_time_intervals() { return m_previous_time_intervals; }
+
+  /*! get previous time constraints attached to the event
+   \return #Container<#TimeProcess> */
+  [[nodiscard]] const auto& previous_time_intervals() const
   {
     return m_previous_time_intervals;
   }
 
-  /*! get previous time contraints attached to the event
-   \return #Container<#TimeProcess> */
-  const ptr_container<time_interval>& previous_time_intervals() const
-  {
-    return m_previous_time_intervals;
-  }
-
-  /*! get next time contraints attached to the event
+  /*! get next time constraints attached to the event
    \return #Container<#time_interval> */
-  ptr_container<time_interval>& next_time_intervals()
-  {
-    return m_next_time_intervals;
-  }
+  auto& next_time_intervals() { return m_next_time_intervals; }
 
-  /*! get next time contraints attached to the event
+  /*! get next time constraints attached to the event
    \return #Container<#TimeProcess> */
-  const ptr_container<time_interval>& next_time_intervals() const
-  {
-    return m_next_time_intervals;
-  }
+  [[nodiscard]] const auto& next_time_intervals() const { return m_next_time_intervals; }
 
   void set_status(status s);
 
@@ -150,17 +138,25 @@ public:
   void cleanup();
 
   void mute(bool m);
+
 private:
   time_event::exec_callback m_callback;
 
   time_sync* m_timesync{};
-  std::vector<std::shared_ptr<time_process>> m_processes;
+  ossia::small_vector<std::shared_ptr<time_process>, 1> m_processes;
   status m_status;
   offset_behavior m_offset{offset_behavior::EXPRESSION_TRUE};
 
   expression_ptr m_expression;
 
-  ptr_container<time_interval> m_previous_time_intervals;
-  ptr_container<time_interval> m_next_time_intervals;
+  small_ptr_container<time_interval, 1> m_previous_time_intervals;
+  small_ptr_container<time_interval, 1> m_next_time_intervals;
 };
+
+inline constexpr auto
+operator&(ossia::time_event::status lhs, ossia::time_event::status rhs) noexcept
+{
+  using t = std::underlying_type_t<ossia::time_event::status>;
+  return static_cast<t>(lhs) & static_cast<t>(rhs);
+}
 }

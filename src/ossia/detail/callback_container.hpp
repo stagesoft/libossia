@@ -1,9 +1,13 @@
 #pragma once
 #include <ossia/detail/config.hpp>
 
+#include <ossia/detail/mutex.hpp>
+
+#if defined(__cpp_exceptions)
+#include <exception>
+#endif
 #include <list>
 #include <mutex>
-#include <stdexcept>
 
 /**
  * \file callback_container.hpp
@@ -11,22 +15,20 @@
 
 namespace ossia
 {
+
+#if defined(__cpp_exceptions)
 /**
  * @brief The invalid_callback_error class
  *
  * Means that an invalid callback was passed
  */
-struct OSSIA_EXPORT invalid_callback_error final : public std::logic_error
+struct OSSIA_EXPORT invalid_callback_error final : public std::exception
 {
-  invalid_callback_error(const char* e) : std::logic_error(e)
-  {
-  }
-
   ~invalid_callback_error() override;
-  invalid_callback_error() : std::logic_error("Bad callback")
-  {
-  }
+  invalid_callback_error();
+  const char* what() const noexcept override;
 };
+#endif
 
 template <typename T>
 /**
@@ -42,27 +44,30 @@ template <typename T>
  */
 class callback_container
 {
+  using mutex = OSSIA_CALLBACK_CONTAINER_MUTEX;
+  using lock_guard = std::lock_guard<mutex>;
+
 public:
   callback_container() = default;
   callback_container(const callback_container& other)
   {
-    std::lock_guard<std::mutex> lck{other.m_mutx};
+    lock_guard lck{other.m_mutx};
     m_callbacks = other.m_callbacks;
   }
   callback_container(callback_container&& other) noexcept
   {
-    std::lock_guard<std::mutex> lck{other.m_mutx};
+    lock_guard lck{other.m_mutx};
     m_callbacks = std::move(other.m_callbacks);
   }
   callback_container& operator=(const callback_container& other)
   {
-    std::lock_guard<std::mutex> lck{other.m_mutx};
+    lock_guard lck{other.m_mutx};
     m_callbacks = other.m_callbacks;
     return *this;
   }
   callback_container& operator=(callback_container&& other) noexcept
   {
-    std::lock_guard<std::mutex> lck{other.m_mutx};
+    lock_guard lck{other.m_mutx};
     m_callbacks = std::move(other.m_callbacks);
     return *this;
   }
@@ -74,7 +79,7 @@ public:
    * A list is used since iterators to other callbacks
    * must not be invalidated upon removal.
    */
-  using impl = typename std::list<T>;
+  using impl = std::list<T>;
   using iterator = typename impl::iterator;
 
   /**
@@ -82,20 +87,23 @@ public:
    * @param callback must be a std::function or similar.
    * @return iterator to save in order to be able to remove the callback.
    */
-  iterator add_callback(T callback)
+  iterator add_callback(T&& callback)
   {
-    T cb = callback;
-    if (cb)
+    if(callback)
     {
-      std::lock_guard<std::mutex> lck{m_mutx};
-      auto it = m_callbacks.insert(m_callbacks.begin(), std::move(cb));
-      if (m_callbacks.size() == 1)
+      lock_guard lck{m_mutx};
+      auto it = m_callbacks.insert(m_callbacks.begin(), std::move(callback));
+      if(m_callbacks.size() == 1)
         on_first_callback_added();
       return it;
     }
     else
     {
+#if defined(__cpp_exceptions)
       throw invalid_callback_error{};
+#else
+      return {};
+#endif
     }
   }
 
@@ -105,24 +113,25 @@ public:
    */
   void remove_callback(iterator it)
   {
-    std::lock_guard<std::mutex> lck{m_mutx};
-    if (m_callbacks.size() == 1)
+    lock_guard lck{m_mutx};
+    if(m_callbacks.size() == 1)
       on_removing_last_callback();
+
     m_callbacks.erase(it);
   }
-
 
   /**
    * @brief Replaces an existing callback with another function.
    */
   void replace_callback(iterator it, T&& cb)
   {
-    std::lock_guard<std::mutex> lck{m_mutx};
+    lock_guard lck{m_mutx};
     *m_callbacks.erase(it, it) = std::move(cb);
   }
+
   void replace_callbacks(impl&& cbs)
   {
-    std::lock_guard<std::mutex> lck{m_mutx};
+    lock_guard lck{m_mutx};
     m_callbacks = std::move(cbs);
   }
 
@@ -130,15 +139,12 @@ public:
   {
   public:
     explicit disabled_callback(callback_container& self)
-      : self{self}, old_callbacks{self.m_callbacks}
+        : self{self}
+        , old_callbacks{self.m_callbacks}
     {
-
     }
 
-    ~disabled_callback()
-    {
-      self.replace_callbacks(std::move(old_callbacks));
-    }
+    ~disabled_callback() { self.replace_callbacks(std::move(old_callbacks)); }
 
   private:
     callback_container& self;
@@ -147,7 +153,7 @@ public:
 
   disabled_callback disable_callback(iterator it)
   {
-    std::lock_guard<std::mutex> lck{m_mutx};
+    lock_guard lck{m_mutx};
     disabled_callback dis{*this};
 
     // TODO should we also call on_removing_last_blah ?
@@ -162,7 +168,7 @@ public:
    */
   std::size_t callback_count() const
   {
-    std::lock_guard<std::mutex> lck{m_mutx};
+    lock_guard lck{m_mutx};
     return m_callbacks.size();
   }
 
@@ -172,7 +178,7 @@ public:
    */
   bool callbacks_empty() const
   {
-    std::lock_guard<std::mutex> lck{m_mutx};
+    lock_guard lck{m_mutx};
     return m_callbacks.empty();
   }
 
@@ -183,10 +189,10 @@ public:
   template <typename... Args>
   void send(Args&&... args)
   {
-    std::lock_guard<std::mutex> lck{m_mutx};
-    for (auto& callback : m_callbacks)
+    lock_guard lck{m_mutx};
+    for(auto& callback : m_callbacks)
     {
-      if (callback)
+      if(callback)
         callback(std::forward<Args>(args)...);
     }
   }
@@ -196,8 +202,8 @@ public:
    */
   void callbacks_clear()
   {
-    std::lock_guard<std::mutex> lck{m_mutx};
-    if (!m_callbacks.empty())
+    lock_guard lck{m_mutx};
+    if(!m_callbacks.empty())
       on_removing_last_callback();
     m_callbacks.clear();
   }
@@ -213,21 +219,19 @@ protected:
    *
    * \see \ref on_removing_last_callback
    */
-  virtual void on_first_callback_added()
-  {
-  }
+  virtual void on_first_callback_added() { }
 
   /**
    * @brief on_removing_last_callback
    *
    * \see \ref on_first_callback_added
    */
-  virtual void on_removing_last_callback()
-  {
-  }
+  virtual void on_removing_last_callback() { }
 
-private:
-  impl m_callbacks;
-  mutable std::mutex m_mutx;
+  //private:
+public:
+  impl m_callbacks TS_GUARDED_BY(m_mutx);
+  mutable mutex m_mutx;
 };
+
 }

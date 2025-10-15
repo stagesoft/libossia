@@ -1,5 +1,8 @@
 # Build settings :
+option(OSSIA_USE_SYSTEM_LIBRARIES "Use system versions of the third-party libraries if possible")
 option(OSSIA_STATIC "Make a static build" OFF)
+option(OSSIA_INSTALL_STATIC_DEPENDENCIES "Generate install rules for wiiuse, etc" OFF)
+option(OSSIA_FAST_DEVELOPER_BUILD "Create shared libraries for some third-party libraries" OFF)
 option(OSSIA_COVERAGE "Run code coverage" OFF)
 option(OSSIA_EXAMPLES "Build examples" OFF)
 option(OSSIA_TESTING "Build tests" OFF)
@@ -11,8 +14,20 @@ option(OSSIA_OSX_FAT_LIBRARIES "Build 32 and 64 bit fat libraries on OS X" OFF)
 option(OSSIA_OSX_RETROCOMPATIBILITY "Build for older OS X versions" OFF)
 option(OSSIA_DATAFLOW "Dataflow features" ON)
 option(OSSIA_EDITOR "Editor features" ON)
+option(OSSIA_SCENARIO_DATAFLOW "Graph node support in scenario" ON)
 option(OSSIA_GFX "Graphics features" ON)
 option(OSSIA_HIDE_ALL_SYMBOLS "Hide all symbols from the ossia lib" OFF)
+option(OSSIA_ENABLE_JACK "Use JACK if available" ON)
+option(OSSIA_ENABLE_PORTAUDIO "Use PortAudio if available" ON)
+option(OSSIA_ENABLE_PIPEWIRE "Use PortAudio if available" ON)
+option(OSSIA_ENABLE_RUBBERBAND "Use RubberBand" ON)
+option(OSSIA_ENABLE_LIBSAMPLERATE "Use libsamplerate" ON)
+option(OSSIA_ENABLE_SDL "Use SDL if available" ON)
+option(OSSIA_ENABLE_FFT "Enable FFT support" OFF)
+option(OSSIA_ENABLE_FFTW "Enable FFT through FFTW" OFF)
+option(OSSIA_ENABLE_KFR "Enable KFR library" OFF)
+option(OSSIA_DISABLE_QT_PLUGIN "Disable building of a Qt plugin" OFF)
+option(OSSIA_DNSSD "Enable DNSSD support" ON)
 
 # Bindings :
 option(OSSIA_JAVA "Build JNI bindings" OFF)
@@ -41,21 +56,22 @@ option(OSSIA_PROTOCOL_MIDI "Enable MIDI protocol" ON)
 option(OSSIA_PROTOCOL_OSC "Enable OSC protocol" ON)
 option(OSSIA_PROTOCOL_MINUIT "Enable Minuit protocol" ON)
 option(OSSIA_PROTOCOL_OSCQUERY "Enable OSCQuery protocol" ON)
+option(OSSIA_PROTOCOL_MQTT5 "Enable MQTT 5 protocol" ON)
+option(OSSIA_PROTOCOL_COAP "Enable CoAP protocol" ON)
 option(OSSIA_PROTOCOL_HTTP "Enable HTTP protocol" ON) # Requires Qt
 option(OSSIA_PROTOCOL_WEBSOCKETS "Enable WebSockets protocol" OFF) # Requires Qt
 option(OSSIA_PROTOCOL_SERIAL "Enable Serial port protocol" OFF) # Requires Qt
 option(OSSIA_PROTOCOL_PHIDGETS "Enable Phidgets protocol" OFF) # Requires Phidgets library
-option(OSSIA_PROTOCOL_LEAPMOTION "Enable Leapmotion protocol" OFF) # Requires LeapMotion Orion library
 option(OSSIA_PROTOCOL_JOYSTICK "Enable Joystick protocol" ON)  # Requires SDL2 library
 option(OSSIA_PROTOCOL_WIIMOTE "Enable Wiimote Protocol" ON) #use wiiuse
-option(OSSIA_PROTOCOL_ARTNET "Enable artnet protocol" ON) #use libartnet
+option(OSSIA_PROTOCOL_ARTNET "Enable artnet protocol" ON)
 option(OSSIA_PROTOCOL_LIBMAPPER "Enable libmapper protocol" OFF) #use external libmapper
 
 # FFT stuff
 if("${CMAKE_CXX_COMPILER_ID}" MATCHES ".*Clang")
   set(OSSIA_COMPILER_IS_CLANG 1)
   set(OSSIA_COMPILER_IS_NOT_CLANG 0)
-elseif("${CMAKE_CXX_COMPILER_ID}" MATCHES "Emscripten")
+elseif(EMSCRIPTEN)
   set(OSSIA_COMPILER_IS_CLANG 1)
   set(OSSIA_COMPILER_IS_NOT_CLANG 0)
 else()
@@ -63,25 +79,20 @@ else()
   set(OSSIA_COMPILER_IS_NOT_CLANG 1)
 endif()
 
-option(OSSIA_ENABLE_FFT "Enable FFT support" OFF)
-option(OSSIA_ENABLE_FFTW "Enable FFT through FFTW" OFF)
-option(OSSIA_ENABLE_KFR "Enable KFR library" OFF)
-
 # List of all the available protocols
 set(OSSIA_AVAILABLE_PROTOCOLS
   AUDIO MIDI
   OSC MINUIT OSCQUERY
   HTTP WEBSOCKETS SERIAL
   PHIDGETS
-  LEAPMOTION
   JOYSTICK
   WIIMOTE
   ARTNET
   LIBMAPPER
+  MQTT5
+  COAP
 )
 
-option(OSSIA_DISABLE_QT_PLUGIN "Disable building of a Qt plugin" OFF)
-option(OSSIA_DNSSD "Enable DNSSD support" ON)
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${PROJECT_SOURCE_DIR}/CMake;${PROJECT_SOURCE_DIR}/cmake/cmake-modules;")
 set(OSSIA_SUBMODULE_AUTOUPDATE ON CACHE BOOL "Auto update submodule")
 
@@ -284,13 +295,7 @@ if(OSSIA_JAVA)
 endif()
 
 if(OSSIA_OSX_FAT_LIBRARIES)
-    string(REGEX MATCH "[0-9]+.[0-9]+" MACOS_SDK_VERSION "${CMAKE_OSX_SYSROOT}")
-    if(MACOS_SDK_VERSION VERSION_LESS 10.14)
-      set(CMAKE_OSX_ARCHITECTURES "i386;x86_64")
-      set(OSSIA_PCH 0)
-    else()
-      message(WARNING "macOS ${MACOS_SDK_VERSION} do not support building 32-bit anymore.")
-    endif()
+    set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64")
 endif()
 
 if(OSSIA_NO_QT)
@@ -306,8 +311,10 @@ if(MSVC)
   add_definitions(-D_CRT_SECURE_NO_WARNINGS)
   add_definitions(-D_SCL_SECURE_NO_WARNINGS)
 
-  if(OSSIA_MAX OR OSSIA_PD OR OSSIA_JAVA OR OSSIA_UNITY3D OR OSSIA_PYTHON)
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+  if(NOT OSSIA_TESTING AND NOT OSSIA_EXAMPLES)
+    if(OSSIA_MAX OR OSSIA_PD OR OSSIA_JAVA OR OSSIA_UNITY3D OR OSSIA_PYTHON)
+      set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
   endif()
 endif()
 
@@ -315,13 +322,28 @@ if(NOT OSSIA_DATAFLOW)
   set(OSSIA_EDITOR 0)
 endif()
 
+if(NOT OSSIA_ENABLE_SDL)
+  set(OSSIA_PROTOCOL_JOYSTICK OFF CACHE "" INTERNAL FORCE)
+endif()
+
+# Static linking configuration
+if(NOT (OSSIA_MAX OR OSSIA_PD OR OSSIA_JAVA OR OSSIA_UNITY3D OR OSSIA_PYTHON))
+  if(OSSIA_STATIC)
+    # Are we building libossia directly?
+    if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+      # If so, if it's a static build of libossia, we need to ship
+      # the libartnet, wiiuse, etc... .a's
+      set(OSSIA_INSTALL_STATIC_DEPENDENCIES ON)
+    endif()
+  endif()
+endif()
 
 function(ossia_set_visibility TheTarget)
   if(OSSIA_STATIC_EXPORT)
     set_target_properties(${TheTarget} PROPERTIES
-      C_VISIBILITY_PRESET default
-      CXX_VISIBILITY_PRESET default
-      VISIBILITY_INLINES_HIDDEN 0
+      C_VISIBILITY_PRESET hidden
+      CXX_VISIBILITY_PRESET hidden
+      VISIBILITY_INLINES_HIDDEN 1
     )
   else()
     set_target_properties(${TheTarget} PROPERTIES
@@ -332,7 +354,6 @@ function(ossia_set_visibility TheTarget)
   endif()
 endfunction()
 
-
 function(ossia_add_test TESTNAME TESTSRCS)
     add_executable(ossia_${TESTNAME} ${TESTSRCS})
     target_compile_options(ossia_${TESTNAME} PUBLIC ${OSSIA_COMPILE_OPTIONS})
@@ -340,7 +361,7 @@ function(ossia_add_test TESTNAME TESTSRCS)
       target_compile_definitions(ossia_${TESTNAME} PUBLIC  CATCH_CONFIG_NO_CPP17_UNCAUGHT_EXCEPTIONS)
     endif()
     target_include_directories(ossia_${TESTNAME} PUBLIC "${CMAKE_CURRENT_LIST_DIR}/catch")
-    target_link_libraries(ossia_${TESTNAME} PUBLIC ${OSSIA_LINK_OPTIONS} ossia PRIVATE Catch2::Catch2WithMain)
+    target_link_libraries(ossia_${TESTNAME} PUBLIC ${OSSIA_LINK_OPTIONS} ossia Catch2::Catch2WithMain)
 
     add_test(NAME ossia_target_${TESTNAME} COMMAND ossia_${TESTNAME})
 endFunction()

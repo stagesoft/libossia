@@ -3,6 +3,8 @@
 #include <ossia/network/base/node.hpp>
 #include <ossia/network/value/destination.hpp>
 
+#include <functional>
+
 /**
  * \file node_functions.hpp
  *
@@ -21,7 +23,7 @@ namespace net
  * @return null if the node was not found.
  */
 OSSIA_EXPORT ossia::net::node_base*
-find_node(node_base& dev, ossia::string_view parameter_base);
+find_node(node_base& dev, std::string_view parameter_base);
 
 /**
  * @brief Find all nodes matching a pattern in a device
@@ -32,7 +34,7 @@ find_node(node_base& dev, ossia::string_view parameter_base);
  * prefer storing a traversal::path and using the functions in path.hpp.
  */
 OSSIA_EXPORT std::vector<ossia::net::node_base*>
-find_nodes(node_base& dev, ossia::string_view pattern);
+find_nodes(node_base& dev, std::string_view pattern);
 
 /**
  * @brief Create a node in a device.
@@ -41,8 +43,7 @@ find_nodes(node_base& dev, ossia::string_view pattern);
  * Hence there is no guarantee that the created node name is the same
  * than the one requested; the output should be checked.
  */
-OSSIA_EXPORT node_base&
-create_node(node_base& dev, ossia::string_view parameter_base);
+OSSIA_EXPORT node_base& create_node(node_base& dev, std::string_view parameter_base);
 
 /**
  * @brief Create nodes according to a brace-expansion-like mechanism
@@ -53,7 +54,7 @@ create_node(node_base& dev, ossia::string_view parameter_base);
  * \see ossia::net::is_brace_expansion
  */
 OSSIA_EXPORT std::vector<ossia::net::node_base*>
-create_nodes(node_base& dev, ossia::string_view pattern);
+create_nodes(node_base& dev, std::string_view pattern);
 
 /**
  * @brief Find a node and create it if it does not exist.
@@ -61,8 +62,10 @@ create_nodes(node_base& dev, ossia::string_view pattern);
  * If the node exists, it will be returned, else a new node will be created.
  */
 OSSIA_EXPORT node_base&
-find_or_create_node(node_base& dev, ossia::string_view parameter_base);
+find_or_create_node(node_base& dev, std::string_view parameter_base);
 
+parameter_base* find_or_create_parameter(
+    node_base& node, std::string_view address, std::string_view type);
 /**
  * @brief Find a parameter and create it if it does not exist.
  * @details Find a node matching the address, if it already has a parameter
@@ -73,14 +76,14 @@ find_or_create_node(node_base& dev, ossia::string_view parameter_base);
  * @param type of the parameter
  * @return vector of created parameters
  */
-OSSIA_EXPORT std::vector<parameter_base*> find_or_create_parameter(
-    node_base& node, const std::string& address, const std::string& type);
+OSSIA_EXPORT std::vector<parameter_base*> find_parameter_or_create_node(
+    node_base& node, std::string_view address, std::string_view type);
 
 /**
  * @brief Calls find_node or create_node according to the value `create`
  */
-OSSIA_EXPORT node_base* find_or_create_node(
-    node_base& dev, ossia::string_view parameter_base, bool create);
+OSSIA_EXPORT node_base*
+find_or_create_node(node_base& dev, std::string_view parameter_base, bool create);
 
 //! Get a valid name for a given node
 void sanitize_name(std::string& name, const node_base::children_t& brethren);
@@ -106,11 +109,10 @@ auto create_parameter(ossia::net::node_base& root, std::string name)
 }
 
 template <typename Address>
-auto find_or_create_parameter(
-    ossia::net::node_base& root, ossia::string_view name)
+auto find_parameter_or_create_node(ossia::net::node_base& root, std::string_view name)
 {
   auto& node = ossia::net::find_or_create_node(root, std::move(name));
-  if (auto p = dynamic_cast<Address*>(node.get_parameter()))
+  if(auto p = dynamic_cast<Address*>(node.get_parameter()))
   {
     return p;
   }
@@ -121,14 +123,13 @@ auto find_or_create_parameter(
     return addr;
   }
 }
-OSSIA_EXPORT std::ostream&
-operator<<(std::ostream&, const ossia::net::parameter_base&);
+OSSIA_EXPORT std::ostream& operator<<(std::ostream&, const ossia::net::parameter_base&);
 
 OSSIA_EXPORT
 void expand_ranges(std::string& str);
 
 OSSIA_EXPORT
-std::pair<std::vector<std::string>, bool> expand_address(const std::string& address);
+std::pair<std::vector<std::string>, bool> expand_address(std::string address);
 
 /**
  * @brief list_all_children : list all child nodes recursively
@@ -137,8 +138,23 @@ std::pair<std::vector<std::string>, bool> expand_address(const std::string& addr
  */
 OSSIA_EXPORT
 std::vector<ossia::net::node_base*>
-list_all_children(ossia::net::node_base* node, unsigned int depth = 0);
+list_all_children(ossia::net::node_base* node, unsigned int depth = 0, bool sort = true);
 
+OSSIA_EXPORT
+void
+list_all_children(
+        ossia::net::node_base* node,
+        std::vector<ossia::net::node_base*>&out,
+        unsigned int depth,
+        bool sort);
+
+/**
+ * @brief Iterates all the child parameters given a base node
+ */
+OSSIA_EXPORT
+void iterate_all_children(
+    ossia::net::node_base* node,
+    const std::function<void(ossia::net::parameter_base&)>&);
 
 struct OSSIA_EXPORT fuzzysearch_result
 {
@@ -146,7 +162,9 @@ struct OSSIA_EXPORT fuzzysearch_result
   std::string oscname;
   ossia::net::node_base* node{};
 
-  friend bool operator==(const fuzzysearch_result& lhs, const fuzzysearch_result& rhs) noexcept {
+  friend bool
+  operator==(const fuzzysearch_result& lhs, const fuzzysearch_result& rhs) noexcept
+  {
     return lhs.score == rhs.score && lhs.oscname == rhs.oscname && lhs.node == rhs.node;
   }
 };
@@ -157,10 +175,31 @@ struct fuzzysearch_options
 };
 
 OSSIA_EXPORT
-void fuzzysearch(const std::vector<ossia::net::node_base*>& node,
-                 const std::vector<std::string>& patterns,
-                 std::vector<fuzzysearch_result>& results,
-                 fuzzysearch_options = {});
+void fuzzysearch(
+    const std::vector<ossia::net::node_base*>& node,
+    const std::vector<std::string>& patterns, std::vector<fuzzysearch_result>& results,
+    fuzzysearch_options = {});
+
+/**
+ * @brief Converts a node in a map of values
+ *
+ * e.g. given the tree
+ * ```
+ * /foo/bar: 10
+ * /foo/baz
+ * /foo/baz/bux: [1.3, 5.]
+ * ```
+ *
+ * then `to_map(foo)` gives something more or less like:
+ *
+ * map{
+ *  { "bar", 10 },
+ *  { "baz", map{ { "bux", vector{1.3, 5} } } }
+ * }
+ *
+ */
+OSSIA_EXPORT
+ossia::value_map_type to_map(const ossia::net::node_base& n) noexcept;
 
 }
 }

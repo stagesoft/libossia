@@ -1,120 +1,122 @@
 #include <ossia/detail/config.hpp>
+
+#include <boost/endian/conversion.hpp>
 #if defined(OSSIA_PROTOCOL_ARTNET)
 #include "artnet_protocol.hpp"
 
+#include <ossia/detail/fmt.hpp>
 #include <ossia/protocols/artnet/dmx_parameter.hpp>
 
-#include <ossia/detail/fmt.hpp>
-#include <artnet/artnet.h>
-
 #include <chrono>
-
-#define ARTNET_NODE_SHORT_NAME "libossia"
-#define ARTNET_NODE_LONG_NAME "Libossia Artnet Protocol"
-
-
 namespace ossia::net
 {
-dmx_buffer::dmx_buffer() : dirty(false)
+dmx_buffer::dmx_buffer(int universe_size)
+    : universe_size{universe_size}
 {
-  std::memset(data, 0, DMX_CHANNEL_COUNT);
+  set_universe_count(1);
 }
 
-dmx_buffer::~dmx_buffer()
+dmx_buffer::~dmx_buffer() = default;
+
+struct art_dmx_packet_header
 {
+  char id[8] = {'A', 'r', 't', '-', 'N', 'e', 't', '\0'};
+  uint8_t opcode[2] = {0x00, 0x50};
+  uint8_t version[2] = {0x00, 0x0e};
+  uint8_t seq = 0;
+  uint8_t phys = 0;
+  uint8_t lo_uni = 0;
+  uint8_t hi_uni = 0;
+  uint16_t length = 2;
+};
+static_assert(sizeof(art_dmx_packet_header) == 18);
 
-}
-
-static constexpr int artnet_port_id = 0;
-artnet_protocol::artnet_protocol(ossia::net::network_context_ptr ctx, const dmx_config& conf)
-  : protocol_base{flags{}}
-  , m_context{ctx}
-  , m_timer{ctx->context}
-  , m_autocreate{conf.autocreate}
+struct art_dmx_packet : art_dmx_packet_header
 {
-  if (conf.frequency < 1 || conf.frequency > 44)
-    throw std::runtime_error(
-        "DMX 512 update frequency must be in the range [1, 44] Hz");
+  uint8_t data[512];
+};
+static_assert(sizeof(art_dmx_packet) == 18 + 512);
 
-  m_timer.set_delay(std::chrono::milliseconds{static_cast<int>(1000.0f / static_cast<float>(conf.frequency))});
-
-  //  44  hz limit apply because we send 512 byte frames.
-  //  It seem to be possible to send only some value and thus
-  //   update at higher frequencies => Work TODO
-
-  //  Do not specify ip adress for now, artnet will choose one
-  m_node = artnet_new(nullptr, 1);
-
-  if (m_node == NULL)
-    throw std::runtime_error("Artnet new failed");
-  m_universe = conf.universe;
-
-  artnet_set_port_type(m_node, artnet_port_id, ARTNET_ENABLE_OUTPUT, ARTNET_PORT_DMX);
-  artnet_set_port_addr(m_node, artnet_port_id, ARTNET_OUTPUT_PORT, m_universe);
-
-  artnet_set_short_name(m_node, ARTNET_NODE_SHORT_NAME);
-  artnet_set_long_name(m_node, ARTNET_NODE_LONG_NAME);
-  artnet_set_node_type(m_node, ARTNET_RAW);
-
-
-  artnet_dump_config(m_node);
-  if (artnet_start(m_node) != ARTNET_EOK)
-    throw std::runtime_error("Artnet Start failed");
+artnet_protocol::artnet_protocol(
+    ossia::net::network_context_ptr ctx, const dmx_config& conf,
+    const ossia::net::outbound_socket_configuration& socket)
+    : dmx_output_protocol_base{ctx, conf}
+    , m_socket{socket, ctx->context}
+{
+  m_socket.m_broadcast = true;
+  m_socket.connect();
+  m_timer.set_delay(std::chrono::milliseconds{
+      static_cast<int>(1000.0f / static_cast<float>(conf.frequency))});
 }
 
 artnet_protocol::~artnet_protocol()
 {
-  m_timer.stop();
-  artnet_destroy(m_node);
+  stop_processing();
 }
 
 void artnet_protocol::set_device(ossia::net::device_base& dev)
 {
-  m_device = &dev;
-
-  if(m_autocreate)
-  {
-    auto& root = dev.get_root_node();
-    for (unsigned int i = 0; i < DMX_CHANNEL_COUNT; ++i)
-      device_parameter::create_device_parameter<dmx_parameter>(
-          root, fmt::format("Channel-{}", i + 1), 0, m_buffer, i);
-  }
-
+  dmx_protocol_base::set_device(dev);
   m_timer.start([this] { this->update_function(); });
-}
-
-bool artnet_protocol::pull(net::parameter_base& param)
-{
-  return true;
-}
-
-bool artnet_protocol::push(const net::parameter_base& param, const ossia::value& v)
-{
-  return true;
-}
-
-bool artnet_protocol::observe(net::parameter_base& param, bool enable)
-{
-  return false;
-}
-
-bool artnet_protocol::push_raw(const ossia::net::full_parameter_data& data)
-{
-  return false;
-}
-
-bool artnet_protocol::update(ossia::net::node_base&)
-{
-  return true;
 }
 
 void artnet_protocol::update_function()
 {
-  if (m_buffer.dirty)
+  for(int current_universe = 0; current_universe < m_buffer.universes();
+      current_universe++)
   {
-    artnet_raw_send_dmx(m_node, m_universe, DMX_CHANNEL_COUNT, m_buffer.data);
-    m_buffer.dirty = false;
+    if(!m_buffer.dirty[current_universe])
+      continue;
+
+    int universe = this->m_conf.start_universe + current_universe;
+    auto data = m_buffer.read_universe(current_universe);
+
+    art_dmx_packet pkt;
+    pkt.lo_uni = universe;
+    pkt.length = boost::asio::detail::socket_ops::host_to_network_short(
+        m_conf.channels_per_universe);
+    std::copy_n(data.data(), data.size(), pkt.data);
+
+    m_socket.write(reinterpret_cast<const char*>(&pkt), sizeof(pkt));
   }
+}
+
+artnet_input_protocol::artnet_input_protocol(
+    ossia::net::network_context_ptr ctx, const dmx_config& conf,
+    const ossia::net::inbound_socket_configuration& socket)
+    : dmx_input_protocol_base{ctx, conf}
+    , m_socket{socket, ctx->context}
+{
+}
+
+artnet_input_protocol::~artnet_input_protocol() { }
+
+void artnet_input_protocol::set_device(ossia::net::device_base& dev)
+{
+  dmx_protocol_base::set_device(dev);
+
+  m_socket.open();
+
+  // FIXME we must make sure that this is actually called after the fixtures have been assigned
+  m_socket.receive([this](const char* bytes, int sz) {
+    if(sz <= sizeof(art_dmx_packet_header) + 2)
+      return;
+
+    static constexpr auto default_dmx_header = art_dmx_packet_header{};
+
+    auto dmx = reinterpret_cast<const art_dmx_packet_header*>(bytes);
+    if(memcmp(dmx, &default_dmx_header, 12) != 0)
+      return;
+
+    auto len = boost::endian::big_to_native(dmx->length);
+
+    on_dmx((const uint8_t*)bytes + sizeof(art_dmx_packet_header), len);
+  });
+}
+
+void artnet_input_protocol::stop()
+{
+  m_socket.close();
 }
 }
 

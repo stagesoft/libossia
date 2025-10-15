@@ -4,17 +4,21 @@
 
 #include <ossia/detail/logger.hpp>
 
-#include <spdlog/spdlog.h>
-#include <spdlog/sinks/stdout_sinks.h>
+#if defined(OSSIA_HAS_FMT)
 #include <spdlog/sinks/null_sink.h>
+#include <spdlog/sinks/stdout_sinks.h>
+#include <spdlog/spdlog.h>
+#endif
+
 #if defined(QT_QML_LIB)
 #include <ossia-qt/qml_plugin.hpp>
 #endif
 #include <ossia/detail/any_map.hpp>
 #include <ossia/detail/callback_container.hpp>
+#include <ossia/detail/thread.hpp>
+
 #include <smallfun.hpp>
 
-#include <iostream>
 #include <memory>
 
 #if defined(_MSC_VER)
@@ -27,27 +31,41 @@
 #pragma warning(push)
 #pragma warning(disable : 4073)
 #pragma init_seg(lib)
-boost::asio::detail::winsock_init<>::manual manual_winsock_init;
+boost::asio::detail::winsock_init<2, 2>::manual manual_winsock_init;
 #pragma warning(pop)
 #elif defined(_WIN32)
 #include <boost/asio/detail/winsock_init.hpp>
 #endif
 
-#if !defined(_MSC_VER)
-template class OSSIA_EXTERN_EXPORT_CPP(OSSIA_EXPORT) tsl::hopscotch_map<
-    std::string, ossia::any, ossia::string_hash, ossia::string_equal,
-    std::allocator<std::pair<std::string, ossia::any>>, 4>;
+#if !defined(__cpp_exceptions)
+#include <boost/throw_exception.hpp>
+namespace boost
+{
+void throw_exception(std::exception const& e)
+{
+  std::terminate();
+}
+void throw_exception(std::exception const& e, boost::source_location const& loc)
+{
+  std::terminate();
+}
+}
 #endif
 namespace ossia
 {
-invalid_callback_error::~invalid_callback_error()
+#if defined(__cpp_exceptions)
+invalid_callback_error::invalid_callback_error() = default;
+invalid_callback_error::~invalid_callback_error() = default;
+const char* invalid_callback_error::what() const noexcept
 {
+  return "Bad callback";
 }
+#endif
 
 static void ossia_global_init()
 {
   static bool init = false;
-  if (!init)
+  if(!init)
   {
     // Create a logger for the library.
     logger();
@@ -61,6 +79,8 @@ static void ossia_global_init()
 #if defined(QT_QML_LIB)
     qt::qml_plugin::reg("Ossia");
 #endif
+
+    ossia::set_thread_pinned(thread_type::Ui, 0);
   }
 }
 
@@ -79,7 +99,6 @@ context::context(const std::vector<spdlog::sink_ptr>& sinks)
 context::~context() = default;
 
 #if defined(OSSIA_BRUH_LOGGER)
-
 bruh_logger& logger() noexcept
 {
   static bruh_logger b;
@@ -98,8 +117,7 @@ std::vector<std::shared_ptr<spdlog::sinks::sink>>& bruh_logger::sinks()
 #else
 spdlog::logger& logger() noexcept
 {
-  static spdlog::logger& init
-      = []() -> spdlog::logger& { return *logger_ptr(); }();
+  static spdlog::logger& init = []() -> spdlog::logger& { return *logger_ptr(); }();
 
   return init;
 }
@@ -107,7 +125,7 @@ spdlog::logger& logger() noexcept
 std::shared_ptr<spdlog::logger> logger_ptr() noexcept
 try
 {
-  if (auto logger = spdlog::get("ossia"))
+  if(auto logger = spdlog::get("ossia"))
     return logger;
   else
     return spdlog::stderr_logger_mt("ossia");

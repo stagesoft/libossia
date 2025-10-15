@@ -1,7 +1,5 @@
 #pragma once
-namespace ossia
-{
-namespace expressions
+namespace ossia::expressions
 {
 
 //! Represents a comparison between expressions
@@ -12,7 +10,8 @@ enum class comparator
   GREATER,       //! >
   LOWER,         //! <
   GREATER_EQUAL, //! >=
-  LOWER_EQUAL    //! <=
+  LOWER_EQUAL,   //! <=
+  CONTAINS
 };
 
 //! Represents a binary operation between expressions
@@ -22,5 +21,4 @@ enum class binary_operator
   OR,  //! ||
   XOR  //! ^
 };
-}
 }

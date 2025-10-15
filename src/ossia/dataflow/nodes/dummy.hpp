@@ -7,13 +7,10 @@ namespace ossia::nodes
 class dummy_node : public ossia::graph_node
 {
 public:
-  dummy_node()
-  {
-  }
+  dummy_node() = default;
 
-  void run(const token_request& t, exec_state_facade) noexcept override
-  {
-  }
+  void run(const token_request& t, exec_state_facade) noexcept override { }
+  std::string label() const noexcept override { return "dummy"; }
 };
 
 class dummy_audio_node : public ossia::graph_node
@@ -22,7 +19,7 @@ public:
   dummy_audio_node()
   {
     m_inlets.push_back(new ossia::audio_inlet);
-    m_outlets.push_back(new ossia::audio_outlet );
+    m_outlets.push_back(new ossia::audio_outlet);
   }
 
   void run(const token_request& t, exec_state_facade) noexcept override
@@ -31,6 +28,7 @@ public:
     auto& o = *m_outlets[0]->target<ossia::audio_port>();
     o = i;
   }
+  std::string label() const noexcept override { return "dummy_audio_node"; }
 };
 
 class dummy_midi_node : public ossia::graph_node
@@ -48,6 +46,7 @@ public:
     auto o = m_outlets[0]->target<ossia::midi_port>();
     o->messages = i->messages;
   }
+  std::string label() const noexcept override { return "dummy_midi_node"; }
 };
 
 class dummy_value_node : public ossia::graph_node
@@ -65,6 +64,7 @@ public:
     auto o = m_outlets[0]->target<ossia::value_port>();
     o->set_data(i->get_data());
   }
+  std::string label() const noexcept override { return "dummy_value_node"; }
 };
 
 }

@@ -1,30 +1,28 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
+#include <ossia/network/base/osc_address.hpp>
 #include <ossia/network/base/protocol.hpp>
 #include <ossia/network/generic/generic_device.hpp>
 #include <ossia/network/generic/generic_node.hpp>
 #include <ossia/network/generic/generic_parameter.hpp>
-#include <ossia/network/base/osc_address.hpp>
 #include <ossia/network/value/value.hpp>
 
 #include <boost/algorithm/string/replace.hpp>
 
 #include <cassert>
-#include <iostream>
-namespace ossia
-{
-namespace net
+
+namespace ossia::net
 {
 generic_node_base::generic_node_base(
     std::string name, ossia::net::device_base& aDevice, node_base& aParent)
-    : m_device{aDevice}, m_parent{&aParent}
+    : m_device{aDevice}
+    , m_parent{&aParent}
 {
   m_name = std::move(name);
   m_oscAddressCache = ossia::net::osc_parameter_string(*this);
 }
 
-generic_node_base::generic_node_base(
-    std::string name, ossia::net::device_base& aDevice)
+generic_node_base::generic_node_base(std::string name, ossia::net::device_base& aDevice)
     : m_device{aDevice}
 {
   m_name = std::move(name);
@@ -44,7 +42,8 @@ node_base* generic_node_base::get_parent() const
 void generic_node_base::on_address_change()
 {
   m_oscAddressCache = ossia::net::osc_parameter_string(*this);
-  for (auto& cld : m_children)
+  read_lock_t lock{m_mutex};
+  for(auto& cld : m_children)
   {
     cld->on_address_change();
   }
@@ -53,9 +52,9 @@ void generic_node_base::on_address_change()
 node_base& generic_node_base::set_name(std::string name)
 {
   auto old_name = std::move(m_name);
-  if (m_parent)
+  if(m_parent)
   {
-    read_lock_t lock{m_mutex};
+    read_lock_t lock{m_parent->m_mutex};
     sanitize_name(name, m_parent->unsafe_children());
     m_name = name;
   }
@@ -72,8 +71,7 @@ node_base& generic_node_base::set_name(std::string name)
   return *this;
 }
 
-generic_node::generic_node(
-    std::string name, device_base& aDevice, node_base& aParent)
+generic_node::generic_node(std::string name, device_base& aDevice, node_base& aParent)
     : generic_node_base{std::move(name), aDevice, aParent}
 {
 }
@@ -97,19 +95,17 @@ ossia::net::parameter_base* generic_node::get_parameter() const
   return m_parameter.get();
 }
 
-void generic_node::set_parameter(
-    std::unique_ptr<ossia::net::parameter_base> addr)
+void generic_node::set_parameter(std::unique_ptr<ossia::net::parameter_base> addr)
 {
   remove_parameter();
-  if (addr)
+  if(addr)
   {
     m_parameter = std::move(addr);
     m_device.on_parameter_created(*m_parameter);
   }
 }
 
-ossia::net::parameter_base*
-generic_node::create_parameter(ossia::val_type type)
+ossia::net::parameter_base* generic_node::create_parameter(ossia::val_type type)
 {
   if(!m_parameter)
   {
@@ -131,7 +127,7 @@ generic_node::create_parameter(ossia::val_type type)
 bool generic_node::remove_parameter()
 {
   // use the device protocol to stop address value observation
-  if (m_parameter)
+  if(m_parameter)
   {
     // notify observers
     auto addr = std::move(m_parameter);
@@ -149,6 +145,5 @@ std::unique_ptr<ossia::net::node_base>
 generic_node::make_child(const std::string& name_base)
 {
   return std::make_unique<generic_node>(name_base, m_device, *this);
-}
 }
 }

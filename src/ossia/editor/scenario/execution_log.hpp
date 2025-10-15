@@ -1,16 +1,17 @@
 #pragma once
 #include <ossia/detail/config.hpp>
 
-#if 0//!defined(NDEBUG)
+#if 0 //! defined(NDEBUG)
 #define OSSIA_EXECUTION_LOG 1
-#include <ossia/detail/json.hpp>
-#include <ossia/dataflow/token_request.hpp>
-#include <ossia/dataflow/graph_node.hpp>
 #include <ossia/dataflow/graph/graph_utils.hpp>
+#include <ossia/dataflow/graph_node.hpp>
+#include <ossia/dataflow/token_request.hpp>
+#include <ossia/detail/json.hpp>
+
 #include <rapidjson/prettywriter.h>
-#include <iostream>
+
 #include <functional>
-#include <fstream>
+
 namespace ossia
 {
 struct on_destruct {

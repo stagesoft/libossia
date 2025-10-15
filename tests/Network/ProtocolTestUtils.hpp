@@ -6,7 +6,7 @@
 #include <ossia/network/generic/generic_device.hpp>
 
 #include <thread>
-#include <catch.hpp>
+#include "include_catch.hpp"
 #include "TestUtils.hpp"
 
 using namespace ossia;
@@ -22,13 +22,10 @@ struct matching_domain<ossia::val_type::BOOL>
 { using type = ossia::domain_base<bool>; };
 template<>
 struct matching_domain<ossia::val_type::INT>
-{ using type = ossia::domain_base<int>; };
+{ using type = ossia::domain_base<int32_t>; };
 template<>
 struct matching_domain<ossia::val_type::FLOAT>
 { using type = ossia::domain_base<float>; };
-template<>
-struct matching_domain<ossia::val_type::CHAR>
-{ using type = ossia::domain_base<char>; };
 template<>
 struct matching_domain<ossia::val_type::STRING>
 { using type = ossia::domain_base<std::string>; };
@@ -45,6 +42,7 @@ template<>
 struct matching_domain<ossia::val_type::VEC4F>
 { using type = ossia::vecf_domain<4>; };
 
+static constexpr int NUM_ADDRESSES_TO_TEST = ((int) ossia::val_type::MAP);
 const std::vector<ossia::value> value_to_test{
     ossia::impulse{},
     int32_t{0},
@@ -59,7 +57,7 @@ const std::vector<ossia::value> value_to_test{
     char{'a'},
     std::string{""},
     std::string{"Welcome to the wonderful ossia world!"},
-    std::vector<ossia::value>{},
+    ossia::value(std::vector<ossia::value>{}),
     std::vector<ossia::value>{ossia::impulse{}},
     std::vector<ossia::value>{ossia::impulse{}, ossia::impulse{}},
     std::vector<ossia::value>{int32_t{0}},
@@ -84,7 +82,7 @@ struct remote_data
     local_device{local_proto(), "score" },
     remote_device{remote_proto(), "score-remote"}
   {
-    int N = 10;
+    int N = NUM_ADDRESSES_TO_TEST;
 
     for(int i = 0; i < N; i++)
     {
@@ -124,10 +122,10 @@ struct remote_data
 
 
 void push_all_values(
-        int N,
         std::vector<std::vector<ossia::net::parameter_base*>>& local_addr,
         std::vector<std::vector<ossia::net::parameter_base*>> & remote_addr)
 {
+  int N = NUM_ADDRESSES_TO_TEST;
   for(int i = 0; i < N; i++)
   {
     int j = 0;
@@ -179,10 +177,10 @@ void push_all_values(
 // In this case we don't do checking yet as there are a lot of possible cases -
 // the parameters are set with their default domains
 void push_all_values_domain(
-        int N,
         std::vector<std::vector<ossia::net::parameter_base*>>& local_addr,
         std::vector<std::vector<ossia::net::parameter_base*>> & remote_addr)
 {
+  int N = NUM_ADDRESSES_TO_TEST;
   for(int i = 0; i < N; i++)
   {
     int j = 0;
@@ -233,13 +231,13 @@ void test_comm_generic(
     FunProto1 local_proto,
     FunProto2 remote_proto)
 {
-  int N = 10;
+  int N = NUM_ADDRESSES_TO_TEST;
   remote_data rem{std::move(local_proto), std::move(remote_proto)};
   auto& local_addr = rem.local_addr;
   auto& remote_addr = rem.remote_addr;
 
 
-  push_all_values(N, local_addr, remote_addr);
+  push_all_values(local_addr, remote_addr);
 
 
   for(const auto& vec : local_addr)
@@ -257,7 +255,7 @@ void test_comm_generic(
     }
   }
 
-  push_all_values(N, local_addr, remote_addr);
+  push_all_values(local_addr, remote_addr);
 
 
   auto test_all_values = [&] (std::vector<ossia::net::parameter_base*>& vec)
@@ -269,7 +267,7 @@ void test_comm_generic(
         vec[i]->set_access(access_mode(access_i));
       }
 
-      push_all_values_domain(N, local_addr, remote_addr);
+      push_all_values_domain(local_addr, remote_addr);
       for(int bounding_i = 0 ; bounding_i < 6; bounding_i++)
       {
         for(int i = 0; i < N; i++)
@@ -277,14 +275,14 @@ void test_comm_generic(
           vec[i]->set_bounding(bounding_mode(bounding_i));
         }
 
-        push_all_values_domain(N, local_addr, remote_addr);
+        push_all_values_domain(local_addr, remote_addr);
 
         for(int domain_i = 0; domain_i < N; domain_i++)
         {
           vec[domain_i]->set_domain(init_domain(ossia::val_type(domain_i)));
         }
 
-        push_all_values_domain(N, local_addr, remote_addr);
+        push_all_values_domain(local_addr, remote_addr);
 
 
         for(int domain_i = 0; domain_i < N; domain_i++)
@@ -294,7 +292,7 @@ void test_comm_generic(
           vec[domain_i]->set_domain(dom);
         }
 
-        push_all_values_domain(N, local_addr, remote_addr);
+        push_all_values_domain(local_addr, remote_addr);
 
       }
     }

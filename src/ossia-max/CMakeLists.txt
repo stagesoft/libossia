@@ -14,9 +14,13 @@ elseif(WIN32)
     set(CMAKE_INSTALL_RPATH  "\$ORIGIN/../support;\$ORIGIN")
 endif()
 
+if(Git_FOUND)
 if(${MAXSDK_PATH} STREQUAL "${OSSIA_3RDPARTY_FOLDER}/max-sdk")
-  execute_process(COMMAND git submodule update --init -- ${OSSIA_3RDPARTY_FOLDER}/max-sdk
-            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+  execute_process(
+      COMMAND "${GIT_EXECUTABLE}" submodule update --init -- ${OSSIA_3RDPARTY_FOLDER}/max-sdk
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+      COMMAND_ERROR_IS_FATAL ANY)
+endif()
 endif()
 
 set(MAXSDK_MAX_INCLUDE_DIR "${MAXSDK_PATH}/source/c74support/max-includes")
@@ -35,6 +39,8 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 set(PROJECT_SRCS
     src/assert.hpp
     src/assert.cpp
+    src/ocue.hpp
+    src/ocue.cpp
     src/ossia-max.cpp
     src/ossia-max.hpp
     src/object_base.cpp
@@ -95,8 +101,13 @@ target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
 
 use_gold(${PROJECT_NAME})
 add_linker_warnings_external(${PROJECT_NAME})
+ossia_set_visibility(${PROJECT_NAME})
 
-target_link_libraries(${PROJECT_NAME} PRIVATE ossia ${MAXSDK_API_LIBRARY})
+target_link_libraries(${PROJECT_NAME} PRIVATE ossia
+  $<LINK_ONLY:$<$<BOOL:${WIN32}>:${MAXSDK_API_LIBRARY}>>
+  $<LINK_ONLY:re2::re2>
+  $<LINK_ONLY:websocketpp::websocketpp>
+)
 
 generate_export_header(${PROJECT_NAME})
 
@@ -110,7 +121,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 if(APPLE)
     target_compile_definitions(${PROJECT_NAME} PRIVATE MAC_VERSION)
     target_include_directories(${PROJECT_NAME} PRIVATE ${FILE_H_DIR})
-    target_compile_options(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-std=c++1z>)
+    target_compile_options(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-std=c++2a>)
     target_link_libraries(${PROJECT_NAME} PRIVATE -Wl,-undefined,dynamic_lookup)
 elseif(WIN32)
     target_compile_definitions(${PROJECT_NAME} PRIVATE WIN_VERSION _CRT_SECURE_NO_WARNINGS)
@@ -154,6 +165,7 @@ set(OSSIA_EXT_LIST
     ossia.monitor
     ossia.assert
     ossia.equals
+    ossia.cue
 )
 set(OSSIA_MAX_SYMBOLS "")
 foreach(ossiaExt ${OSSIA_EXT_LIST})
@@ -170,13 +182,13 @@ endforeach()
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/package-info.json.in" "${CMAKE_CURRENT_BINARY_DIR}/package-info.json" @ONLY)
 
 # We only export the Max required symbols.
-# This is of utmost importance for support in Max4Live : ossia and Ableton Live both use 
+# This is of utmost importance for support in Max4Live : ossia and Ableton Live both use
 # boost.asio, which leads to conflicts at runtime
 if(APPLE AND CMAKE_BUILD_TYPE MATCHES Release)
   file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/symbols.txt" "${OSSIA_MAX_SYMBOLS}\n")
   get_property(FLODSF TARGET ossia-max PROPERTY LINK_FLAGS)
   set_property(TARGET ossia-max APPEND PROPERTY
-    LINK_FLAGS 
+    LINK_FLAGS
       "-s -exported_symbols_list '${CMAKE_CURRENT_BINARY_DIR}/symbols.txt'")
   get_property(FLODSF TARGET ossia-max PROPERTY LINK_FLAGS)
 endif()

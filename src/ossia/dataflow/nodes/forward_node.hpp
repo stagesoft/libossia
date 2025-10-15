@@ -1,8 +1,8 @@
 #pragma once
-#include <ossia/dataflow/graph_node.hpp>
-#include <ossia/dataflow/port.hpp>
 #include <ossia/dataflow/audio_port.hpp>
+#include <ossia/dataflow/graph_node.hpp>
 #include <ossia/dataflow/midi_port.hpp>
+#include <ossia/dataflow/port.hpp>
 namespace ossia::nodes
 {
 class forward_node : public ossia::nonowning_graph_node
@@ -16,6 +16,7 @@ public:
     // m_outlets.push_back(&midi_out);
   }
 
+  [[nodiscard]] std::string label() const noexcept override { return "forward_node"; }
   void run(const token_request& t, exec_state_facade) noexcept override
   {
     // OPTIMIZEME : we copy the ins & outs of the token more
@@ -72,10 +73,7 @@ public:
       m_inlets.resize(1);
     }
   }
-  std::string label() const noexcept override
-  {
-    return "Interval";
-  }
+  [[nodiscard]] std::string label() const noexcept override { return "Interval"; }
 
   void run(const token_request& t, exec_state_facade f) noexcept override
   {
@@ -108,18 +106,12 @@ class loop final : public forward_node
 {
 public:
   using forward_node::forward_node;
-  std::string label() const noexcept override
-  {
-    return "Loop";
-  }
+  [[nodiscard]] std::string label() const noexcept override { return "Loop"; }
 };
 class scenario final : public forward_node
 {
 public:
   using forward_node::forward_node;
-  std::string label() const noexcept override
-  {
-    return "Scenario";
-  }
+  [[nodiscard]] std::string label() const noexcept override { return "Scenario"; }
 };
 }

@@ -6,16 +6,12 @@
 
 namespace ossia
 {
-constant_curve::~constant_curve()
-{
-}
+constant_curve::~constant_curve() = default;
 }
 
 namespace ossia
 {
-curve_abstract::~curve_abstract()
-{
-}
+curve_abstract::~curve_abstract() = default;
 
 void behavior::reset()
 {
@@ -23,19 +19,17 @@ void behavior::reset()
   {
     void operator()(const curve_ptr& p)
     {
-      if (p)
+      if(p)
         p->reset();
     }
 
     void operator()(const std::vector<behavior>& p)
     {
-      for (auto& b : p)
+      for(auto& b : p)
         ossia::apply_nonnull(*this, b);
     }
 
-    void operator()()
-    {
-    }
+    void operator()() { }
   };
 
   ossia::apply(behavior_reset{}, *this);

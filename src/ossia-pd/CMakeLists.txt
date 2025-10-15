@@ -14,20 +14,24 @@ message(STATUS "Update ossia-pd dependencies: pure-data and CicmWrapper")
 if(OSSIA_PURR_DATA)
   if(NOT EXISTS "${OSSIA_3RDPARTY_FOLDER}/purr-data")
     execute_process(COMMAND git clone --recursive -j16 https://github.com/jcelerier/purr-data
-                    WORKING_DIRECTORY "${OSSIA_3RDPARTY_FOLDER}")
+                    WORKING_DIRECTORY "${OSSIA_3RDPARTY_FOLDER}"
+                    COMMAND_ERROR_IS_FATAL ANY)
   endif()
 else()
   if(NOT EXISTS "${OSSIA_3RDPARTY_FOLDER}/pure-data")
     execute_process(COMMAND git clone --recursive -j16 https://github.com/pure-data/pure-data
-                    WORKING_DIRECTORY "${OSSIA_3RDPARTY_FOLDER}")
+                    WORKING_DIRECTORY "${OSSIA_3RDPARTY_FOLDER}"
+                    COMMAND_ERROR_IS_FATAL ANY)
     execute_process(COMMAND git checkout 0.49-0
-                    WORKING_DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/pure-data")
+                    WORKING_DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/pure-data"
+                    COMMAND_ERROR_IS_FATAL ANY)
   endif()
 endif()
 
 if(NOT EXISTS "${OSSIA_3RDPARTY_FOLDER}/CicmWrapper")
   execute_process(COMMAND git clone --recursive -j16 https://github.com/jcelerier/CicmWrapper
-                  WORKING_DIRECTORY "${OSSIA_3RDPARTY_FOLDER}")
+                  WORKING_DIRECTORY "${OSSIA_3RDPARTY_FOLDER}"
+                  COMMAND_ERROR_IS_FATAL ANY)
 endif()
 
 
@@ -142,7 +146,7 @@ endif()
 add_linker_warnings_external(${PROJECT_NAME})
 
 if(NOT MSVC)
-    target_compile_options(${PROJECT_NAME} PRIVATE -std=c++14)
+    target_compile_options(${PROJECT_NAME} PRIVATE -std=c++20)
 endif()
 
 # Win32 uses DLL as a suffix for pd externals
@@ -169,7 +173,7 @@ elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES ".*64.*")
 elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES ".*86.*")
   set(ARCH_SUFFIX "i386")
 else()
-  message(FATAL "Could not determine target architecture")  
+  message(FATAL "Could not determine target architecture")
 endif()
 
 set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".${PLATFORM_SUFFIX}_${ARCH_SUFFIX}")

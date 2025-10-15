@@ -12,9 +12,7 @@
 #include <thread>
 #include <vector>
 
-namespace ossia
-{
-namespace net
+namespace ossia::net
 {
 
 struct parameter_data;
@@ -32,7 +30,7 @@ protected:
   ossia::bounding_mode m_boundingMode{};
 
   mutable mutex_t m_valueMutex;
-  ossia::value m_value;
+  ossia::value m_value TS_GUARDED_BY(m_valueMutex);
 
   ossia::domain m_domain;
 
@@ -43,12 +41,16 @@ public:
 
   ~generic_parameter();
 
+  ossia::net::protocol_base& get_protocol() const noexcept override
+  {
+    return m_protocol;
+  }
+
   void pull_value() final override;
   std::future<void> pull_value_async() final override;
   void request_value() final override;
 
-  ossia::net::generic_parameter&
-  push_value(const ossia::value&) final override;
+  ossia::net::generic_parameter& push_value(const ossia::value&) final override;
   ossia::net::generic_parameter& push_value(ossia::value&&) final override;
   ossia::net::generic_parameter& push_value() final override;
 
@@ -62,22 +64,19 @@ public:
   ossia::value set_value_quiet(ossia::value&&) override;
   void set_value_quiet(const ossia::destination&);
 
-  ossia::val_type get_value_type() const final override;
-  ossia::net::generic_parameter&
-      set_value_type(ossia::val_type) final override;
+  ossia::val_type get_value_type() const noexcept final override;
+  ossia::net::generic_parameter& set_value_type(ossia::val_type) final override;
 
-  ossia::access_mode get_access() const final override;
+  ossia::access_mode get_access() const noexcept final override;
   ossia::net::generic_parameter& set_access(ossia::access_mode) final override;
 
-  const ossia::domain& get_domain() const final override;
-  ossia::net::generic_parameter&
-  set_domain(const ossia::domain&) final override;
+  const ossia::domain& get_domain() const noexcept final override;
+  ossia::net::generic_parameter& set_domain(const ossia::domain&) final override;
 
-  ossia::bounding_mode get_bounding() const final override;
-  ossia::net::generic_parameter&
-      set_bounding(ossia::bounding_mode) final override;
+  ossia::bounding_mode get_bounding() const noexcept final override;
+  ossia::net::generic_parameter& set_bounding(ossia::bounding_mode) final override;
 
-  bool filter_value(const ossia::value& val) const final override;
+  bool filter_value(const ossia::value& val) const noexcept final override;
 
   generic_parameter& set_unit(const ossia::unit_t& v) final override;
 
@@ -87,5 +86,4 @@ public:
 private:
   friend struct update_parameter_visitor;
 };
-}
 }

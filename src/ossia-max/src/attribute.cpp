@@ -1,33 +1,26 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check it.
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
+#include <ossia/network/common/path.hpp>
+
 #include <ossia-max/src/attribute.hpp>
 #include <ossia-max/src/ossia-max.hpp>
 #include <ossia-max/src/utils.hpp>
-
-#include <ossia/network/common/path.hpp>
 
 using namespace ossia::max_binding;
 
 extern "C" void ossia_attribute_setup()
 {
-  auto c = class_new( "ossia.attribute",
-      (method)attribute::create,
-      (method)attribute::destroy,
-      (long)sizeof(attribute), 0L,
-      A_GIMME, 0);
+  auto c = class_new(
+      "ossia.attribute", (method)attribute::create, (method)attribute::destroy,
+      (long)sizeof(attribute), 0L, A_GIMME, 0);
 
   parameter_base::class_setup(c);
 
-  class_addmethod(
-        c, (method)attribute::assist,
-        "assist", A_CANT, 0);
-  class_addmethod(
-        c, (method)attribute::notify,
-        "notify", A_CANT, 0);
+  class_addmethod(c, (method)attribute::assist, "assist", A_CANT, 0);
+  class_addmethod(c, (method)parameter_base::notify, "notify", A_CANT, 0);
 
-  class_addmethod(c, (method) parameter_base::get_mess_cb, "get",  A_SYM, 0);
-  class_addmethod(c, (method) address_mess_cb<attribute>, "address",   A_SYM, 0);
-
+  class_addmethod(c, (method)parameter_base::get_mess_cb, "get", A_SYM, 0);
+  class_addmethod(c, (method)address_mess_cb<attribute>, "address", A_SYM, 0);
 
   class_register(CLASS_BOX, c);
 
@@ -40,10 +33,9 @@ namespace ossia
 namespace max_binding
 {
 
-
 void attribute::assist(attribute* x, void* b, long m, long a, char* s)
 {
-  if (m == ASSIST_INLET)
+  if(m == ASSIST_INLET)
   {
     sprintf(s, "Remote parameter attribute messages");
   }
@@ -54,86 +46,93 @@ void attribute::assist(attribute* x, void* b, long m, long a, char* s)
       case 0:
         sprintf(s, "Remote parameter attribute value");
         break;
-      default:
-        ;
+      default:;
     }
   }
 }
 
-t_max_err attribute::notify(attribute *x, t_symbol *s,
-                            t_symbol *msg, void *sender, void *data)
+void attribute::on_device_removing(device_base* obj)
 {
-  t_symbol *attrname;
+  auto dev = obj->m_device.get();
+  dev->on_parameter_created.disconnect<&attribute::on_parameter_created_callback>(this);
+  dev->on_node_renamed.disconnect<&attribute::on_node_renamed_callback>(this);
+}
 
-  if (!x->m_lock && msg == gensym("attr_modified")) {
-    attrname = (t_symbol *)object_method((t_object *)data, gensym("getname"));
+void attribute::on_device_created(device_base* obj)
+{
+  auto dev = obj->m_device.get();
+  // no need to connect to on_node_removing because ossia::max::matcher
+  // already connect to it
+  dev->on_parameter_created.connect<&attribute::on_parameter_created_callback>(this);
+  dev->on_node_renamed.connect<&attribute::on_node_renamed_callback>(this);
+}
 
-    if ( attrname == gensym("unit") )
-      x->set_unit();
-    else if ( attrname == gensym("type") )
-      x->set_type();
-    else
-      parameter_base::notify(x, s, msg, sender, data);
-  }
-  return 0;
+void wrapper(void* x)
+{
+  if(ossia_max::instance().config.autoregister)
+    static_cast<attribute*>(x)->do_registration();
+}
+
+void attribute::on_node_renamed_callback(ossia::net::node_base& node, const std::string&)
+{
+  // first remove the matcher with old name
+  remove_matchers(node);
+
+  schedule(this, (method)wrapper, 0, nullptr, 0, nullptr);
+}
+
+void attribute::on_parameter_created_callback(const ossia::net::parameter_base& addr)
+{
+  schedule(this, (method)wrapper, 0, nullptr, 0, nullptr);
 }
 
 void attribute::do_registration()
 {
-  m_registered = true;
+  return;
+  if(m_name && std::string_view(m_name->s_name) != "")
+  {
+    clear_and_init_registration();
 
-  m_matchers = find_or_create_matchers();
-  set_matchers_index();
-
-  m_selection_path.reset();
-  fill_selection();
+    m_registered = true;
+  }
 }
 
 void attribute::unregister()
 {
-  m_node_selection.clear();
-  m_matchers.clear();
-
-  ossia_max::instance().nr_attributes.push_back(this);
-
-  if(m_dev)
+  auto copy = m_matchers;
+  for(auto& m : copy)
   {
-    m_dev->on_parameter_created.disconnect<&attribute::on_parameter_created_callback>(this);
-    m_dev->get_root_node().about_to_be_deleted.disconnect<&attribute::on_device_deleted>(this);
-  }
-  m_dev = nullptr;
-}
-
-void attribute::on_parameter_created_callback(const ossia::net::parameter_base& param)
-{
-  auto& node = param.get_node();
-
-  for(auto p : m_paths)
-  {
-    auto path = ossia::traversal::make_path(p);
-    if( path && ossia::traversal::match(*path, node) )
+    if(m->is_locked())
     {
-      m_matchers.emplace_back(std::make_shared<matcher>(&node,this));
-      int size = m_matchers.size();
-      m_matchers[size-1]->m_index = size;
-      fill_selection();
+      m->set_zombie();
+    }
+    else
+    {
+      ossia::remove_erase(m_matchers, m);
     }
   }
-}
 
-void attribute::on_device_deleted(const net::node_base &)
-{
-  m_dev = nullptr;
+  m_registered = false;
 }
 
 void* attribute::create(t_symbol* name, int argc, t_atom* argv)
 {
   auto x = make_ossia<attribute>();
 
-  if (x)
+  if(x)
   {
     critical_enter(0);
     ossia_max::get_patcher_descriptor(x->m_patcher).attributes.push_back(x);
+
+    device_base::on_device_created.connect<&attribute::on_device_created>(x);
+    device_base::on_device_removing.connect<&attribute::on_device_removing>(x);
+
+    std::vector<ossia::net::generic_device*> devs = get_all_devices();
+    for(auto dev : devs)
+    {
+      dev->on_parameter_created.connect<&attribute::on_parameter_created_callback>(x);
+      dev->on_node_renamed.connect<&attribute::on_node_renamed_callback>(x);
+    }
 
     x->m_otype = object_class::attribute;
     x->m_dumpout = outlet_new(x, NULL);
@@ -143,9 +142,9 @@ void* attribute::create(t_symbol* name, int argc, t_atom* argv)
 
     // check name argument
     x->m_name = _sym_nothing;
-    if (attrstart && argv)
+    if(attrstart && argv)
     {
-      if (atom_gettype(argv) == A_SYM)
+      if(atom_gettype(argv) == A_SYM)
       {
         x->m_name = atom_getsym(argv);
         x->m_addr_scope = ossia::net::get_address_scope(x->m_name->s_name);
@@ -160,7 +159,7 @@ void* attribute::create(t_symbol* name, int argc, t_atom* argv)
     // https://cycling74.com/forums/notify-when-attribute-changes
     object_attach_byptr_register(x, x, CLASS_BOX);
 
-    defer_low(x, (method) object_base::loadbang, nullptr, 0, nullptr);
+    defer_low(x, (method)object_base::loadbang, nullptr, 0, nullptr);
 
     critical_exit(0);
   }
@@ -174,20 +173,14 @@ void attribute::destroy(attribute* x)
   x->m_dead = true;
   x->unregister();
 
-  bool is_pattern;
-
-  for(auto& p : x->m_paths)
+  for(auto dev : get_all_devices())
   {
-    is_pattern = ossia::traversal::is_pattern(p);
-    if(is_pattern)
-      break;
+    dev->on_parameter_created.disconnect<&attribute::on_parameter_created_callback>(x);
+    dev->on_node_renamed.disconnect<&attribute::on_node_renamed_callback>(x);
   }
 
-  if(is_pattern && x->m_dev)
-  {
-    x->m_dev->on_parameter_created.disconnect<&attribute::on_parameter_created_callback>(x);
-    x->m_dev->get_root_node().about_to_be_deleted.disconnect<&attribute::on_device_deleted>(x);
-  }
+  device_base::on_device_created.disconnect<&attribute::on_device_created>(x);
+  device_base::on_device_removing.disconnect<&attribute::on_device_removing>(x);
 
   outlet_delete(x->m_dumpout);
   x->~attribute();

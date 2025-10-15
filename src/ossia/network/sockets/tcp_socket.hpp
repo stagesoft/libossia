@@ -1,11 +1,14 @@
 #pragma once
+#include <ossia/network/context.hpp>
 #include <ossia/network/sockets/configuration.hpp>
+
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ip/udp.hpp>
-#include <boost/asio/write.hpp>
 #include <boost/asio/local/datagram_protocol.hpp>
 #include <boost/asio/placeholders.hpp>
+#include <boost/asio/strand.hpp>
+#include <boost/asio/write.hpp>
 
 #include <nano_signal_slot.hpp>
 
@@ -25,28 +28,30 @@ public:
   explicit tcp_listener(proto::socket sock)
       : m_socket{std::move(sock)}
   {
-
   }
 
   void close()
   {
+    // FIXME async?
+    try
+    {
+      m_socket.shutdown(boost::asio::ip::udp::socket::shutdown_both);
+    }
+    catch(...)
+    {
+    }
     m_socket.close();
   }
 
   void write(const boost::asio::const_buffer& buf)
   {
-    boost::asio::write(m_socket, buf);
+    boost::system::error_code ec;
+    boost::asio::write(m_socket, buf, ec);
   }
 
-  void on_close()
-  {
+  void on_close() { }
 
-  }
-
-  void on_fail()
-  {
-
-  }
+  void on_fail() { }
 
   proto::socket m_socket;
 };
@@ -58,9 +63,17 @@ public:
   using socket = typename proto::socket;
   using listener = tcp_listener;
 
-  tcp_server(const socket_configuration& conf, boost::asio::io_context& ctx)
-      : m_context {ctx}
-      , m_acceptor {ctx, proto::endpoint{boost::asio::ip::make_address(conf.host), conf.port}}
+  tcp_server(const inbound_socket_configuration& conf, boost::asio::io_context& ctx)
+      : m_context{ctx}
+      , m_acceptor{
+            boost::asio::make_strand(ctx),
+            proto::endpoint{boost::asio::ip::make_address(conf.bind), conf.port}}
+  {
+  }
+
+  tcp_server(
+      const inbound_socket_configuration& conf, ossia::net::network_context_ptr ctx)
+      : tcp_server{conf, ctx->context}
   {
   }
 
@@ -74,27 +87,47 @@ public:
   using proto = boost::asio::ip::tcp;
   using socket = typename proto::socket;
 
-  tcp_client(const socket_configuration& conf, boost::asio::io_context& ctx)
-      : m_context {ctx}
-      , m_endpoint {boost::asio::ip::make_address(conf.host), conf.port}
-      , m_socket {ctx}
+  tcp_client(const outbound_socket_configuration& conf, boost::asio::io_context& ctx)
+      : m_context{ctx}
+      , m_endpoint{boost::asio::ip::make_address(conf.host), conf.port}
+      , m_socket{boost::asio::make_strand(ctx)}
   {
   }
 
   void connect()
   {
-    m_socket.connect(m_endpoint);
-    on_open();
+    boost::system::error_code ec;
+    m_socket.set_option(boost::asio::ip::tcp::no_delay{true}, ec);
+    m_socket.set_option(boost::asio::socket_base::reuse_address{true}, ec);
+
+    m_socket.async_connect(
+        m_endpoint, [this](const boost::system::error_code& ec, auto&&...) {
+      if(m_socket.is_open() && !ec)
+      {
+        m_connected = true;
+        on_open();
+      }
+      else
+      {
+        m_connected = false;
+        puts(ec.message().c_str());
+        on_fail();
+      }
+    });
   }
 
-  bool connected() const
-  {
-    return m_connected;
-  }
+  bool connected() const { return m_connected; }
 
   void close()
   {
-    m_context.post([this] {
+    boost::asio::post(m_context, [this] {
+      try
+      {
+        m_socket.shutdown(boost::asio::ip::udp::socket::shutdown_both);
+      }
+      catch(...)
+      {
+      }
       m_socket.close();
       on_close();
     });
@@ -102,7 +135,8 @@ public:
 
   void write(const char* data, std::size_t sz)
   {
-    boost::asio::write(m_socket, boost::asio::buffer(data, sz));
+    boost::system::error_code ec;
+    boost::asio::write(m_socket, boost::asio::const_buffer(data, sz), ec);
   }
 
   Nano::Signal<void()> on_open;

@@ -1,9 +1,11 @@
 #pragma once
 #include <ossia/audio/audio_parameter.hpp>
 #include <ossia/audio/audio_tick.hpp>
-
 #include <ossia/detail/lockfree_queue.hpp>
+
 #include <smallfun.hpp>
+
+#include <atomic>
 
 #include <ossia-config.hpp>
 
@@ -17,7 +19,7 @@ public:
 
   virtual bool running() const = 0;
   virtual void wait(int milliseconds);
-  void stop();
+  virtual void stop();
 
   void gc();
   void sync();
@@ -42,17 +44,9 @@ public:
   int effective_inputs{};
   int effective_outputs{};
 
-  void tick_start()
-  {
-    load_audio_tick();
-  }
-  void tick_clear()
-  {
-    stop_received = true;
-  }
-  void tick_end()
-  {
-  }
+  void tick_start() { load_audio_tick(); }
+  void tick_clear() { stop_received = true; }
+  void tick_end() { }
 
 private:
   std::shared_ptr<audio_engine> self;
@@ -60,10 +54,8 @@ private:
   std::atomic_int64_t reply{-1};
 };
 
-
-
 OSSIA_EXPORT
 ossia::audio_engine* make_audio_engine(
-    std::string proto, std::string name, std::string req_in,
-    std::string req_out, int& inputs, int& outputs, int& rate, int& bs);
+    std::string proto, std::string name, std::string req_in, std::string req_out,
+    int& inputs, int& outputs, int& rate, int& bs);
 }

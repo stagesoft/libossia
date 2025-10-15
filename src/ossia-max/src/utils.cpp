@@ -1,8 +1,12 @@
 #include "utils.hpp"
 
-#include <ossia/network/common/path.hpp>
-#include <boost/algorithm/string/predicate.hpp>
+#include "ocue.hpp"
 #include "ossia-max.hpp"
+
+#include <ossia/network/common/path.hpp>
+
+#include <boost/algorithm/string/predicate.hpp>
+
 #include <algorithm> // std::lexicographical_compare
 
 namespace ossia
@@ -17,23 +21,26 @@ std::vector<ossia::net::generic_device*> get_all_devices()
   devs.reserve(instance.devices.size() + instance.clients.size() + 1);
   devs.push_back(instance.get_default_device().get());
 
-  for (auto device_obj : instance.devices.reference())
+  for(auto device_obj : instance.devices.reference())
   {
     auto dev = device_obj->m_device;
-    if (dev)
+    if(dev && !ossia::contains(devs, dev.get()))
+    {
       devs.push_back(dev.get());
+    }
   }
 
   for(auto client_obj : instance.clients.reference())
   {
     auto dev = client_obj->m_device;
-    if (dev)
+    if(dev && !ossia::contains(devs, dev.get()))
+    {
       devs.push_back(dev.get());
+    }
   }
 
   return devs;
 }
-
 
 std::vector<parameter_base*> list_all_objects_recursively(t_object* patcher)
 {
@@ -78,14 +85,14 @@ std::vector<ossia::net::priority> get_priority_list(ossia::net::node_base* node)
   return priorities;
 }
 
-void fire_values_by_priority(std::vector<node_priority>& priority_graph, bool only_default = false)
+void fire_values_by_priority(
+    std::vector<node_priority>& priority_graph, bool only_default = false)
 {
   // keep only BI and not impulse (with default value, optionally)
-  ossia::remove_erase_if(priority_graph, [only_default](const node_priority& np){
+  ossia::remove_erase_if(priority_graph, [only_default](const node_priority& np) {
     auto param = np.obj->get_node()->get_parameter();
-    if(param
-    && param->get_access() == ossia::access_mode::BI
-    && param->get_value_type() != ossia::val_type::IMPULSE)
+    if(param && param->get_access() == ossia::access_mode::BI
+       && param->get_value_type() != ossia::val_type::IMPULSE)
     {
       if(only_default)
       {
@@ -99,11 +106,13 @@ void fire_values_by_priority(std::vector<node_priority>& priority_graph, bool on
   });
 
   // sort vector against all priorities
-  std::sort(priority_graph.begin(), priority_graph.end(), [](const node_priority& a, const node_priority& b){
+  std::sort(
+      priority_graph.begin(), priority_graph.end(),
+      [](const node_priority& a, const node_priority& b) {
     return std::lexicographical_compare(
-        b.priorities.begin(), b.priorities.end(),
-        a.priorities.begin(), a.priorities.end());
-  });
+        b.priorities.begin(), b.priorities.end(), a.priorities.begin(),
+        a.priorities.end());
+      });
 
   // fire values by descending priority order
   for(const auto& p : priority_graph)
@@ -155,12 +164,12 @@ void output_all_values(t_object* patcher, bool only_default)
 ossia::net::address_scope get_address_scope(ossia::string_view addr)
 {
   ossia::net::address_scope type = ossia::net::address_scope::relative;
-  if (boost::starts_with(addr, "//") )
+  if(boost::starts_with(addr, "//"))
     type = ossia::net::address_scope::relative;
-  else if ( boost::starts_with(addr, "/") )
+  else if(boost::starts_with(addr, "/"))
     type = ossia::net::address_scope::absolute;
-  else if ( addr.find(":/") != std::string::npos )
-      type = ossia::net::address_scope::global;
+  else if(addr.find(":/") != std::string::npos)
+    type = ossia::net::address_scope::global;
   return type;
 }
 
@@ -169,13 +178,13 @@ std::vector<ossia::value> attribute2value(t_atom* atom, long size)
   std::vector<ossia::value> list;
   list.reserve(size);
 
-  for (int i = 0; i < size; i++)
+  for(int i = 0; i < size; i++)
   {
-    if (atom[i].a_type == A_FLOAT)
+    if(atom[i].a_type == A_FLOAT)
       list.push_back(atom_getfloat(&atom[i]));
-    else if (atom[i].a_type == A_LONG)
+    else if(atom[i].a_type == A_LONG)
       list.push_back(static_cast<int>(atom_getlong(&atom[i])));
-    else if (atom[i].a_type == A_SYM)
+    else if(atom[i].a_type == A_SYM)
       list.push_back(std::string(atom_getsym(&atom[i])->s_name));
   }
   return list;
@@ -183,45 +192,46 @@ std::vector<ossia::value> attribute2value(t_atom* atom, long size)
 
 ossia::val_type symbol2val_type(t_symbol* s)
 {
-  if (s)
+  if(s)
   {
     ossia::string_view type = s->s_name;
 
-    if (type == "float")
+    if(type == "float")
       return ossia::val_type::FLOAT;
-    else if (type == "symbol" || type == "string")
+    else if(type == "symbol" || type == "string")
       return ossia::val_type::STRING;
-    else if (type == "int")
+    else if(type == "int")
       return ossia::val_type::INT;
-    else if (type == "vec2f")
+    else if(type == "vec2f")
       return ossia::val_type::VEC2F;
-    else if (type == "vec3f")
+    else if(type == "vec3f")
       return ossia::val_type::VEC3F;
-    else if (type == "vec4f")
+    else if(type == "vec4f")
       return ossia::val_type::VEC4F;
-    else if (type == "impulse")
+    else if(type == "impulse")
       return ossia::val_type::IMPULSE;
-    else if (type == "bool")
+    else if(type == "bool")
       return ossia::val_type::BOOL;
-    else if (type == "list")
+    else if(type == "list")
       return ossia::val_type::LIST;
-    else if (type == "char")
-      return ossia::val_type::CHAR;
+    else if(type == "map")
+      return ossia::val_type::MAP;
     else
       return ossia::val_type::NONE;
-  } else
+  }
+  else
     return ossia::val_type::FLOAT;
 }
 
 t_symbol* val_type2symbol(ossia::val_type type)
 {
-  switch (type)
+  switch(type)
   {
     case ossia::val_type::FLOAT:
-      return gensym("float");
+      return _sym_float;
       break;
     case ossia::val_type::INT:
-      return gensym("int");
+      return _sym_int;
       break;
     case ossia::val_type::VEC2F:
       return gensym("vec2f");
@@ -239,34 +249,34 @@ t_symbol* val_type2symbol(ossia::val_type type)
       return gensym("bool");
       break;
     case ossia::val_type::STRING:
-      return gensym("string");
+      return _sym_string;
       break;
     case ossia::val_type::LIST:
-      return gensym("list");
+      return _sym_list;
       break;
-    case ossia::val_type::CHAR:
-      return gensym("char");
+    case ossia::val_type::MAP:
+      return gensym("map");
       break;
     case ossia::val_type::NONE:
     default:
-      return gensym("none");
+      return _sym_none;
   }
 }
 
 ossia::bounding_mode symbol2bounding_mode(t_symbol* bounding_mode)
 {
-  if (bounding_mode == gensym("free"))
+  if(bounding_mode == gensym("free"))
     return ossia::bounding_mode::FREE;
-  else if (bounding_mode == gensym("both"))
+  else if(bounding_mode == gensym("both"))
     return ossia::bounding_mode::CLIP;
-  else if (bounding_mode == gensym("wrap"))
+  else if(bounding_mode == gensym("wrap"))
     return ossia::bounding_mode::WRAP;
-  else if (bounding_mode == gensym("fold"))
+  else if(bounding_mode == gensym("fold"))
     return ossia::bounding_mode::FOLD;
-  else if (bounding_mode == gensym("low"))
-    return ossia::bounding_mode::LOW;
-  else if (bounding_mode == gensym("high"))
-    return ossia::bounding_mode::HIGH;
+  else if(bounding_mode == gensym("low"))
+    return ossia::bounding_mode::CLAMP_LOW;
+  else if(bounding_mode == gensym("high"))
+    return ossia::bounding_mode::CLAMP_HIGH;
   else
   {
     error("unknown clip mode: %s", bounding_mode->s_name);
@@ -276,7 +286,7 @@ ossia::bounding_mode symbol2bounding_mode(t_symbol* bounding_mode)
 
 t_symbol* bounding_mode2symbol(ossia::bounding_mode bm)
 {
-  switch (bm)
+  switch(bm)
   {
     case ossia::bounding_mode::FREE:
       return gensym("free");
@@ -286,22 +296,22 @@ t_symbol* bounding_mode2symbol(ossia::bounding_mode bm)
       return gensym("wrap");
     case ossia::bounding_mode::FOLD:
       return gensym("fold");
-    case ossia::bounding_mode::LOW:
+    case ossia::bounding_mode::CLAMP_LOW:
       return gensym("low");
-    case ossia::bounding_mode::HIGH:
+    case ossia::bounding_mode::CLAMP_HIGH:
       return gensym("high");
-    default :
+    default:
       return nullptr;
   }
 }
 
 ossia::access_mode symbol2access_mode(t_symbol* access_mode)
 {
-  if (access_mode == gensym("bi") || access_mode == gensym("rw"))
+  if(access_mode == gensym("bi") || access_mode == gensym("rw"))
     return ossia::access_mode::BI;
-  else if (access_mode == gensym("get") || access_mode == gensym("r"))
+  else if(access_mode == gensym("get") || access_mode == gensym("r"))
     return ossia::access_mode::GET;
-  else if (access_mode == gensym("set") || access_mode == gensym("w"))
+  else if(access_mode == _sym_set || access_mode == gensym("w"))
     return ossia::access_mode::SET;
   else
   {
@@ -315,7 +325,7 @@ t_symbol* access_mode2symbol(ossia::access_mode mode)
   switch(mode)
   {
     case ossia::access_mode::SET:
-      return gensym("set");
+      return _sym_set;
     case ossia::access_mode::GET:
       return gensym("get");
     default:
@@ -324,14 +334,15 @@ t_symbol* access_mode2symbol(ossia::access_mode mode)
 }
 
 // TODO wrap this in a member method and rename it get_matchers(node_base* n);
-std::vector<ossia::max_binding::matcher*> make_matchers_vector(object_base* x, const ossia::net::node_base* node)
+std::vector<ossia::max_binding::matcher*>
+make_matchers_vector(object_base* x, const ossia::net::node_base* node)
 {
   std::vector<ossia::max_binding::matcher*> matchers;
-  if (node)
+  if(node)
   {
-    for (auto& m : x->m_matchers)
+    for(const auto& m : x->m_matchers)
     {
-      if (node == m->get_node() && !m->is_zombie())
+      if(node == m->get_node() && !m->is_zombie())
       {
         matchers.push_back(m.get());
         break;
@@ -354,7 +365,7 @@ std::vector<ossia::max_binding::matcher*> make_matchers_vector(object_base* x, c
 ossia::value atom2value(t_symbol* s, int argc, t_atom* argv)
 {
   // TODO unify with parameter_base::push code
-  if (argc == 1 && !s)
+  if(argc == 1 && !s)
   {
     ossia::value v;
     // convert one element array to single element
@@ -369,8 +380,7 @@ ossia::value atom2value(t_symbol* s, int argc, t_atom* argv)
       case A_LONG:
         v = static_cast<int32_t>(atom_getlong(argv));
         break;
-      default:
-        ;
+      default:;
     }
 
     return v;
@@ -378,13 +388,13 @@ ossia::value atom2value(t_symbol* s, int argc, t_atom* argv)
   else
   {
     std::vector<ossia::value> list;
-    list.reserve(argc+1);
-    if ( s && s != gensym("list") )
+    list.reserve(argc + 1);
+    if(s && s != _sym_list)
       list.push_back(std::string(s->s_name));
 
-    for (; argc > 0; argc--, argv++)
+    for(; argc > 0; argc--, argv++)
     {
-      switch (argv->a_type)
+      switch(argv->a_type)
       {
         case A_SYM:
           list.push_back(std::string(atom_getsym(argv)->s_name));
@@ -395,22 +405,40 @@ ossia::value atom2value(t_symbol* s, int argc, t_atom* argv)
         case A_LONG:
           list.push_back(static_cast<int32_t>(atom_getlong(argv)));
           break;
-        default:
-          ;
+        default:;
       }
     }
     return ossia::value(list);
   }
 }
 
-template<class T> void register_objects_by_type(const ossia::safe_set<T>& objs)
+template <class T>
+void register_unnamed_objects_by_type(const ossia::safe_set<T>& objs)
+{
+  for(auto obj : objs)
+  {
+    if(!obj->m_dead)
+    {
+      obj->m_node_selection.clear();
+      auto m = std::move(obj->m_matchers);
+      obj->m_matchers.clear();
+      m.clear();
+      obj->update_path();
+      obj->do_registration();
+    }
+  }
+}
+template <class T>
+void register_objects_by_type(const ossia::safe_set<T>& objs)
 {
   for(auto obj : objs)
   {
     if(!obj->m_dead && obj->m_name && obj->m_name != _sym_nothing)
     {
       obj->m_node_selection.clear();
+      auto m = std::move(obj->m_matchers);
       obj->m_matchers.clear();
+      m.clear();
       obj->update_path();
       obj->do_registration();
     }
@@ -430,8 +458,8 @@ void register_children_in_patcher_recursively(t_object* patcher, object_base* ca
 
   if(root_patcher != patcher)
   {
-    device_base* db = pat_desc.device?static_cast<device_base*>(pat_desc.device):
-                                      static_cast<device_base*>(pat_desc.client);
+    device_base* db = pat_desc.device ? static_cast<device_base*>(pat_desc.device)
+                                      : static_cast<device_base*>(pat_desc.client);
     if(db && db != caller && !db->m_dead)
     {
       if(db->m_device)
@@ -444,8 +472,8 @@ void register_children_in_patcher_recursively(t_object* patcher, object_base* ca
     }
   }
 
-  node_base* nb = pat_desc.model?static_cast<node_base*>(pat_desc.model):
-                                 static_cast<node_base*>(pat_desc.view);
+  node_base* nb = pat_desc.model ? static_cast<node_base*>(pat_desc.model)
+                                 : static_cast<node_base*>(pat_desc.view);
 
   if(nb && nb != caller && !nb->m_dead)
   {
@@ -453,19 +481,18 @@ void register_children_in_patcher_recursively(t_object* patcher, object_base* ca
     {
       nb->m_node_selection.clear();
       nb->m_matchers.clear();
-      // FIXME update_path shouldn't be needed here since it is called in find_or_create_matchers() during registration
+      // FIXME update_path shouldn't be needed here since it is called in
+      // find_or_create_matchers() during registration
       nb->update_path();
       switch(nb->m_otype)
       {
-        case object_class::model:
-        {
+        case object_class::model: {
           auto mdl = static_cast<model*>(nb);
           mdl->do_registration();
           register_children_in_patcher_recursively(patcher, mdl);
           break;
         }
-        case object_class::view:
-        {
+        case object_class::view: {
           auto vw = static_cast<view*>(nb);
           vw->do_registration();
           register_children_in_patcher_recursively(patcher, vw);
@@ -481,6 +508,7 @@ void register_children_in_patcher_recursively(t_object* patcher, object_base* ca
   register_objects_by_type(pat_desc.parameters);
   register_objects_by_type(pat_desc.remotes);
   register_objects_by_type(pat_desc.attributes);
+  register_unnamed_objects_by_type(pat_desc.cues);
 
   for(auto subpatcher : pat_desc.subpatchers)
   {
@@ -491,11 +519,12 @@ void register_children_in_patcher_recursively(t_object* patcher, object_base* ca
 long get_poly_index(t_object* patcher)
 {
   // check if object is inside a poly~ and retrieve voice number to update name
-  if (patcher)
+  if(patcher)
   {
-    t_object *assoc = nullptr;
+    t_object* assoc = nullptr;
     object_method(patcher, gensym("getassoc"), &assoc);
-    if (assoc) {
+    if(assoc)
+    {
       // post("found %s", object_classname(assoc)->s_name);
       // voices = object_attr_getlong(assoc, gensym("voices"));
       // post("total amount of voices: %ld", voices);
@@ -553,7 +582,7 @@ std::vector<std::string> parse_tags_symbol(t_symbol** tags_symbol, long size)
 {
   std::vector<std::string> tags;
 
-  for(int i=0;i<size;i++)
+  for(int i = 0; i < size; i++)
   {
     tags.push_back(tags_symbol[i]->s_name);
   }

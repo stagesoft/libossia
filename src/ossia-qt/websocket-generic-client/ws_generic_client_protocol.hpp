@@ -1,15 +1,16 @@
 #pragma once
-#include <ossia/network/base/protocol.hpp>
-#include <verdigris>
-#include <ossia-qt/js_utilities.hpp>
 #include <ossia/detail/logger.hpp>
 #include <ossia/network/base/protocol.hpp>
 #include <ossia/network/generic/wrapped_parameter.hpp>
+
+#include <ossia-qt/js_utilities.hpp>
 
 #include <QByteArray>
 #include <QJSValue>
 #include <QList>
 #include <QObject>
+
+#include <verdigris>
 
 class QQmlEngine;
 class QQmlComponent;
@@ -20,12 +21,11 @@ namespace ossia
 {
 namespace net
 {
-
+class WS;
 struct ws_generic_client_parameter_data_base
 {
   ws_generic_client_parameter_data_base() = default;
-  ws_generic_client_parameter_data_base(
-      const ws_generic_client_parameter_data_base&)
+  ws_generic_client_parameter_data_base(const ws_generic_client_parameter_data_base&)
       = default;
   ws_generic_client_parameter_data_base(ws_generic_client_parameter_data_base&&)
       = default;
@@ -48,21 +48,20 @@ struct ws_generic_client_parameter_data_base
 };
 
 struct ws_generic_client_parameter_data
-    : public parameter_data,
-      public ws_generic_client_parameter_data_base
+    : public parameter_data
+    , public ws_generic_client_parameter_data_base
 {
   using base_data_type = ws_generic_client_parameter_data_base;
   ws_generic_client_parameter_data() = default;
-  ws_generic_client_parameter_data(const ws_generic_client_parameter_data&)
-      = default;
+  ws_generic_client_parameter_data(const ws_generic_client_parameter_data&) = default;
   ws_generic_client_parameter_data(ws_generic_client_parameter_data&&) = default;
-  ws_generic_client_parameter_data&
-  operator=(const ws_generic_client_parameter_data&)
+  ws_generic_client_parameter_data& operator=(const ws_generic_client_parameter_data&)
       = default;
   ws_generic_client_parameter_data& operator=(ws_generic_client_parameter_data&&)
       = default;
 
-  ws_generic_client_parameter_data(const std::string& name) : parameter_data{name}
+  ws_generic_client_parameter_data(const std::string& name)
+      : parameter_data{name}
   {
   }
 
@@ -76,11 +75,12 @@ struct ws_generic_client_parameter_data
 };
 
 using ws_generic_client_parameter = wrapped_parameter<ws_generic_client_parameter_data>;
-using ws_generic_client_node = ossia::net::wrapped_node<ws_generic_client_parameter_data, ws_generic_client_parameter>;
+using ws_generic_client_node = ossia::net::wrapped_node<
+    ws_generic_client_parameter_data, ws_generic_client_parameter>;
 
 class OSSIA_EXPORT ws_generic_client_protocol final
-    : public QObject,
-      public ossia::net::protocol_base
+    : public QObject
+    , public ossia::net::protocol_base
 {
   W_OBJECT(ws_generic_client_protocol)
 
@@ -89,8 +89,7 @@ public:
 
   ws_generic_client_protocol(const ws_generic_client_protocol&) = delete;
   ws_generic_client_protocol(ws_generic_client_protocol&&) = delete;
-  ws_generic_client_protocol& operator=(const ws_generic_client_protocol&)
-      = delete;
+  ws_generic_client_protocol& operator=(const ws_generic_client_protocol&) = delete;
   ws_generic_client_protocol& operator=(ws_generic_client_protocol&&) = delete;
 
   ~ws_generic_client_protocol() override;
@@ -99,29 +98,31 @@ public:
 
   bool pull(ossia::net::parameter_base& parameter_base) override;
 
-  bool push(const ossia::net::parameter_base& parameter_base, const ossia::value& v) override;
+  bool
+  push(const ossia::net::parameter_base& parameter_base, const ossia::value& v) override;
   bool push_raw(const ossia::net::full_parameter_data& parameter_base) override;
 
   bool observe(ossia::net::parameter_base& parameter_base, bool enable) override;
 
   void set_device(ossia::net::device_base& dev) override;
 
-  static ws_generic_client_parameter_data read_data(const QJSValue& js)
-  {
-    return js;
-  }
+  static ws_generic_client_parameter_data read_data(const QJSValue& js) { return js; }
+
 public:
-  void sig_push(const ws_generic_client_parameter* arg_1, const ossia::value& v) E_SIGNAL(OSSIA_EXPORT, sig_push, arg_1, v)
+  void sig_push(const ws_generic_client_parameter* arg_1, const ossia::value& v)
+      E_SIGNAL(OSSIA_EXPORT, sig_push, arg_1, v)
+
+          private
+      : void slot_push(const ws_generic_client_parameter*, const ossia::value& v);
+  W_SLOT(slot_push);
 
 private:
-  void slot_push(const ws_generic_client_parameter*, const ossia::value& v); W_SLOT(slot_push);
-
-private:
+  void on_ready(const QString& host);
   void apply_reply(QJSValue);
 
   QQmlEngine* m_engine{};
   QQmlComponent* m_component{};
-  QObject* m_object{};
+  WS* m_object{};
 
   QWebSocket* m_websocket{};
 
@@ -130,9 +131,15 @@ private:
   QList<std::pair<QNetworkReply*, const ws_generic_client_parameter*>> m_replies;
 };
 
-using ws_generic_client_device = ossia::net::wrapped_device<ws_generic_client_node, ws_generic_client_protocol>;
+using ws_generic_client_device
+    = ossia::net::wrapped_device<ws_generic_client_node, ws_generic_client_protocol>;
 class OSSIA_EXPORT WS : public QObject
 {
+  W_OBJECT(WS)
+
+  W_INLINE_PROPERTY_VALUE(
+      bool, processFromJson, = false, processFromJson, setProcessFromJson,
+      processFromJsonChanged);
 };
 }
 }

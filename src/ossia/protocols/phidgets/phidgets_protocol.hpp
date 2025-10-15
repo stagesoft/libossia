@@ -1,11 +1,12 @@
 #pragma once
+#include <ossia/detail/config.hpp>
+
 #include <ossia/detail/hash_map.hpp>
 #include <ossia/detail/optional.hpp>
 #include <ossia/network/base/protocol.hpp>
 #include <ossia/network/phidgets/phidgets_parameter_data.hpp>
 
 #include <readerwriterqueue.h>
-#include <ossia/detail/config.hpp>
 
 namespace ossia
 {
@@ -20,7 +21,7 @@ class OSSIA_EXPORT phidget_protocol : public ossia::net::protocol_base
   std::function<void()> m_commandCb;
   moodycamel::ReaderWriterQueue<std::function<void()>> m_functionQueue;
 
-  ossia::fast_hash_map<PhidgetHandle, ossia::phidget_node*> m_phidgetMap;
+  ossia::hash_map<PhidgetHandle, ossia::phidget_node*> m_phidgetMap;
 
 public:
   phidget_protocol();

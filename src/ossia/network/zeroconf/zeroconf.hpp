@@ -13,9 +13,7 @@ namespace servus
 class Servus;
 }
 
-namespace ossia
-{
-namespace net
+namespace ossia::net
 {
 struct OSSIA_EXPORT minuit_connection_data
 {
@@ -38,9 +36,9 @@ struct OSSIA_EXPORT zeroconf_server
 {
   zeroconf_server();
   zeroconf_server(const zeroconf_server&) = delete;
-  zeroconf_server(zeroconf_server&&);
+  zeroconf_server(zeroconf_server&&) noexcept;
   zeroconf_server& operator=(const zeroconf_server&) = delete;
-  zeroconf_server& operator=(zeroconf_server&&);
+  zeroconf_server& operator=(zeroconf_server&&) noexcept;
   ~zeroconf_server();
 
   zeroconf_server(std::unique_ptr<servus::Servus> s);
@@ -84,5 +82,4 @@ OSSIA_EXPORT std::vector<oscquery_connection_data> list_oscquery_devices();
 OSSIA_EXPORT zeroconf_server make_zeroconf_server(
     std::string description, std::string service, std::string local_name,
     int32_t local_port, int32_t remote_port);
-}
 }

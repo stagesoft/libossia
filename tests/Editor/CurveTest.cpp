@@ -2,23 +2,25 @@
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 
 #include <ossia/detail/config.hpp>
+
+#include <ossia/editor/curve/curve.hpp>
 #include <ossia/editor/curve/curve_segment/linear.hpp>
 #include <ossia/editor/curve/curve_segment/power.hpp>
-#include <ossia/editor/curve/curve.hpp>
 #include <ossia/network/generic/generic_device.hpp>
 
-#include <catch2/catch.hpp>
+#include "include_catch.hpp"
+#include <catch2/catch_approx.hpp>
 
 #include <iostream>
 
 using namespace ossia;
 
-TEST_CASE ("test_basic", "test_basic")
+TEST_CASE("test_basic", "test_basic")
 {
   //! \todo test clone()
 }
 
-TEST_CASE ("test_double_float", "test_double_float")
+TEST_CASE("test_double_float", "test_double_float")
 {
   // <double, float> curve
   auto c = std::make_shared<curve<double, float>>();
@@ -63,9 +65,9 @@ TEST_CASE ("test_double_float", "test_double_float")
   REQUIRE(c->value_at(2.) == 0.);
 }
 
-TEST_CASE ("test_float_float", "test_float_float")
+TEST_CASE("test_float_float", "test_float_float")
 {
-  using Approx = Catch::Detail::Approx;
+  using Approx = Catch::Approx;
   auto c = std::make_shared<curve<float, float>>();
   REQUIRE(c != nullptr);
 
@@ -90,7 +92,7 @@ TEST_CASE ("test_float_float", "test_float_float")
   REQUIRE(c->value_at(10.) == Approx(float(0.)));
 }
 
-TEST_CASE ("test_float_int", "test_float_int")
+TEST_CASE("test_float_int", "test_float_int")
 {
   auto c = std::make_shared<curve<float, int>>();
   curve_segment_linear<int> linearSegment;
@@ -108,7 +110,7 @@ TEST_CASE ("test_float_int", "test_float_int")
   REQUIRE(c->value_at(10.) == 10);
 }
 
-TEST_CASE ("test_destination", "test_destination")
+TEST_CASE("test_destination", "test_destination")
 {
   ossia::net::generic_device device{"test"};
 

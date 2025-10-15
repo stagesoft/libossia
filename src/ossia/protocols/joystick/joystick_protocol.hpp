@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ossia/network/context_functions.hpp>
 #include <ossia/network/base/protocol.hpp>
 #include <ossia/network/common/complex_type.hpp>
 #include <ossia/network/common/device_parameter.hpp>
+#include <ossia/network/context_functions.hpp>
 #include <ossia/network/domain/domain.hpp>
 
 #include <vector>
@@ -19,6 +19,7 @@ struct OSSIA_EXPORT joystick_info
 {
   static unsigned int get_joystick_count();
   static const char* get_joystick_name(const int index);
+  static bool get_joystick_is_gamepad(const int index);
   static int32_t get_joystick_id(const int index);
   static void write_joystick_uuid(const int index, uint8_t* dst);
 
@@ -30,8 +31,11 @@ class OSSIA_EXPORT joystick_protocol final : public ossia::net::protocol_base
 {
   friend class joystick_protocol_manager;
   friend struct joystick_event_processor;
+
 public:
-  joystick_protocol(ossia::net::network_context_ptr, const int32_t joystick_id, const int joystick_index);
+  joystick_protocol(
+      ossia::net::network_context_ptr, const int32_t joystick_id,
+      const int joystick_index);
   joystick_protocol(const joystick_protocol&) = delete;
   joystick_protocol(joystick_protocol&&) = delete;
   joystick_protocol& operator=(const joystick_protocol&) = delete;

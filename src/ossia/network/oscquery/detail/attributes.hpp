@@ -6,7 +6,7 @@
 #include <ossia/network/common/parameter_properties.hpp>
 #include <ossia/network/oscquery/detail/typetag.hpp>
 
-#include <brigand/sequences/list.hpp>
+#include <boost/mp11/list.hpp>
 
 /**
  * \file ossia/network/oscquery/detail/attributes.hpp
@@ -14,9 +14,7 @@
  * This file contains mapping from the ossia attributes to the OSCQuery
  * attributes.
  */
-namespace ossia
-{
-namespace oscquery
+namespace ossia::oscquery
 {
 namespace detail
 {
@@ -227,23 +225,14 @@ constexpr auto query_value()
 struct OSSIA_EXPORT full_path_attribute
 {
   using type = std::string;
-  static auto text()
-  {
-    return detail::attribute_full_path();
-  }
-  static auto getter(const ossia::net::node_base& n)
-  {
-    return n.osc_address();
-  }
+  static auto text() { return detail::attribute_full_path(); }
+  static auto getter(const ossia::net::node_base& n) { return n.osc_address(); }
 };
 
 struct OSSIA_EXPORT typetag_attribute
 {
   using type = std::string;
-  static auto text()
-  {
-    return ossia::net::text_value_type();
-  }
+  static auto text() { return ossia::net::text_value_type(); }
   static auto getter(const ossia::net::node_base& n)
   {
     return oscquery::get_osc_typetag(n);
@@ -261,221 +250,151 @@ struct metadata;
 template <>
 struct metadata<full_path_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_full_path();
-  }
+  static constexpr auto key() { return detail::attribute_full_path(); }
 };
 template <>
 struct metadata<typetag_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_typetag();
-  }
+  static constexpr auto key() { return detail::attribute_typetag(); }
 };
 
 // common attributes
 template <>
 struct metadata<net::value_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_value();
-  }
+  static constexpr auto key() { return detail::attribute_value(); }
 };
 template <>
 struct metadata<net::domain_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_range();
-  }
+  static constexpr auto key() { return detail::attribute_range(); }
 };
 template <>
 struct metadata<net::access_mode_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_accessmode();
-  }
+  static constexpr auto key() { return detail::attribute_accessmode(); }
 };
 template <>
 struct metadata<net::bounding_mode_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_clipmode();
-  }
+  static constexpr auto key() { return detail::attribute_clipmode(); }
 };
 template <>
 struct metadata<net::unit_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_unit();
-  }
+  static constexpr auto key() { return detail::attribute_unit(); }
 };
 template <>
 struct metadata<net::default_value_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_default_value();
-  }
+  static constexpr auto key() { return detail::attribute_default_value(); }
 };
 template <>
 struct metadata<net::tags_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_tags();
-  }
+  static constexpr auto key() { return detail::attribute_tags(); }
 };
 template <>
 struct metadata<net::refresh_rate_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_refresh_rate();
-  }
+  static constexpr auto key() { return detail::attribute_refresh_rate(); }
 };
 template <>
 struct metadata<net::priority_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_priority();
-  }
+  static constexpr auto key() { return detail::attribute_priority(); }
 };
 template <>
 struct metadata<net::value_step_size_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_step_size();
-  }
+  static constexpr auto key() { return detail::attribute_step_size(); }
 };
 template <>
 struct metadata<net::instance_bounds_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_instance_bounds();
-  }
+  static constexpr auto key() { return detail::attribute_instance_bounds(); }
 };
 template <>
 struct metadata<net::critical_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_critical();
-  }
+  static constexpr auto key() { return detail::attribute_critical(); }
 };
 template <>
 struct metadata<net::hidden_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_hidden();
-  }
+  static constexpr auto key() { return detail::attribute_hidden(); }
 };
 template <>
 struct metadata<net::disabled_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_disabled();
-  }
+  static constexpr auto key() { return detail::attribute_disabled(); }
 };
 template <>
 struct metadata<net::extended_type_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_extended_type();
-  }
+  static constexpr auto key() { return detail::attribute_extended_type(); }
 };
 template <>
 struct metadata<net::description_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_description();
-  }
+  static constexpr auto key() { return detail::attribute_description(); }
 };
 template <>
 struct metadata<net::repetition_filter_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_repetition_filter();
-  }
+  static constexpr auto key() { return detail::attribute_repetition_filter(); }
 };
 template <>
 struct metadata<net::app_version_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_app_version();
-  }
+  static constexpr auto key() { return detail::attribute_app_version(); }
 };
 template <>
 struct metadata<net::app_creator_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_app_creator();
-  }
+  static constexpr auto key() { return detail::attribute_app_creator(); }
 };
 template <>
 struct metadata<net::app_name_attribute>
 {
-  static constexpr auto key()
-  {
-    return detail::attribute_app_name();
-  }
+  static constexpr auto key() { return detail::attribute_app_name(); }
 };
 
-using base_attributes = brigand::list<
+using base_attributes = boost::mp11::mp_list<
     typetag_attribute, net::value_attribute, net::domain_attribute,
     net::access_mode_attribute, net::bounding_mode_attribute,
-    net::repetition_filter_attribute, net::unit_attribute,
+    net::repetition_filter_attribute, net::unit_attribute, net::default_value_attribute>;
+
+using base_attributes_without_type = boost::mp11::mp_list<
+    net::value_attribute, net::domain_attribute, net::access_mode_attribute,
+    net::bounding_mode_attribute, net::repetition_filter_attribute, net::unit_attribute,
     net::default_value_attribute>;
 
-using base_attributes_without_type = brigand::list<
-    net::value_attribute, net::domain_attribute, net::access_mode_attribute,
-    net::bounding_mode_attribute, net::repetition_filter_attribute,
-    net::unit_attribute, net::default_value_attribute>;
-
-using extended_attributes = brigand::list<
+using extended_attributes = boost::mp11::mp_list<
     net::tags_attribute, net::refresh_rate_attribute, net::priority_attribute,
     net::value_step_size_attribute, net::instance_bounds_attribute,
     net::critical_attribute, net::hidden_attribute, net::disabled_attribute,
-    net::extended_type_attribute, net::description_attribute,
-    net::app_name_attribute, net::app_creator_attribute,
-    net::app_version_attribute>;
-
-using attributes_when_reading = brigand::list<
-    net::domain_attribute, net::access_mode_attribute,
-    net::bounding_mode_attribute, net::repetition_filter_attribute,
-    net::tags_attribute, net::refresh_rate_attribute, net::priority_attribute,
-    net::value_step_size_attribute, net::instance_bounds_attribute,
-    net::critical_attribute, net::hidden_attribute, net::disabled_attribute,
-    net::description_attribute, net::app_name_attribute,
+    net::extended_type_attribute, net::description_attribute, net::app_name_attribute,
     net::app_creator_attribute, net::app_version_attribute>;
 
-using all_attributes = brigand::list<
+using attributes_when_reading = boost::mp11::mp_list<
+    net::domain_attribute, net::access_mode_attribute, net::bounding_mode_attribute,
+    net::repetition_filter_attribute, net::tags_attribute, net::refresh_rate_attribute,
+    net::priority_attribute, net::value_step_size_attribute,
+    net::instance_bounds_attribute, net::critical_attribute, net::hidden_attribute,
+    net::disabled_attribute, net::description_attribute, net::app_name_attribute,
+    net::app_creator_attribute, net::app_version_attribute>;
+
+using all_attributes = boost::mp11::mp_list<
     typetag_attribute, net::unit_attribute, net::extended_type_attribute,
 
     net::value_attribute, net::default_value_attribute,
 
-    net::domain_attribute, net::access_mode_attribute,
-    net::bounding_mode_attribute, net::repetition_filter_attribute,
-    net::tags_attribute, net::refresh_rate_attribute, net::priority_attribute,
-    net::value_step_size_attribute, net::instance_bounds_attribute,
-    net::critical_attribute, net::hidden_attribute, net::disabled_attribute,
-    net::description_attribute, net::app_name_attribute,
+    net::domain_attribute, net::access_mode_attribute, net::bounding_mode_attribute,
+    net::repetition_filter_attribute, net::tags_attribute, net::refresh_rate_attribute,
+    net::priority_attribute, net::value_step_size_attribute,
+    net::instance_bounds_attribute, net::critical_attribute, net::hidden_attribute,
+    net::disabled_attribute, net::description_attribute, net::app_name_attribute,
     net::app_creator_attribute, net::app_version_attribute>;
 }
 enum class message_type
@@ -494,7 +413,7 @@ enum class message_type
   Ignore
 };
 
-using key_map_type = string_view_map<ossia::string_view>;
+using key_map_type = string_view_map<std::string_view>;
 
 //! Mapping between ossia attributes and oscquery attributes
 OSSIA_EXPORT const key_map_type& ossia_to_oscquery_key();
@@ -503,11 +422,8 @@ OSSIA_EXPORT const key_map_type& ossia_to_oscquery_key();
 OSSIA_EXPORT const key_map_type& oscquery_to_ossia_key();
 
 //! Convert the text of an ossia attribute to the key of an oscquery attribute
-OSSIA_EXPORT std::optional<ossia::string_view>
-    ossia_to_oscquery_key(ossia::string_view);
+OSSIA_EXPORT std::optional<std::string_view> ossia_to_oscquery_key(std::string_view);
 
 //! Convert the text of an oscquery attribute to the key of an ossia attribute.
-OSSIA_EXPORT std::optional<ossia::string_view>
-    oscquery_to_ossia_key(ossia::string_view);
-}
+OSSIA_EXPORT std::optional<std::string_view> oscquery_to_ossia_key(std::string_view);
 }

@@ -2,7 +2,6 @@
 #include <ossia/detail/config.hpp>
 
 #include <array>
-
 #include <string_view>
 
 namespace ossia
@@ -18,16 +17,15 @@ inline std::string& operator+=(std::string& str, string_view s)
 
 // See also https://gist.github.com/klmr/2775736
 template <std::size_t N>
-constexpr ossia::string_view make_string_view(const char (&str)[N]) noexcept
+constexpr std::string_view make_string_view(const char (&str)[N]) noexcept
 {
   return {str, N - 1};
 }
 
 template <typename... Args>
-constexpr std::array<ossia::string_view, sizeof...(Args)>
+constexpr std::array<std::string_view, sizeof...(Args)>
 make_string_array(Args&&... args) noexcept
 {
-  return std::array<ossia::string_view, sizeof...(Args)>{
-      make_string_view(args)...};
+  return std::array<std::string_view, sizeof...(Args)>{make_string_view(args)...};
 }
 }

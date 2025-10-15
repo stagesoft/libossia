@@ -1,12 +1,13 @@
 #pragma once
 #include <ossia/detail/config.hpp>
-#include <QQmlExtensionPlugin>
-#include <verdigris>
+
 #include <QQmlExtensionInterface>
+#include <QQmlExtensionPlugin>
+
 #include <ossia_export.h>
-namespace ossia
-{
-namespace qt
+
+#include <verdigris>
+namespace ossia::qt
 {
 #if defined(OSSIA_DISABLE_QT_PLUGIN)
 class OSSIA_EXPORT qml_plugin
@@ -26,5 +27,4 @@ public:
   void registerTypes(const char* uri) override;
 };
 #endif
-}
 }

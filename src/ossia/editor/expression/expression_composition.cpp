@@ -3,22 +3,22 @@
 #include <ossia/editor/expression/expression.hpp>
 #include <ossia/editor/expression/expression_composition.hpp>
 
-namespace ossia
-{
-namespace expressions
+namespace ossia::expressions
 {
 
 expression_composition::expression_composition(
     expression_ptr expr1, binary_operator op, expression_ptr expr2)
-    : m_first(std::move(expr1)), m_second(std::move(expr2)), m_operator(op)
+    : m_first(std::move(expr1))
+    , m_second(std::move(expr2))
+    , m_operator(op)
 {
-  if (!m_first || !m_second)
-    throw std::runtime_error("An argument to expression_composition is null");
+  if(!m_first || !m_second)
+    ossia_do_throw(std::runtime_error, "An argument to expression_composition is null");
 }
 
 expression_composition::~expression_composition()
 {
-  if (!expression_callback_container::callbacks_empty())
+  if(!expression_callback_container::callbacks_empty())
     expression_callback_container::callbacks_clear();
 }
 
@@ -77,18 +77,15 @@ void expression_composition::on_removing_last_callback()
 
 bool expression_composition::do_evaluation(bool first, bool second) const
 {
-  switch (m_operator)
+  switch(m_operator)
   {
-    case binary_operator::AND:
-    {
+    case binary_operator::AND: {
       return first && second;
     }
-    case binary_operator::OR:
-    {
+    case binary_operator::OR: {
       return first || second;
     }
-    case binary_operator::XOR:
-    {
+    case binary_operator::XOR: {
       return first ^ second;
     }
     default:
@@ -106,6 +103,5 @@ void expression_composition::second_callback(bool second_result)
 {
   bool result = do_evaluation(expressions::evaluate(*m_first), second_result);
   send(result);
-}
 }
 }

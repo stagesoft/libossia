@@ -6,24 +6,20 @@ set(CMAKE_MODULE_PATH
 if(OSSIA_SDK)
   list(APPEND CMAKE_PREFIX_PATH "${OSSIA_SDK}/portaudio/lib/cmake/portaudio")
 endif()
-
-if(APPLE AND EXISTS /usr/local/opt/qt5)
-  list(APPEND CMAKE_PREFIX_PATH "/usr/local/opt/qt5")
-endif()
-
-cmake_minimum_required(VERSION 3.13 FATAL_ERROR)
-if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.18)
-  cmake_policy(VERSION 3.18)
+cmake_minimum_required(VERSION 3.25...3.31 FATAL_ERROR)
+if(POLICY CMP0167)
+  cmake_policy(SET CMP0167 OLD)
 endif()
 
 project(ossia C CXX)
 
+set(OSSIA_IS_TOP_LEVEL "${PROJECT_IS_TOP_LEVEL}")
 set(CMAKE_POSITION_INDEPENDENT_CODE 1)
 find_package(Threads)
 
 if(NOT QT_VERSION)
-  set(QT_VERSION Qt5 5.15.2)
-  set(QT_PREFIX Qt5)
+  set(QT_VERSION Qt6 6.4)
+  set(QT_PREFIX Qt6)
 endif()
 find_package(${QT_VERSION} COMPONENTS Core)
 
@@ -34,7 +30,8 @@ find_package(${QT_VERSION} COMPONENTS Core)
 ## the variable looks like : `/tmp/DpvCam/3rdparty/libossia/3rdparty;CACHE;STRING;;INTERNAL`
 ## which is a list instead of a single PATH value
 ## at least with CMake 15.2
-set(OSSIA_3RDPARTY_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty" CACHE "" INTERNAL)
+set(OSSIA_SOURCE_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}" CACHE INTERNAL "")
+set(OSSIA_3RDPARTY_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty" CACHE INTERNAL "")
 include(OssiaOptions)
 
 # Dependencies
@@ -55,10 +52,31 @@ if(OSSIA_EXAMPLES)
 endif()
 
 if(OSSIA_TESTING)
+  set(CMAKE_CTEST_ARGUMENTS --rerun-failed --output-on-failure)
   include(CTest)
-  set(CATCH_BUILD_STATIC_LIBRARY 1)
-  set(CATCH_BUILD_STATIC_LIBRARY 1 CACHE INTERNAL "" FORCE)
-  add_subdirectory(3rdparty/Catch2)
+  if(OSSIA_USE_SYSTEM_LIBRARIES)
+    find_package(Catch2 CONFIG REQUIRED)
+    if(NOT TARGET Catch2::Catch2WithMain)
+      add_library(Catch2WithMain INTERFACE)
+      add_library(Catch2::Catch2WithMain ALIAS Catch2WithMain)
+      target_compile_definitions(Catch2WithMain INTERFACE CATCH_CONFIG_MAIN)
+      target_link_libraries(Catch2WithMain INTERFACE Catch2::Catch2)
+    endif()
+  else()
+    set(CATCH_INSTALL_DOCS 0)
+    set(CATCH_INSTALL_DOCS 0 CACHE INTERNAL "" FORCE)
+    set(CATCH_INSTALL_EXTRAS 0)
+    set(CATCH_INSTALL_EXTRAS 0 CACHE INTERNAL "" FORCE)
+    set(CATCH_BUILD_TESTING 0)
+    set(CATCH_BUILD_TESTING 0 CACHE INTERNAL "" FORCE)
+    set(CATCH_BUILD_STATIC_LIBRARY 1)
+    set(CATCH_BUILD_STATIC_LIBRARY 1 CACHE INTERNAL "" FORCE)
+
+    set(old_BUILD_SHARED_LIBS "${BUILD_SHARED_LIBS}")
+    set(BUILD_SHARED_LIBS 0)
+    add_subdirectory(3rdparty/Catch2)
+    set(BUILD_SHARED_LIBS "${old_BUILD_SHARED_LIBS}")
+  endif()
   add_subdirectory(tests)
 endif()
 

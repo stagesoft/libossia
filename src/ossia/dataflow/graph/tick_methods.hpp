@@ -1,15 +1,14 @@
 #pragma once
+#include <ossia/audio/audio_tick.hpp>
 #include <ossia/dataflow/execution_state.hpp>
 #include <ossia/dataflow/graph/graph_interface.hpp>
 #include <ossia/dataflow/graph_node.hpp>
+#include <ossia/detail/disable_fpe.hpp>
+#include <ossia/detail/hash_map.hpp>
 #include <ossia/detail/pod_vector.hpp>
-#include <ossia/editor/scenario/time_interval.hpp>
-#include <ossia/editor/scenario/scenario.hpp>
-#include <ossia/audio/audio_tick.hpp>
-
 #include <ossia/editor/scenario/execution_log.hpp>
-
-#include <map>
+#include <ossia/editor/scenario/scenario.hpp>
+#include <ossia/editor/scenario/time_interval.hpp>
 
 #if defined(SCORE_BENCHMARK)
 #if __has_include(<valgrind/callgrind.h>)
@@ -37,7 +36,9 @@ struct cycle_count_bench
 
   uint64_t t0;
 
-  cycle_count_bench(ossia::double_vector& v) : m_tickDurations{v}, t0{rdtsc()}
+  cycle_count_bench(ossia::double_vector& v)
+      : m_tickDurations{v}
+      , t0{rdtsc()}
   {
   }
 
@@ -54,7 +55,8 @@ struct clock_count_bench
   std::chrono::time_point<std::chrono::steady_clock> t0;
 
   clock_count_bench(ossia::double_vector& v)
-      : m_tickDurations{v}, t0{std::chrono::steady_clock::now()}
+      : m_tickDurations{v}
+      , t0{std::chrono::steady_clock::now()}
   {
   }
 
@@ -67,14 +69,8 @@ struct clock_count_bench
 };
 struct callgrind_bench
 {
-  callgrind_bench()
-  {
-    CALLGRIND_START_INSTRUMENTATION;
-  }
-  ~callgrind_bench()
-  {
-    CALLGRIND_STOP_INSTRUMENTATION;
-  }
+  callgrind_bench() { CALLGRIND_START_INSTRUMENTATION; }
+  ~callgrind_bench() { CALLGRIND_STOP_INSTRUMENTATION; }
 };
 }
 #endif
@@ -88,13 +84,11 @@ struct tick_all_nodes
   ossia::execution_state& e;
   ossia::graph_interface& g;
 
-  void operator()(const ossia::audio_tick_state& st)
-  {
-    (*this)(st.frames, st.seconds);
-  }
+  void operator()(const ossia::audio_tick_state& st) { (*this)(st.frames, st.seconds); }
 
   void operator()(unsigned long samples, double) const
   {
+    ossia::disable_fpe();
     std::atomic_thread_fence(std::memory_order_seq_cst);
     e.begin_tick();
     const time_value old_date{e.samples_since_start};
@@ -102,8 +96,9 @@ struct tick_all_nodes
     const time_value new_date{e.samples_since_start};
 
     // TODO tempo / sig ?
-    for (auto& node : g.get_nodes())
-      node->request(token_request{old_date, new_date, 0_tv, 0_tv, 1.0, {}, ossia::root_tempo});
+    for(auto& node : g.get_nodes())
+      node->request(
+          token_request{old_date, new_date, 0_tv, 0_tv, 1.0, {}, ossia::root_tempo});
 
     g.state(e);
     std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -112,7 +107,6 @@ struct tick_all_nodes
 };
 
 // 1 tick per buffer
-template <void (ossia::execution_state::*Commit)()>
 struct buffer_tick
 {
   ossia::execution_state& st;
@@ -120,10 +114,7 @@ struct buffer_tick
   ossia::scenario& scenar;
   ossia::transport_info_fun transport;
 
-  void operator()(const ossia::audio_tick_state& st)
-  {
-    (*this)(st.frames, st.seconds);
-  }
+  void operator()(const ossia::audio_tick_state& st) { (*this)(st.frames, st.seconds); }
 
   void operator()(unsigned long frameCount, double seconds)
   {
@@ -132,6 +123,7 @@ struct buffer_tick
     auto log = g_exec_log.start_tick();
 #endif
 
+    ossia::disable_fpe();
     std::atomic_thread_fence(std::memory_order_seq_cst);
     st.begin_tick();
     st.samples_since_start += frameCount;
@@ -150,9 +142,8 @@ struct buffer_tick
 
     tok.date = tok.prev_date + flicks;
 
-
     // Notify the current transport state
-    if (transport.allocated())
+    if(transport.allocated())
     {
       transport(itv.current_transport_info());
     }
@@ -183,18 +174,19 @@ struct buffer_tick
       auto log = g_exec_log.start_commit();
 #endif
 
-      (st.*Commit)();
+      st.commit();
     }
 
+#if defined(OSSIA_SCENARIO_DATAFLOW)
     // Clear the scenario token
     {
       scenar.node->requested_tokens.clear();
     }
+#endif
   }
 };
 
 // 1 tick per sample
-template <void (ossia::execution_state::*Commit)()>
 struct precise_score_tick
 {
   ossia::execution_state& st;
@@ -202,17 +194,15 @@ struct precise_score_tick
   ossia::time_interval& itv;
   ossia::transport_info_fun transport;
 
-  void operator()(const ossia::audio_tick_state& st)
-  {
-    (*this)(st.frames, st.seconds);
-  }
+  void operator()(const ossia::audio_tick_state& st) { (*this)(st.frames, st.seconds); }
 
   void operator()(unsigned long frameCount, double seconds)
   {
+    ossia::disable_fpe();
     std::atomic_thread_fence(std::memory_order_seq_cst);
     st.bufferSize = 1;
     st.cur_date = seconds * 1e9;
-    for (std::size_t i = 0; i < frameCount; i++)
+    for(std::size_t i = 0; i < frameCount; i++)
     {
       st.begin_tick();
       st.samples_since_start++;
@@ -220,7 +210,7 @@ struct precise_score_tick
       itv.tick_offset(ossia::time_value{1}, 0_tv, tok);
       g.state(st);
       std::atomic_thread_fence(std::memory_order_seq_cst);
-      (st.*Commit)();
+      st.commit();
 
       st.advance_tick(1);
       std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -229,7 +219,6 @@ struct precise_score_tick
 };
 
 /*
-template <void (ossia::execution_state::*Commit)()>
 struct split_score_tick
 {
 public:
@@ -330,6 +319,7 @@ public:
 
   void operator()(unsigned long frameCount, double seconds)
   {
+    ossia::disable_fpe();
     st.samples_since_start += frameCount;
     st.bufferSize = (int)frameCount;
     // we could run a syscall and call now() but that's a bit more costly.
@@ -342,7 +332,7 @@ public:
 
 private:
   ossia::flat_set<int64_t> cuts;
-  std::map<
+  ossia::hash_map<
       const ossia::graph_node*,
       std::pair<ossia::token_request_vec, ossia::token_request_vec::iterator>>
       requests;
@@ -355,26 +345,20 @@ struct benchmark_score_tick
   BaseTick base;
   ossia::double_vector m_tickDurations;
 
-  void operator()(const ossia::audio_tick_state& st)
-  {
-    (*this)(st.frames, st.seconds);
-  }
+  void operator()(const ossia::audio_tick_state& st) { (*this)(st.frames, st.seconds); }
 
   void operator()(unsigned long frameCount, double seconds)
   {
     cycle_count_bench bench{m_tickDurations};
     base(frameCount, seconds);
   }
-  benchmark_score_tick()
-  {
-    m_tickDurations.reserve(100000);
-  }
+  benchmark_score_tick() { m_tickDurations.reserve(100000); }
   ~benchmark_score_tick()
   {
     QFile f("/tmp/out.data");
     QTextStream s(&f);
     f.open(QIODevice::WriteOnly);
-    for (auto t : m_tickDurations)
+    for(auto t : m_tickDurations)
       s << t << "\n";
   }
 };

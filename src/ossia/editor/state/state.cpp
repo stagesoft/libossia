@@ -7,10 +7,37 @@
 #include <ossia/network/base/node.hpp>
 #include <ossia/network/base/parameter.hpp>
 
-#include <iostream>
-
 namespace ossia
 {
+state::children_type::iterator state::begin() noexcept
+{
+  return m_children.begin();
+}
+state::children_type::iterator state::end() noexcept
+{
+  return m_children.end();
+}
+state::children_type::const_iterator state::begin() const noexcept
+{
+  return m_children.begin();
+}
+state::children_type::const_iterator state::end() const noexcept
+{
+  return m_children.end();
+}
+state::children_type::const_iterator state::cbegin() const noexcept
+{
+  return m_children.cbegin();
+}
+state::children_type::const_iterator state::cend() const noexcept
+{
+  return m_children.cend();
+}
+
+const state::children_type& state::children() const noexcept
+{
+  return m_children;
+}
 std::size_t state::size() const
 {
   return m_children.size();
@@ -23,7 +50,7 @@ bool state::empty() const
 
 void state::launch()
 {
-  for (auto& state : m_children)
+  for(auto& state : m_children)
   {
     ossia::apply(state_execution_visitor{}, state);
   }
@@ -31,13 +58,13 @@ void state::launch()
 
 void state::add(const state_element& e)
 {
-  if (e)
+  if(e)
     m_children.push_back(e);
 }
 
 void state::add(state_element&& e)
 {
-  if (e)
+  if(e)
     m_children.push_back(std::move(e));
 }
 
@@ -83,19 +110,16 @@ void flatten_and_filter(ossia::state& state, const state_element& element)
 
 void flatten_and_filter(ossia::state& state, state_element&& element)
 {
-  ossia::apply(
-      state_flatten_visitor<ossia::state, false>{state}, std::move(element));
+  ossia::apply(state_flatten_visitor<ossia::state, false>{state}, std::move(element));
 }
 
-void merge_flatten_and_filter(
-    ossia::state& state, const state_element& element)
+void merge_flatten_and_filter(ossia::state& state, const state_element& element)
 {
   ossia::apply(state_flatten_visitor<ossia::state, true>{state}, element);
 }
 
 void merge_flatten_and_filter(ossia::state& state, state_element&& element)
 {
-  ossia::apply(
-      state_flatten_visitor<ossia::state, true>{state}, std::move(element));
+  ossia::apply(state_flatten_visitor<ossia::state, true>{state}, std::move(element));
 }
 }

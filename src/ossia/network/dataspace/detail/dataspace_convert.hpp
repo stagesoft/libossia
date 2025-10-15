@@ -3,9 +3,7 @@
 #include <ossia/network/dataspace/dataspace_visitors.hpp>
 #include <ossia/network/dataspace/value_with_unit.hpp>
 #include <ossia/network/value/value_traits.hpp>
-namespace ossia
-{
-namespace detail
+namespace ossia::detail
 {
 
 template <typename T, typename U>
@@ -33,13 +31,11 @@ struct convert_unit_visitor
     return {};
   }
 
-  OSSIA_INLINE ossia::value_with_unit
-  operator()(const angle& d1, const angle_u& d2)
+  OSSIA_INLINE ossia::value_with_unit operator()(const angle& d1, const angle_u& d2)
   {
     return ossia::apply(*this, d1, d2);
   }
-  OSSIA_INLINE ossia::value_with_unit
-  operator()(const color& d1, const color_u& d2)
+  OSSIA_INLINE ossia::value_with_unit operator()(const color& d1, const color_u& d2)
   {
     return ossia::apply(*this, d1, d2);
   }
@@ -53,8 +49,7 @@ struct convert_unit_visitor
   {
     return ossia::apply(*this, d1, d2);
   }
-  OSSIA_INLINE ossia::value_with_unit
-  operator()(const gain& d1, const gain_u& d2)
+  OSSIA_INLINE ossia::value_with_unit operator()(const gain& d1, const gain_u& d2)
   {
     return ossia::apply(*this, d1, d2);
   }
@@ -63,13 +58,11 @@ struct convert_unit_visitor
   {
     return ossia::apply(*this, d1, d2);
   }
-  OSSIA_INLINE ossia::value_with_unit
-  operator()(const speed& d1, const speed_u& d2)
+  OSSIA_INLINE ossia::value_with_unit operator()(const speed& d1, const speed_u& d2)
   {
     return ossia::apply(*this, d1, d2);
   }
-  OSSIA_INLINE ossia::value_with_unit
-  operator()(const timing& d1, const timing_u& d2)
+  OSSIA_INLINE ossia::value_with_unit operator()(const timing& d1, const timing_u& d2)
   {
     return ossia::apply(*this, d1, d2);
   }
@@ -116,15 +109,9 @@ struct convert_to_value_visitor
     return val.dataspace_value;
   }
 
-  OSSIA_INLINE ossia::value operator()(ossia::value val)
-  {
-    return val;
-  }
+  OSSIA_INLINE ossia::value operator()(ossia::value val) { return val; }
 
-  OSSIA_INLINE ossia::value operator()()
-  {
-    return {};
-  }
+  OSSIA_INLINE ossia::value operator()() { return {}; }
 };
 
 struct convert_to_unit_visitor
@@ -168,15 +155,8 @@ struct convert_to_unit_visitor
     return typename T::unit_type{};
   }
 
-  OSSIA_INLINE ossia::unit_t operator()(ossia::value val)
-  {
-    return {};
-  }
+  OSSIA_INLINE ossia::unit_t operator()(ossia::value val) { return {}; }
 
-  OSSIA_INLINE ossia::unit_t operator()()
-  {
-    return {};
-  }
+  OSSIA_INLINE ossia::unit_t operator()() { return {}; }
 };
-}
 }

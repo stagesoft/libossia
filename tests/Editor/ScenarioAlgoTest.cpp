@@ -1,28 +1,48 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check it.
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 
-#include <catch.hpp>
+#include "TestUtils.hpp"
+
 #include <ossia/detail/config.hpp>
 
-
-#include <ossia/dataflow/node_process.hpp>
+#include <ossia/dataflow/execution/merged_policy.hpp>
 #include <ossia/dataflow/graph/graph.hpp>
+#include <ossia/dataflow/node_process.hpp>
+#include <ossia/dataflow/nodes/dummy.hpp>
 #include <ossia/dataflow/nodes/messages.hpp>
 #include <ossia/dataflow/nodes/percentage.hpp>
 
-#include "TestUtils.hpp"
+#include "include_catch.hpp"
 
+#include <iostream>
 
-auto create_event(ossia::scenario& s)
+static auto create_event(ossia::scenario& s)
 {
   auto en = std::make_shared<ossia::time_sync>();
   en->set_expression(ossia::expressions::make_expression_true());
-  auto ee = std::make_shared<ossia::time_event>(ossia::time_event::exec_callback{}, *en, ossia::expressions::make_expression_true());
+  auto ee = std::make_shared<ossia::time_event>(
+      ossia::time_event::exec_callback{}, *en,
+      ossia::expressions::make_expression_true());
   en->insert(en->get_time_events().end(), ee);
   s.add_time_sync(std::move(en));
   return ee;
 }
 
+static std::shared_ptr<ossia::time_interval> create_interval(
+    ossia::time_interval::exec_callback callback, ossia::time_event& startEvent,
+    ossia::time_event& endEvent, ossia::time_value nominal, ossia::time_value min,
+    ossia::time_value max)
+{
+  auto ptr
+      = ossia::time_interval::create(callback, startEvent, endEvent, nominal, min, max);
+  // Added because as an optimization nodes aren't added to intervals when they don't have a children
+  // which woudl make tests much harder to read / write / understand and does not change anything in practice
+
+  ptr->add_time_process(std::make_shared<ossia::node_process>(
+      std::make_shared<ossia::nodes::dummy_node>()));
+  return ptr;
+}
+/*
 namespace ossia
 {
 bool operator==(const std::vector<ossia::token_request>& lhs, const std::vector<ossia::simple_token_request>& rhs)
@@ -43,13 +63,22 @@ bool operator==(const std::vector<ossia::simple_token_request>& lhs, const std::
   return rhs == lhs;
 }
 }
+*/
 
-auto start_event(ossia::scenario& s)
+static auto start_event(ossia::scenario& s)
 {
   auto sn = s.get_start_time_sync();
   return *sn->get_time_events().begin();
 }
-ossia::token_request default_request(ossia::time_value from = {}, ossia::time_value to = {})
+
+static auto start_and_tick(const std::shared_ptr<ossia::time_interval>& itv)
+{
+  itv->start();
+  itv->tick_current(ossia::time_value{}, {});
+}
+
+static ossia::token_request
+default_request(ossia::time_value from = {}, ossia::time_value to = {})
 {
   ossia::token_request req;
   req.prev_date = from;
@@ -64,7 +93,7 @@ ossia::token_request default_request(ossia::time_value from = {}, ossia::time_va
   return req;
 }
 
-TEST_CASE ("test_exec_simple", "test_exec_simple")
+TEST_CASE("test_exec_simple", "test_exec_simple")
 {
   using namespace ossia;
   root_scenario s;
@@ -73,11 +102,12 @@ TEST_CASE ("test_exec_simple", "test_exec_simple")
   std::shared_ptr<time_event> se = start_event(scenario);
   std::shared_ptr<time_event> ee = create_event(scenario);
 
-  std::shared_ptr<time_interval> c = time_interval::create({}, *se, *ee, 3000_tv, 3000_tv, 3000_tv);
+  std::shared_ptr<time_interval> c
+      = create_interval({}, *se, *ee, 3000_tv, 3000_tv, 3000_tv);
   s.scenario->add_time_interval(c);
 
-  s.interval->start_and_tick();
-  REQUIRE(se->get_status() == time_event::status::FINISHED);
+  start_and_tick(s.interval);
+  REQUIRE(se->get_status() & time_event::status::FINISHED);
   REQUIRE(c->get_date() == 0_tv);
 
   s.interval->tick(1000_tv, default_request());
@@ -89,15 +119,15 @@ TEST_CASE ("test_exec_simple", "test_exec_simple")
   s.interval->tick(1_tv, default_request()); // The interval is stopped
 
   REQUIRE(c->get_date() == 0_tv);
-  REQUIRE(c->get_end_event().get_status() == time_event::status::FINISHED);
+  REQUIRE(c->get_end_event().get_status() & time_event::status::FINISHED);
   s.interval->tick(1000_tv, default_request());
   REQUIRE(c->get_date() == 0_tv);
-  REQUIRE(c->get_end_event().get_status() == time_event::status::FINISHED);
+  REQUIRE(c->get_end_event().get_status() & time_event::status::FINISHED);
   s.interval->tick(1000_tv, default_request());
   REQUIRE(c->get_date() == 0_tv);
-  REQUIRE(c->get_end_event().get_status() == time_event::status::FINISHED);
+  REQUIRE(c->get_end_event().get_status() & time_event::status::FINISHED);
 }
-TEST_CASE ("test_exec_0", "test_exec_0")
+TEST_CASE("test_exec_0", "test_exec_0")
 {
   using namespace ossia;
   root_scenario s;
@@ -106,19 +136,18 @@ TEST_CASE ("test_exec_0", "test_exec_0")
   std::shared_ptr<time_event> se = start_event(scenario);
   std::shared_ptr<time_event> ee = create_event(scenario);
 
-  std::shared_ptr<time_interval> c = time_interval::create({}, *se, *ee, 0_tv, 0_tv, 0_tv);
+  std::shared_ptr<time_interval> c = create_interval({}, *se, *ee, 0_tv, 0_tv, 0_tv);
   s.scenario->add_time_interval(c);
 
-  s.interval->start_and_tick();
-  REQUIRE(se->get_status() == time_event::status::FINISHED);
+  start_and_tick(s.interval);
+  REQUIRE(se->get_status() & time_event::status::FINISHED);
   REQUIRE(c->get_date() == 0_tv);
 
   s.interval->tick(1000_tv, default_request());
   REQUIRE(c->get_date() == 0_tv);
 }
 
-
-TEST_CASE ("test_exec_chain_long", "test_exec_chain_long")
+TEST_CASE("test_exec_chain_long", "test_exec_chain_long")
 {
   using namespace ossia;
   root_scenario s;
@@ -128,14 +157,15 @@ TEST_CASE ("test_exec_chain_long", "test_exec_chain_long")
   std::shared_ptr<time_event> e1 = create_event(scenario);
   std::shared_ptr<time_event> e2 = create_event(scenario);
 
-
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 3000_tv, 3000_tv, 3000_tv);
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e1, *e2, 3000_tv, 3000_tv, 3000_tv);
+  std::shared_ptr<time_interval> c0
+      = create_interval({}, *e0, *e1, 3000_tv, 3000_tv, 3000_tv);
+  std::shared_ptr<time_interval> c1
+      = create_interval({}, *e1, *e2, 3000_tv, 3000_tv, 3000_tv);
 
   s.scenario->add_time_interval(c0);
   s.scenario->add_time_interval(c1);
 
-  s.interval->start_and_tick();
+  start_and_tick(s.interval);
   s.interval->tick(500_tv, default_request());
   REQUIRE(c0->get_date() == 500_tv);
   REQUIRE(c1->get_date() == 0_tv);
@@ -145,8 +175,7 @@ TEST_CASE ("test_exec_chain_long", "test_exec_chain_long")
   REQUIRE(c1->get_date() == 500_tv);
 }
 
-
-TEST_CASE ("test_exec_chain_tokens", "test_exec_chain_tokens")
+TEST_CASE("test_exec_chain_tokens", "test_exec_chain_tokens")
 {
   using namespace ossia;
   root_scenario s;
@@ -156,9 +185,9 @@ TEST_CASE ("test_exec_chain_tokens", "test_exec_chain_tokens")
   std::shared_ptr<time_event> e1 = create_event(scenario);
   std::shared_ptr<time_event> e2 = create_event(scenario);
 
-
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 10_tv, 10_tv, 10_tv);
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e1, *e2, 100_tv, 100_tv, 100_tv);
+  std::shared_ptr<time_interval> c0 = create_interval({}, *e0, *e1, 10_tv, 10_tv, 10_tv);
+  std::shared_ptr<time_interval> c1
+      = create_interval({}, *e1, *e2, 100_tv, 100_tv, 100_tv);
 
   // {
   auto n = std::make_shared<ossia::nodes::messages>();
@@ -168,35 +197,36 @@ TEST_CASE ("test_exec_chain_tokens", "test_exec_chain_tokens")
   s.scenario->add_time_interval(c0);
   s.scenario->add_time_interval(c1);
 
-  s.interval->start_and_tick();
-
+  start_and_tick(s.interval);
 
   s.interval->tick(50_tv, default_request());
   REQUIRE(c1->get_date() == 40_tv);
   for(auto tok : n->requested_tokens)
   {
-    std::cerr << tok;
+    std::cout << tok << "\n";
   }
 
-  REQUIRE((int)n->requested_tokens.size() == (int)2);
-  REQUIRE(n->requested_tokens[0] == (simple_token_request{.prev_date = 0_tv, .date = 0_tv,  .offset = 10_tv}));
-  REQUIRE(n->requested_tokens[1] == (simple_token_request{.prev_date = 0_tv, .date = 40_tv, .offset = 10_tv}));
+  REQUIRE((int)n->requested_tokens.size() == (int)1);
+  REQUIRE(
+      n->requested_tokens[0]
+      == (simple_token_request{.prev_date = 0_tv, .date = 40_tv, .offset = 10_tv}));
   n->requested_tokens.clear();
 
   s.interval->tick(50_tv, default_request());
   REQUIRE(c1->get_date() == 90_tv);
   for(auto tok : n->requested_tokens)
   {
-    std::cerr << tok;
+    std::cout << tok << "\n";
   }
 
   REQUIRE((int)n->requested_tokens.size() == (int)1);
-  REQUIRE(n->requested_tokens[0] == (simple_token_request{.prev_date = 40_tv, .date = 90_tv, .offset = 0_tv}));
+  REQUIRE(
+      n->requested_tokens[0]
+      == (simple_token_request{.prev_date = 40_tv, .date = 90_tv, .offset = 0_tv}));
   n->requested_tokens.clear();
-
 }
 
-TEST_CASE ("test_exec_chain_multi", "test_exec_chain_multi")
+TEST_CASE("test_exec_chain_multi", "test_exec_chain_multi")
 {
 
   using namespace ossia;
@@ -209,24 +239,20 @@ TEST_CASE ("test_exec_chain_multi", "test_exec_chain_multi")
   std::shared_ptr<time_event> e3 = create_event(scenario);
   std::shared_ptr<time_event> e4 = create_event(scenario);
 
-
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 1_tv, 1_tv, 1_tv);
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e1, *e2, 1_tv, 1_tv, 1_tv);
-  std::shared_ptr<time_interval> c2 = time_interval::create({}, *e2, *e3, 1_tv, 1_tv, 1_tv);
-  std::shared_ptr<time_interval> c3 = time_interval::create({}, *e3, *e4, 10_tv, 10_tv, 10_tv);
+  std::shared_ptr<time_interval> c0 = create_interval({}, *e0, *e1, 1_tv, 1_tv, 1_tv);
+  std::shared_ptr<time_interval> c1 = create_interval({}, *e1, *e2, 1_tv, 1_tv, 1_tv);
+  std::shared_ptr<time_interval> c2 = create_interval({}, *e2, *e3, 1_tv, 1_tv, 1_tv);
+  std::shared_ptr<time_interval> c3 = create_interval({}, *e3, *e4, 10_tv, 10_tv, 10_tv);
 
   s.scenario->add_time_interval(c0);
   s.scenario->add_time_interval(c1);
   s.scenario->add_time_interval(c2);
   s.scenario->add_time_interval(c3);
 
-
-  s.interval->start_and_tick();
+  start_and_tick(s.interval);
   s.interval->tick(5_tv, default_request());
-  std::cerr << e0->get_status() << " "
-            << e1->get_status() << " "
-            << e2->get_status() << " "
-            << e3->get_status() << std::endl;
+  std::cout << e0->get_status() << " " << e1->get_status() << " " << e2->get_status()
+            << " " << e3->get_status() << std::endl;
 
   REQUIRE(c0->get_date() == 0_tv);
   REQUIRE(c1->get_date() == 0_tv);
@@ -234,7 +260,7 @@ TEST_CASE ("test_exec_chain_multi", "test_exec_chain_multi")
   REQUIRE(c3->get_date() == 2_tv);
 }
 
-TEST_CASE ("test_exec_chain_multi_infinite", "test_exec_chain_multi_infinite")
+TEST_CASE("test_exec_chain_multi_infinite", "test_exec_chain_multi_infinite")
 {
 
   using namespace ossia;
@@ -242,30 +268,34 @@ TEST_CASE ("test_exec_chain_multi_infinite", "test_exec_chain_multi_infinite")
   root_scenario s;
   ossia::scenario& scenario = *s.scenario;
   std::shared_ptr<time_event> e0 = start_event(scenario);
-  std::shared_ptr<time_event> e1 = create_event(scenario); e1->get_time_sync().set_expression(ossia::expressions::make_expression_false());
-  std::shared_ptr<time_event> e2 = create_event(scenario); e2->get_time_sync().set_expression(ossia::expressions::make_expression_false());
-  std::shared_ptr<time_event> e3 = create_event(scenario); e3->get_time_sync().set_expression(ossia::expressions::make_expression_false());
-  std::shared_ptr<time_event> e4 = create_event(scenario); e4->get_time_sync().set_expression(ossia::expressions::make_expression_false());
+  std::shared_ptr<time_event> e1 = create_event(scenario);
+  e1->get_time_sync().set_expression(ossia::expressions::make_expression_false());
+  std::shared_ptr<time_event> e2 = create_event(scenario);
+  e2->get_time_sync().set_expression(ossia::expressions::make_expression_false());
+  std::shared_ptr<time_event> e3 = create_event(scenario);
+  e3->get_time_sync().set_expression(ossia::expressions::make_expression_false());
+  std::shared_ptr<time_event> e4 = create_event(scenario);
+  e4->get_time_sync().set_expression(ossia::expressions::make_expression_false());
 
-
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 1_tv, 0_tv, ossia::Infinite);
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e1, *e2, 1_tv, 0_tv, ossia::Infinite);
-  std::shared_ptr<time_interval> c2 = time_interval::create({}, *e2, *e3, 1_tv, 0_tv, ossia::Infinite);
-  std::shared_ptr<time_interval> c3 = time_interval::create({}, *e3, *e4, 1_tv, 0_tv, ossia::Infinite);
+  std::shared_ptr<time_interval> c0
+      = create_interval({}, *e0, *e1, 1_tv, 0_tv, ossia::Infinite);
+  std::shared_ptr<time_interval> c1
+      = create_interval({}, *e1, *e2, 1_tv, 0_tv, ossia::Infinite);
+  std::shared_ptr<time_interval> c2
+      = create_interval({}, *e2, *e3, 1_tv, 0_tv, ossia::Infinite);
+  std::shared_ptr<time_interval> c3
+      = create_interval({}, *e3, *e4, 1_tv, 0_tv, ossia::Infinite);
 
   s.scenario->add_time_interval(c0);
   s.scenario->add_time_interval(c1);
   s.scenario->add_time_interval(c2);
   s.scenario->add_time_interval(c3);
 
-
-  s.interval->start_and_tick();
+  start_and_tick(s.interval);
   {
     s.interval->tick(5_tv, default_request());
-    std::cerr << e1->get_status() << " "
-             << e2->get_status() << " "
-             << e3->get_status() << " "
-             << e4->get_status();
+    std::cout << e1->get_status() << " " << e2->get_status() << " " << e3->get_status()
+              << " " << e4->get_status() << std::endl;
 
     REQUIRE(c0->get_date() == 5_tv);
     REQUIRE(e1->get_status() == time_event::status::PENDING);
@@ -280,18 +310,17 @@ TEST_CASE ("test_exec_chain_multi_infinite", "test_exec_chain_multi_infinite")
     REQUIRE(e4->get_status() == time_event::status::NONE);
   }
 
-  e1->get_time_sync().set_expression(ossia::expressions::make_expression_atom(1, ossia::expressions::comparator::EQUAL, 1));
+  e1->get_time_sync().set_expression(ossia::expressions::make_expression_atom(
+      1, ossia::expressions::comparator::EQUAL, 1));
 
   // The "interactivity" tick introduced
   {
     s.interval->tick(5_tv, default_request());
-    std::cerr << e1->get_status() << " "
-             << e2->get_status() << " "
-             << e3->get_status() << " "
-             << e4->get_status();
+    std::cout << e1->get_status() << " " << e2->get_status() << " " << e3->get_status()
+              << " " << e4->get_status() << std::endl;
 
     REQUIRE(c0->get_date() == 0_tv);
-    REQUIRE(e1->get_status() == time_event::status::FINISHED);
+    REQUIRE(e1->get_status() & time_event::status::FINISHED);
 
     REQUIRE(c1->get_date() == 0_tv);
     REQUIRE(e2->get_status() == time_event::status::NONE);
@@ -305,13 +334,11 @@ TEST_CASE ("test_exec_chain_multi_infinite", "test_exec_chain_multi_infinite")
 
   {
     s.interval->tick(5_tv, default_request());
-    std::cerr << e1->get_status() << " "
-             << e2->get_status() << " "
-             << e3->get_status() << " "
-             << e4->get_status();
+    std::cout << e1->get_status() << " " << e2->get_status() << " " << e3->get_status()
+              << " " << e4->get_status() << std::endl;
 
     REQUIRE(c0->get_date() == 0_tv);
-    REQUIRE(e1->get_status() == time_event::status::FINISHED);
+    REQUIRE(e1->get_status() & time_event::status::FINISHED);
 
     REQUIRE(c1->get_date() == 5_tv);
     REQUIRE(e2->get_status() == time_event::status::PENDING);
@@ -324,8 +351,7 @@ TEST_CASE ("test_exec_chain_multi_infinite", "test_exec_chain_multi_infinite")
   }
 }
 
-
-TEST_CASE ("test_exec_two_branch_infinite", "test_exec_two_branch_infinite")
+TEST_CASE("test_exec_two_branch_infinite", "test_exec_two_branch_infinite")
 {
 
   using namespace ossia;
@@ -333,9 +359,12 @@ TEST_CASE ("test_exec_two_branch_infinite", "test_exec_two_branch_infinite")
   root_scenario s;
   ossia::scenario& scenario = *s.scenario;
   std::shared_ptr<time_event> e0 = start_event(scenario);
-  std::shared_ptr<time_event> e1 = create_event(scenario); e1->get_time_sync().set_expression(ossia::expressions::make_expression_false());
-  std::shared_ptr<time_event> e2 = create_event(scenario); e2->get_time_sync().set_expression(ossia::expressions::make_expression_false());
-  std::shared_ptr<time_event> e3 = create_event(scenario); e3->get_time_sync().set_expression(ossia::expressions::make_expression_false());
+  std::shared_ptr<time_event> e1 = create_event(scenario);
+  e1->get_time_sync().set_expression(ossia::expressions::make_expression_false());
+  std::shared_ptr<time_event> e2 = create_event(scenario);
+  e2->get_time_sync().set_expression(ossia::expressions::make_expression_false());
+  std::shared_ptr<time_event> e3 = create_event(scenario);
+  e3->get_time_sync().set_expression(ossia::expressions::make_expression_false());
 
   /*           c0
        * e0 - - - - - - - - - - e2 - )
@@ -343,22 +372,24 @@ TEST_CASE ("test_exec_two_branch_infinite", "test_exec_two_branch_infinite")
        * | - - - - e1 - - - - - | ------------ e3
        */
 
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e2, 20_tv, 0_tv, 25_tv);
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e0, *e1, 15_tv, 0_tv, ossia::Infinite);
-  std::shared_ptr<time_interval> c2 = time_interval::create({}, *e1, *e2, 5_tv, 0_tv, ossia::Infinite);
-  std::shared_ptr<time_interval> c3 = time_interval::create({}, *e2, *e3, 100_tv, 100_tv, 100_tv);
+  std::shared_ptr<time_interval> c0 = create_interval({}, *e0, *e2, 20_tv, 0_tv, 25_tv);
+  std::shared_ptr<time_interval> c1
+      = create_interval({}, *e0, *e1, 15_tv, 0_tv, ossia::Infinite);
+  std::shared_ptr<time_interval> c2
+      = create_interval({}, *e1, *e2, 5_tv, 0_tv, ossia::Infinite);
+  std::shared_ptr<time_interval> c3
+      = create_interval({}, *e2, *e3, 100_tv, 100_tv, 100_tv);
 
   s.scenario->add_time_interval(c0);
   s.scenario->add_time_interval(c1);
   s.scenario->add_time_interval(c2);
   s.scenario->add_time_interval(c3);
 
-  s.interval->start_and_tick();
+  start_and_tick(s.interval);
   {
     s.interval->tick(5_tv, default_request());
-    std::cerr << e1->get_status() << " "
-             << e2->get_status() << " "
-             << e3->get_status();
+    std::cout << e1->get_status() << " " << e2->get_status() << " " << e3->get_status()
+              << std::endl;
 
     REQUIRE(c0->get_date() == 5_tv);
     REQUIRE(e1->get_status() == time_event::status::PENDING);
@@ -374,9 +405,8 @@ TEST_CASE ("test_exec_two_branch_infinite", "test_exec_two_branch_infinite")
 
   {
     s.interval->tick(30_tv, default_request());
-    std::cerr << e1->get_status() << " "
-             << e2->get_status() << " "
-             << e3->get_status();
+    std::cout << e1->get_status() << " " << e2->get_status() << " " << e3->get_status()
+              << std::endl;
 
     REQUIRE(c0->get_date() == 25_tv);
     REQUIRE(e1->get_status() == time_event::status::PENDING);
@@ -390,24 +420,24 @@ TEST_CASE ("test_exec_two_branch_infinite", "test_exec_two_branch_infinite")
     REQUIRE(c3->get_date() == 0_tv);
   }
 
-  e1->get_time_sync().set_expression(ossia::expressions::make_expression_atom(1, ossia::expressions::comparator::EQUAL, 1));
+  e1->get_time_sync().set_expression(ossia::expressions::make_expression_atom(
+      1, ossia::expressions::comparator::EQUAL, 1));
 
   // TODO we would like another behaviour :
   // right now there is an additional tick needed for triggering e2 after e1, while we would like them to happen directly
   // however this means that c2 would not execute at all...
   {
     s.interval->tick(2_tv, default_request());
-    std::cerr << e1->get_status() << " "
-             << e2->get_status() << " "
-             << e3->get_status();
+    std::cout << e1->get_status() << " " << e2->get_status() << " " << e3->get_status()
+              << std::endl;
 
     // FIXME there is some indeterminism here. Hypothesis is that this is due because of a pointer set.
     //REQUIRE(c0->get_date() == 0_tv);
     REQUIRE(c0->get_date() == 25_tv);
-    REQUIRE(e1->get_status() == time_event::status::FINISHED);
+    REQUIRE(e1->get_status() & time_event::status::FINISHED);
 
     REQUIRE(c1->get_date() == 0_tv);
-    //REQUIRE(e2->get_status() == time_event::status::FINISHED);
+    //REQUIRE(e2->get_status() & time_event::status::FINISHED);
     REQUIRE(e2->get_status() == time_event::status::NONE);
 
     REQUIRE(c2->get_date() == 0_tv);
@@ -419,15 +449,14 @@ TEST_CASE ("test_exec_two_branch_infinite", "test_exec_two_branch_infinite")
 
   {
     s.interval->tick(2_tv, default_request());
-    std::cerr << e1->get_status() << " "
-             << e2->get_status() << " "
-             << e3->get_status();
+    std::cout << e1->get_status() << " " << e2->get_status() << " " << e3->get_status()
+              << std::endl;
 
     REQUIRE(c0->get_date() == 0_tv);
-    REQUIRE(e1->get_status() == time_event::status::FINISHED);
+    REQUIRE(e1->get_status() & time_event::status::FINISHED);
 
     REQUIRE(c1->get_date() == 0_tv);
-    REQUIRE(e2->get_status() == time_event::status::FINISHED);
+    REQUIRE(e2->get_status() & time_event::status::FINISHED);
 
     REQUIRE(c2->get_date() == 0_tv);
     REQUIRE(e3->get_status() == time_event::status::NONE);
@@ -435,10 +464,9 @@ TEST_CASE ("test_exec_two_branch_infinite", "test_exec_two_branch_infinite")
     //REQUIRE(c3->get_date() == 4_tv);
     REQUIRE(c3->get_date() == 2_tv);
   }
-
 }
 
-TEST_CASE ("test_min", "test_min")
+TEST_CASE("test_min", "test_min")
 {
 
   using namespace ossia;
@@ -449,18 +477,20 @@ TEST_CASE ("test_min", "test_min")
   std::shared_ptr<time_event> e1 = create_event(scenario);
   std::shared_ptr<time_event> e2 = create_event(scenario);
 
-
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 3000_tv, 2000_tv, 4000_tv);
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e1, *e2, 100000_tv, 100000_tv, 100000_tv);
+  std::shared_ptr<time_interval> c0
+      = create_interval({}, *e0, *e1, 3000_tv, 2000_tv, 4000_tv);
+  std::shared_ptr<time_interval> c1
+      = create_interval({}, *e1, *e2, 100000_tv, 100000_tv, 100000_tv);
 
   s.scenario->add_time_interval(c0);
   s.scenario->add_time_interval(c1);
 
-  s.interval->start_and_tick();
+  start_and_tick(s.interval);
   s.interval->tick(1000_tv, default_request());
   REQUIRE(c0->get_date() == 1000_tv);
   REQUIRE(c1->get_date() == 0_tv);
-  s.interval->tick(1500_tv, default_request()); // Get into the min; the node is triggered
+  s.interval->tick(
+      1500_tv, default_request()); // Get into the min; the node is triggered
   REQUIRE(c0->get_date() == 0_tv);
   REQUIRE(c1->get_date() == 0_tv);
 
@@ -471,7 +501,7 @@ TEST_CASE ("test_min", "test_min")
   REQUIRE(c1->get_date() == 5000_tv);
 }
 
-TEST_CASE ("test_max", "test_max")
+TEST_CASE("test_max", "test_max")
 {
 
   using namespace ossia;
@@ -483,14 +513,15 @@ TEST_CASE ("test_max", "test_max")
   std::shared_ptr<time_event> e2 = create_event(scenario);
   e1->get_time_sync().set_expression(ossia::expressions::make_expression_false());
 
-
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 3000_tv, 2000_tv, 4000_tv);
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e1, *e2, 100000_tv, 100000_tv, 100000_tv);
+  std::shared_ptr<time_interval> c0
+      = create_interval({}, *e0, *e1, 3000_tv, 2000_tv, 4000_tv);
+  std::shared_ptr<time_interval> c1
+      = create_interval({}, *e1, *e2, 100000_tv, 100000_tv, 100000_tv);
 
   scenario.add_time_interval(c0);
   scenario.add_time_interval(c1);
 
-  s.interval->start_and_tick();
+  start_and_tick(s.interval);
   s.interval->tick(3000_tv, default_request());
   REQUIRE(c0->get_date() == 3000_tv);
   REQUIRE(c1->get_date() == 0_tv);
@@ -499,9 +530,7 @@ TEST_CASE ("test_max", "test_max")
   REQUIRE(c1->get_date() == 500_tv);
 }
 
-
-
-TEST_CASE ("test_inter_tick", "test_inter_tick")
+TEST_CASE("test_inter_tick", "test_inter_tick")
 {
 
   using namespace ossia;
@@ -514,16 +543,18 @@ TEST_CASE ("test_inter_tick", "test_inter_tick")
   std::shared_ptr<time_event> e3 = create_event(scenario);
   e1->get_time_sync().set_expression(ossia::expressions::make_expression_false());
 
-
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 3000_tv, 3000_tv, 3000_tv);
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e1, *e2, 500_tv, 500_tv, 500_tv);
-  std::shared_ptr<time_interval> c2 = time_interval::create({}, *e2, *e3, 3000_tv, 3000_tv, 3000_tv);
+  std::shared_ptr<time_interval> c0
+      = create_interval({}, *e0, *e1, 3000_tv, 3000_tv, 3000_tv);
+  std::shared_ptr<time_interval> c1
+      = create_interval({}, *e1, *e2, 500_tv, 500_tv, 500_tv);
+  std::shared_ptr<time_interval> c2
+      = create_interval({}, *e2, *e3, 3000_tv, 3000_tv, 3000_tv);
 
   scenario.add_time_interval(c0);
   scenario.add_time_interval(c1);
   scenario.add_time_interval(c2);
 
-  s.interval->start_and_tick();
+  start_and_tick(s.interval);
   s.interval->tick(1000_tv, default_request());
   REQUIRE(c0->get_date() == 1000_tv);
   REQUIRE(c1->get_date() == 0_tv);
@@ -534,9 +565,8 @@ TEST_CASE ("test_inter_tick", "test_inter_tick")
   REQUIRE(c2->get_date() == 500_tv);
 }
 
-TEST_CASE ("test_unconnected", "test_unconnected")
+TEST_CASE("test_unconnected", "test_unconnected")
 {
-
 
   root_scenario s;
   using namespace ossia;
@@ -545,14 +575,14 @@ TEST_CASE ("test_unconnected", "test_unconnected")
   std::shared_ptr<time_event> e0 = create_event(scenario);
   std::shared_ptr<time_event> e1 = create_event(scenario);
 
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 2_tv, 2_tv, 2_tv);
+  std::shared_ptr<time_interval> c0 = create_interval({}, *e0, *e1, 2_tv, 2_tv, 2_tv);
   s.scenario->add_time_interval(c0);
 
   REQUIRE(c0->get_date() == 0_tv);
   REQUIRE(e0->get_status() == time_event::status::NONE);
   REQUIRE(e1->get_status() == time_event::status::NONE);
 
-  s.interval->start_and_tick();
+  start_and_tick(s.interval);
 
   REQUIRE(c0->get_date() == 0_tv);
   REQUIRE(e0->get_status() == time_event::status::NONE);
@@ -571,10 +601,8 @@ TEST_CASE ("test_unconnected", "test_unconnected")
   REQUIRE(e1->get_status() == time_event::status::NONE);
 }
 
-
-TEST_CASE ("test_simulated_state", "test_simulated_state")
+TEST_CASE("test_1_len_interval_state", "test_1_len_interval_state")
 {
-
   using namespace ossia;
   root_scenario s;
   TestDevice utils;
@@ -585,11 +613,11 @@ TEST_CASE ("test_simulated_state", "test_simulated_state")
   std::shared_ptr<time_event> e2 = create_event(scenario);
   std::shared_ptr<time_event> e3 = create_event(scenario);
 
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 2_tv, 2_tv, 2_tv);
+  std::shared_ptr<time_interval> c0 = create_interval({}, *e0, *e1, 2_tv, 2_tv, 2_tv);
   s.scenario->add_time_interval(c0);
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e1, *e2, 0_tv, 0_tv, 0_tv);
+  std::shared_ptr<time_interval> c1 = create_interval({}, *e1, *e2, 1_tv, 1_tv, 1_tv);
   s.scenario->add_time_interval(c1);
-  std::shared_ptr<time_interval> c2 = time_interval::create({}, *e2, *e3, 20_tv, 20_tv, 20_tv);
+  std::shared_ptr<time_interval> c2 = create_interval({}, *e2, *e3, 20_tv, 20_tv, 20_tv);
   s.scenario->add_time_interval(c2);
 
   auto msg_node = std::make_shared<ossia::nodes::messages>();
@@ -602,15 +630,70 @@ TEST_CASE ("test_simulated_state", "test_simulated_state")
   s.interval->tick(10_tv, default_request());
 
   for(auto tr : msg_node->requested_tokens)
-    std::cerr << tr;
-  REQUIRE((int)msg_node->requested_tokens.size() == (int) 1);
+    std::cout << " -- " << tr << "\n";
+  REQUIRE(e0->get_status() & ossia::time_event::status::FINISHED);
+  REQUIRE(e1->get_status() & ossia::time_event::status::FINISHED);
+  REQUIRE(e2->get_status() & ossia::time_event::status::FINISHED);
+  REQUIRE((int)msg_node->requested_tokens.size() == (int)1);
+  auto t0 = msg_node->requested_tokens[0];
+  auto expected = simple_token_request{.prev_date = 0_tv, .date = 1_tv, .offset = 2_tv};
+  REQUIRE(t0 == expected);
+
+  REQUIRE(utils.float_addr->value() == ossia::value(float(0.)));
+
+  auto gg = std::make_unique<graph>();
+  auto& g = *gg;
+  ossia::execution_state e;
+  g.add_node(msg_node);
+  g.state(e);
+  e.commit();
+
+  REQUIRE(utils.float_addr->value() == ossia::value(float(1.234)));
+  REQUIRE(c2->get_date() == 7_tv);
+}
+
+TEST_CASE("test_0_len_interval_state", "test_0_len_interval_state")
+{
+  using namespace ossia;
+  root_scenario s;
+  TestDevice utils;
+
+  ossia::scenario& scenario = *s.scenario;
+  std::shared_ptr<time_event> e0 = start_event(scenario);
+  std::shared_ptr<time_event> e1 = create_event(scenario);
+  std::shared_ptr<time_event> e2 = create_event(scenario);
+  std::shared_ptr<time_event> e3 = create_event(scenario);
+
+  std::shared_ptr<time_interval> c0 = create_interval({}, *e0, *e1, 2_tv, 2_tv, 2_tv);
+  s.scenario->add_time_interval(c0);
+  std::shared_ptr<time_interval> c1 = create_interval({}, *e1, *e2, 0_tv, 0_tv, 0_tv);
+  s.scenario->add_time_interval(c1);
+  std::shared_ptr<time_interval> c2 = create_interval({}, *e2, *e3, 20_tv, 20_tv, 20_tv);
+  s.scenario->add_time_interval(c2);
+
+  auto msg_node = std::make_shared<ossia::nodes::messages>();
+  msg_node->data.push_back({*utils.float_addr, ossia::value(1.234)});
+
+  auto msg_proc = std::make_shared<ossia::node_process>(msg_node);
+
+  c1->add_time_process(msg_proc);
+  s.interval->start();
+  s.interval->tick(10_tv, default_request());
+
+  for(auto tr : msg_node->requested_tokens)
+    std::cout << " -- " << tr << "\n";
+  REQUIRE(e0->get_status() & ossia::time_event::status::FINISHED);
+  REQUIRE(e1->get_status() & ossia::time_event::status::FINISHED);
+  REQUIRE(e2->get_status() & ossia::time_event::status::FINISHED);
+  REQUIRE((int)msg_node->requested_tokens.size() == (int)1);
   auto t0 = msg_node->requested_tokens[0];
   auto expected = simple_token_request{.prev_date = 0_tv, .date = 0_tv, .offset = 2_tv};
   REQUIRE(t0 == expected);
 
   REQUIRE(utils.float_addr->value() == ossia::value(float(0.)));
 
-  ossia::graph g;
+  auto gg = std::make_unique<graph>();
+  auto& g = *gg;
   ossia::execution_state e;
   g.add_node(msg_node);
   g.state(e);
@@ -620,7 +703,7 @@ TEST_CASE ("test_simulated_state", "test_simulated_state")
   REQUIRE(c2->get_date() == 8_tv);
 }
 
-TEST_CASE ("test_trigger", "test_trigger")
+TEST_CASE("test_trigger", "test_trigger")
 {
 
   using namespace ossia;
@@ -630,35 +713,34 @@ TEST_CASE ("test_trigger", "test_trigger")
   std::shared_ptr<time_event> e0 = start_event(scenario);
   std::shared_ptr<time_event> e1 = create_event(scenario);
   std::shared_ptr<time_event> e2 = create_event(scenario);
-  e1->get_time_sync().set_expression(ossia::expressions::make_expression_atom(1, ossia::expressions::comparator::EQUAL, 1));
+  e1->get_time_sync().set_expression(ossia::expressions::make_expression_atom(
+      1, ossia::expressions::comparator::EQUAL, 1));
 
-
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 30_tv, 20_tv, 40_tv);
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e1, *e2, 100000_tv, 100000_tv, 100000_tv);
+  std::shared_ptr<time_interval> c0 = create_interval({}, *e0, *e1, 30_tv, 20_tv, 40_tv);
+  std::shared_ptr<time_interval> c1
+      = create_interval({}, *e1, *e2, 100000_tv, 100000_tv, 100000_tv);
 
   scenario.add_time_interval(c0);
   scenario.add_time_interval(c1);
 
-  s.interval->start_and_tick();
+  start_and_tick(s.interval);
   s.interval->tick(15_tv, default_request());
   REQUIRE(c0->get_date() == 15_tv);
   REQUIRE(c1->get_date() == 0_tv);
 
   s.interval->tick(15_tv, default_request());
-  std::cerr << c0->get_date() << c1->get_date();
+  std::cout << c0->get_date() << c1->get_date() << std::endl;
   REQUIRE(c0->get_date() == 0_tv); // executed, we go on to the next one
   REQUIRE(c1->get_date() == 0_tv);
-  REQUIRE(e1->get_status() == ossia::time_event::status::FINISHED);
+  REQUIRE(e1->get_status() & ossia::time_event::status::FINISHED);
 
   s.interval->tick(15_tv, default_request());
-  std::cerr << c0->get_date() << c1->get_date();
+  std::cout << c0->get_date() << c1->get_date() << std::endl;
   REQUIRE(c0->get_date() == 0_tv);
   REQUIRE(c1->get_date() == 15_tv);
-
 }
 
-
-TEST_CASE ("test_trigger_at_start", "test_trigger_at_start")
+TEST_CASE("test_trigger_at_start", "test_trigger_at_start")
 {
   using namespace ossia;
   root_scenario s;
@@ -667,28 +749,25 @@ TEST_CASE ("test_trigger_at_start", "test_trigger_at_start")
   std::shared_ptr<time_event> e0 = start_event(scenario);
   std::shared_ptr<time_event> e1 = create_event(scenario);
 
-  scenario.get_start_time_sync()->set_expression(ossia::expressions::make_expression_false());
+  scenario.get_start_time_sync()->set_expression(
+      ossia::expressions::make_expression_false());
 
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 30_tv, 30_tv, 30_tv);
+  std::shared_ptr<time_interval> c0 = create_interval({}, *e0, *e1, 30_tv, 30_tv, 30_tv);
 
   scenario.add_time_interval(c0);
 
   REQUIRE(!scenario.get_start_time_sync()->is_evaluating());
   REQUIRE(c0->get_date() == 0_tv);
 
-  s.interval->start_and_tick();
+  start_and_tick(s.interval);
   s.interval->tick(15_tv, default_request());
   REQUIRE(c0->get_date() == 0_tv);
   REQUIRE(scenario.get_start_time_sync()->is_evaluating());
 }
 
-TEST_CASE ("test_speed", "test_speed")
-{
+TEST_CASE("test_speed", "test_speed") { }
 
-}
-
-
-TEST_CASE ("test_tokens", "test_tokens")
+TEST_CASE("test_tokens", "test_tokens")
 {
 
   using namespace ossia;
@@ -701,9 +780,11 @@ TEST_CASE ("test_tokens", "test_tokens")
   e1->get_time_sync().set_expression(ossia::expressions::make_expression_false());
 
   // Dummy processes are added, else token requests aren't registered as an optimization
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 300_tv, 300_tv, 300_tv);
+  std::shared_ptr<time_interval> c0
+      = create_interval({}, *e0, *e1, 300_tv, 300_tv, 300_tv);
   c0->add_time_process(dummy_process());
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e1, *e2, 500_tv, 500_tv, 500_tv);
+  std::shared_ptr<time_interval> c1
+      = create_interval({}, *e1, *e2, 500_tv, 500_tv, 500_tv);
   c1->add_time_process(dummy_process());
 
   scenario.add_time_interval(c0);
@@ -712,26 +793,21 @@ TEST_CASE ("test_tokens", "test_tokens")
   s.interval->tick(700_tv, default_request());
 
   ossia::simple_token_request_vec expected0{
-      {.prev_date = 0_tv, .date = 0_tv, .parent_duration = 300_tv},
       {.prev_date = 0_tv, .date = 300_tv, .parent_duration = 300_tv}};
 
   REQUIRE(c0->node->requested_tokens == expected0);
 
-  std::cerr << c1->node->requested_tokens.size();
-  std::cerr << c1->node->requested_tokens[0];
+  std::cout << c1->node->requested_tokens.size() << std::endl;
+  std::cout << c1->node->requested_tokens[0] << std::endl;
 
-  REQUIRE(c1->node->requested_tokens.size() == 2);
-  std::cerr << c1->node->requested_tokens[1];
+  REQUIRE(c1->node->requested_tokens.size() == 1);
 
-  ossia::simple_token_request_vec expected1 {
-      {.prev_date = 0_tv, .date = 0_tv,   .parent_duration = 500_tv, .offset = 300_tv},
+  ossia::simple_token_request_vec expected1{
       {.prev_date = 0_tv, .date = 400_tv, .parent_duration = 500_tv, .offset = 300_tv}};
   REQUIRE(c1->node->requested_tokens == expected1);
 }
 
-
-
-TEST_CASE ("test_tokens_max", "test_tokens_max")
+TEST_CASE("test_tokens_max", "test_tokens_max")
 {
 
   using namespace ossia;
@@ -742,10 +818,11 @@ TEST_CASE ("test_tokens_max", "test_tokens_max")
   std::shared_ptr<time_event> e1 = create_event(scenario);
   e1->get_time_sync().set_expression(ossia::expressions::make_expression_false());
 
-
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 300_tv, 300_tv, 300_tv);
+  std::shared_ptr<time_interval> c0
+      = create_interval({}, *e0, *e1, 300_tv, 300_tv, 300_tv);
   c0->add_time_process(dummy_process());
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e0, *e1, 500_tv, 100_tv, 1000_tv);
+  std::shared_ptr<time_interval> c1
+      = create_interval({}, *e0, *e1, 500_tv, 100_tv, 1000_tv);
   c1->add_time_process(dummy_process());
 
   scenario.add_time_interval(c0);
@@ -753,24 +830,20 @@ TEST_CASE ("test_tokens_max", "test_tokens_max")
   s.interval->start();
   s.interval->tick(700_tv, default_request());
 
-  // In this case (when there are flexible bounsd) we go as far as possible in the tick.
+  // In this case (when there are flexible bounds) we go as far as possible in the tick.
   // Else this would cause deadlocks if one interval reached its max before another reached its min
-  ossia::simple_token_request_vec expected0 {
-      {.prev_date = 0_tv, .date = 0_tv,   .parent_duration = 300_tv, .offset = 0_tv},
+  ossia::simple_token_request_vec expected0{
       {.prev_date = 0_tv, .date = 300_tv, .parent_duration = 300_tv, .offset = 0_tv}};
   REQUIRE(c0->node->requested_tokens == expected0);
-  std::cerr << c1->node->requested_tokens.size();
-  std::cerr << c1->node->requested_tokens[0];
-  REQUIRE(c1->node->requested_tokens.size() == 2);
-  std::cerr << c1->node->requested_tokens[1];
-  ossia::simple_token_request_vec expected1 {
-      {.prev_date = 0_tv, .date = 0_tv,   .parent_duration = 500_tv, .offset = 0_tv},
+  std::cout << c1->node->requested_tokens.size() << std::endl;
+  std::cout << c1->node->requested_tokens[0] << std::endl;
+  REQUIRE(c1->node->requested_tokens.size() == 1);
+  ossia::simple_token_request_vec expected1{
       {.prev_date = 0_tv, .date = 700_tv, .parent_duration = 500_tv, .offset = 0_tv}};
   REQUIRE(c1->node->requested_tokens == expected1);
 }
 
-
-TEST_CASE ("test_tokens_min", "test_tokens_min")
+TEST_CASE("test_tokens_min", "test_tokens_min")
 {
   using namespace ossia;
   root_scenario s;
@@ -780,9 +853,9 @@ TEST_CASE ("test_tokens_min", "test_tokens_min")
   std::shared_ptr<time_event> e1 = create_event(scenario);
   e1->get_time_sync().set_expression(ossia::expressions::make_expression_false());
 
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 30_tv, 30_tv, 30_tv);
+  std::shared_ptr<time_interval> c0 = create_interval({}, *e0, *e1, 30_tv, 30_tv, 30_tv);
   c0->add_time_process(dummy_process());
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e0, *e1, 10_tv, 10_tv, 10_tv);
+  std::shared_ptr<time_interval> c1 = create_interval({}, *e0, *e1, 10_tv, 10_tv, 10_tv);
   c1->add_time_process(dummy_process());
 
   scenario.add_time_interval(c0);
@@ -792,15 +865,12 @@ TEST_CASE ("test_tokens_min", "test_tokens_min")
   {
     s.interval->tick(20_tv, default_request());
     ossia::simple_token_request_vec expected0{
-        {.prev_date = 0_tv, .date = 0_tv, .offset = 0_tv},
         {.prev_date = 0_tv, .date = 20_tv, .offset = 0_tv}};
     REQUIRE(c0->node->requested_tokens == expected0);
-    std::cerr << c1->node->requested_tokens.size();
-    std::cerr << c1->node->requested_tokens[0];
-    REQUIRE(c1->node->requested_tokens.size() == 2);
-    std::cerr << c1->node->requested_tokens[1];
+    std::cout << c1->node->requested_tokens.size() << std::endl;
+    std::cout << c1->node->requested_tokens[0] << std::endl;
+    REQUIRE(c1->node->requested_tokens.size() == 1);
     ossia::simple_token_request_vec expected1{
-        {.prev_date = 0_tv, .date = 0_tv, .offset = 0_tv},
         {.prev_date = 0_tv, .date = 10_tv, .offset = 0_tv}};
     REQUIRE(c1->node->requested_tokens == expected1);
 
@@ -813,20 +883,20 @@ TEST_CASE ("test_tokens_min", "test_tokens_min")
   REQUIRE(e1->get_status() == time_event::status::NONE);
   {
     s.interval->tick(20_tv, default_request());
-    ossia::simple_token_request_vec expected0{{.prev_date = 20_tv, .date = 30_tv, .offset = 0_tv}};
-    std::cerr << c0->node->requested_tokens;
-    std::cerr << c1->node->requested_tokens;
+    ossia::simple_token_request_vec expected0{
+        {.prev_date = 20_tv, .date = 30_tv, .offset = 0_tv}};
+    std::cout << c0->node->requested_tokens << std::endl;
+    std::cout << c1->node->requested_tokens << std::endl;
     REQUIRE(c0->node->requested_tokens.size() == 1);
     REQUIRE(c0->node->requested_tokens == expected0);
 
     REQUIRE(c1->node->requested_tokens.size() == 0);
   }
 
-  REQUIRE(e1->get_status() == time_event::status::FINISHED);
+  REQUIRE(e1->get_status() & time_event::status::FINISHED);
 }
 
-
-TEST_CASE ("test_autom", "test_autom")
+TEST_CASE("test_autom", "test_autom")
 {
   //
   //      using namespace ossia;
@@ -837,7 +907,7 @@ TEST_CASE ("test_autom", "test_autom")
   //      std::shared_ptr<time_event> e0 = start_event(scenario);
   //      std::shared_ptr<time_event> e1 = create_event(scenario);
 
-  //      std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 2_tv, 2_tv, 2_tv);
+  //      std::shared_ptr<time_interval> c0 = create_interval({}, *e0, *e1, 2_tv, 2_tv, 2_tv);
   //      s.scenario->add_time_interval(c0);
 
   //      std::shared_ptr<ossia::automation> proc = std::make_shared<ossia::automation>();
@@ -853,13 +923,13 @@ TEST_CASE ("test_autom", "test_autom")
   //      proc->set_behavior(crv);
   //      c0->add_time_process(proc);
 
-  //      s.interval->start_and_tick();
+  //      start_and_tick(s.interval);
   //      s.interval->tick(1000_tv);
   //      s.interval->tick(999_tv);
   //      s.interval->tick(1_tv);
 }
 
-TEST_CASE ("test_autom_and_state", "test_autom_and_state")
+TEST_CASE("test_autom_and_state", "test_autom_and_state")
 {
   //
   //      using namespace ossia;
@@ -872,8 +942,7 @@ TEST_CASE ("test_autom_and_state", "test_autom_and_state")
   //      e0->add_state(ossia::message{*utils.float_addr, ossia::value{36.}});
   //      e1->add_state(ossia::message{*utils.float_addr, ossia::value{24.}});
 
-
-  //      std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 2_tv, 2_tv, 2_tv);
+  //      std::shared_ptr<time_interval> c0 = create_interval({}, *e0, *e1, 2_tv, 2_tv, 2_tv);
   //      s.scenario->add_time_interval(c0);
 
   //      std::shared_ptr<ossia::automation> proc = std::make_shared<ossia::automation>();
@@ -889,26 +958,33 @@ TEST_CASE ("test_autom_and_state", "test_autom_and_state")
   //      proc->set_behavior(crv);
   //      c0->add_time_process(proc);
 
-  //      s.interval->start_and_tick();
+  //      start_and_tick(s.interval);
   //      s.interval->tick(1000_tv);
   //      s.interval->tick(999_tv);
   //      s.interval->tick(1_tv);
 }
 
+static auto& get_value_state(ossia::execution_state& s)
+{
+  return static_cast<ossia::merged_execution_state_policy*>(s.m_policy.get())
+      ->m_valueState;
+};
 
-TEST_CASE ("test_percentage", "test_percentage")
+TEST_CASE("test_percentage", "test_percentage")
 {
 
   using namespace ossia;
   root_scenario s;
   TestDevice utils;
-  ossia::graph g;
+
+  auto gg = std::make_unique<graph>();
+  auto& g = *gg;
 
   ossia::scenario& scenario = *s.scenario;
   std::shared_ptr<time_event> e0 = start_event(scenario);
   std::shared_ptr<time_event> e1 = create_event(scenario);
 
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 2_tv, 2_tv, 2_tv);
+  std::shared_ptr<time_interval> c0 = create_interval({}, *e0, *e1, 2_tv, 2_tv, 2_tv);
   s.scenario->add_time_interval(c0);
 
   auto node = std::make_shared<ossia::nodes::percentage>(*utils.float_addr);
@@ -916,52 +992,51 @@ TEST_CASE ("test_percentage", "test_percentage")
   c0->add_time_process(proc);
   g.add_node(node);
 
-
-  s.interval->start_and_tick();
+  s.interval->start();
   {
     ossia::execution_state s;
     g.state(s);
-    REQUIRE(s.m_valueState.size() == 1);
-    REQUIRE(s.m_valueState.begin()->second.back().first.value == ossia::value(0.f));
+    REQUIRE(get_value_state(s).size() == 0);
   }
 
   s.interval->tick(1_tv, default_request());
   {
     ossia::execution_state s;
     g.state(s);
-    REQUIRE(s.m_valueState.size() == 1);
-    REQUIRE(s.m_valueState.begin()->second.back().first.value == ossia::value(0.5f));
+    REQUIRE(get_value_state(s).size() == 1);
+    REQUIRE(get_value_state(s).begin()->second.back().first.value == ossia::value(0.5f));
   }
 
   s.interval->tick(1_tv, default_request());
   {
     ossia::execution_state s;
     g.state(s);
-    REQUIRE(s.m_valueState.size() == 1);
-    REQUIRE(s.m_valueState.begin()->second.back().first.value == ossia::value(1.f));
+    REQUIRE(get_value_state(s).size() == 1);
+    REQUIRE(get_value_state(s).begin()->second.back().first.value == ossia::value(1.f));
   }
 
   s.interval->tick(1_tv, default_request());
   {
     ossia::execution_state s;
     g.state(s);
-    REQUIRE(s.m_valueState.empty());
+    REQUIRE(get_value_state(s).empty());
   }
 }
 
-TEST_CASE ("test_percentage_long", "test_percentage_long")
+TEST_CASE("test_percentage_long", "test_percentage_long")
 {
 
   using namespace ossia;
   root_scenario s;
   TestDevice utils;
-  ossia::graph g;
+  auto gg = std::make_unique<graph>();
+  auto& g = *gg;
 
   ossia::scenario& scenario = *s.scenario;
   std::shared_ptr<time_event> e0 = start_event(scenario);
   std::shared_ptr<time_event> e1 = create_event(scenario);
 
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 5_tv, 5_tv, 5_tv);
+  std::shared_ptr<time_interval> c0 = create_interval({}, *e0, *e1, 5_tv, 5_tv, 5_tv);
   s.scenario->add_time_interval(c0);
 
   auto node = std::make_shared<ossia::nodes::percentage>(*utils.float_addr);
@@ -969,40 +1044,43 @@ TEST_CASE ("test_percentage_long", "test_percentage_long")
   c0->add_time_process(proc);
   g.add_node(node);
 
-
-  s.interval->start_and_tick();
+  s.interval->start();
+  s.interval->tick(1_tv, default_request());
+  REQUIRE(node->requested_tokens.size() == 1);
   {
     ossia::execution_state s;
     g.state(s);
-    REQUIRE(s.m_valueState.size() == 1);
-    REQUIRE(s.m_valueState.begin()->second.back().first.value == ossia::value(0.f));
+    REQUIRE(node->requested_tokens.size() == 0);
+    REQUIRE(get_value_state(s).size() == 1);
+    REQUIRE(get_value_state(s).begin()->second.back().first.value == ossia::value(0.2f));
   }
 
-  s.interval->tick(3_tv, default_request());
+  s.interval->tick(2_tv, default_request());
   {
     ossia::execution_state s;
     g.state(s);
-    REQUIRE(s.m_valueState.size() == 1);
-    REQUIRE(s.m_valueState.begin()->second.back().first.value == ossia::value(3./5.));
+    REQUIRE(get_value_state(s).size() == 1);
+    REQUIRE(
+        get_value_state(s).begin()->second.back().first.value == ossia::value(3. / 5.));
   }
 
   s.interval->tick(7_tv, default_request());
   {
     ossia::execution_state s;
     g.state(s);
-    REQUIRE(s.m_valueState.size() == 1);
-    REQUIRE(s.m_valueState.begin()->second.back().first.value == ossia::value(1.f));
+    REQUIRE(get_value_state(s).size() == 1);
+    REQUIRE(get_value_state(s).begin()->second.back().first.value == ossia::value(1.f));
   }
 
   s.interval->tick(1_tv, default_request());
   {
     ossia::execution_state s;
     g.state(s);
-    REQUIRE(s.m_valueState.empty());
+    REQUIRE(get_value_state(s).empty());
   }
 }
 
-TEST_CASE ("test_offset", "test_offset")
+TEST_CASE("test_offset", "test_offset")
 {
   // TODO reinstate me
   //        using namespace ossia;
@@ -1018,16 +1096,16 @@ TEST_CASE ("test_offset", "test_offset")
   //        e1->add_state(ossia::message{*utils.float_addr, ossia::value{24.}});
   //        e2->add_state(ossia::message{*utils.float_addr, ossia::value{31.}});
 
-  //        std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 5_tv, 5_tv, 5_tv);
+  //        std::shared_ptr<time_interval> c0 = create_interval({}, *e0, *e1, 5_tv, 5_tv, 5_tv);
   //        s.scenario->add_time_interval(c0);
-  //        std::shared_ptr<time_interval> c1 = time_interval::create({}, *e1, *e2, 5_tv, 5_tv, 5_tv);
+  //        std::shared_ptr<time_interval> c1 = create_interval({}, *e1, *e2, 5_tv, 5_tv, 5_tv);
   //        s.scenario->add_time_interval(c1);
-  //        std::shared_ptr<time_interval> c2 = time_interval::create({}, *e2, *e3, 5_tv, 5_tv, 5_tv);
+  //        std::shared_ptr<time_interval> c2 = create_interval({}, *e2, *e3, 5_tv, 5_tv, 5_tv);
   //        s.scenario->add_time_interval(c1);
 
   //        {
   //            auto st = s.interval->offset(7_tv);
-  //            ossia::print(std::cerr, st);
+  //            ossia::print(std::cout, st);
 
   //            ossia::state expected;
   //            {
@@ -1044,7 +1122,7 @@ TEST_CASE ("test_offset", "test_offset")
   //            ossia::state expected;
 
   //            s.interval->start_and_tick(st);
-  //            ossia::print(std::cerr, st);
+  //            ossia::print(std::cout, st);
 
   //            REQUIRE(st == expected);
   //        }
@@ -1053,7 +1131,7 @@ TEST_CASE ("test_offset", "test_offset")
 
   //        {
   //            auto st = s.interval->offset(13_tv);
-  //            ossia::print(std::cerr, st);
+  //            ossia::print(std::cout, st);
 
   //            ossia::state expected;
   //            {
@@ -1070,16 +1148,13 @@ TEST_CASE ("test_offset", "test_offset")
   //            ossia::state expected;
 
   //            s.interval->start_and_tick(st);
-  //            ossia::print(std::cerr, st);
+  //            ossia::print(std::cout, st);
 
   //            REQUIRE(st == expected);
   //        }
-
 }
 
-
-
-TEST_CASE ("test_musical_bar", "test_musical_bar")
+TEST_CASE("test_musical_bar", "test_musical_bar")
 {
 
   using namespace ossia;
@@ -1087,8 +1162,10 @@ TEST_CASE ("test_musical_bar", "test_musical_bar")
   root_scenario s;
   ossia::scenario& scenario = *s.scenario;
   std::shared_ptr<time_event> e0 = start_event(scenario);
-  std::shared_ptr<time_event> e1 = create_event(scenario); e1->get_time_sync().set_expression(ossia::expressions::make_expression_false());
-  std::shared_ptr<time_event> e2 = create_event(scenario); e2->get_time_sync().set_expression(ossia::expressions::make_expression_false());
+  std::shared_ptr<time_event> e1 = create_event(scenario);
+  e1->get_time_sync().set_expression(ossia::expressions::make_expression_false());
+  std::shared_ptr<time_event> e2 = create_event(scenario);
+  e2->get_time_sync().set_expression(ossia::expressions::make_expression_false());
 
   // assume sampling rate is 44100 -> a quarter note is 22050
   e1->get_time_sync().set_sync_rate(1);
@@ -1097,17 +1174,18 @@ TEST_CASE ("test_musical_bar", "test_musical_bar")
     * e0 - - - - - - - - - - e1 - - - - - - - - - - e2
    */
 
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 0_tv, 0_tv, ossia::Infinite);
+  std::shared_ptr<time_interval> c0
+      = create_interval({}, *e0, *e1, 0_tv, 0_tv, ossia::Infinite);
   c0->add_time_process(dummy_process());
 
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e1, *e2, 0_tv, 0_tv, ossia::Infinite);
+  std::shared_ptr<time_interval> c1
+      = create_interval({}, *e1, *e2, 0_tv, 0_tv, ossia::Infinite);
   c1->add_time_process(dummy_process());
-
 
   s.scenario->add_time_interval(c0);
   s.scenario->add_time_interval(c1);
 
-  s.interval->start_and_tick();
+  start_and_tick(s.interval);
   {
     s.interval->tick(5_tv, default_request());
 
@@ -1118,8 +1196,8 @@ TEST_CASE ("test_musical_bar", "test_musical_bar")
     REQUIRE(e2->get_status() == time_event::status::NONE);
   }
 
-
-  e1->get_time_sync().set_expression(ossia::expressions::make_expression_atom(1, ossia::expressions::comparator::EQUAL, 1));
+  e1->get_time_sync().set_expression(ossia::expressions::make_expression_atom(
+      1, ossia::expressions::comparator::EQUAL, 1));
 
   // Tick a bit : nothing happens
   {
@@ -1150,7 +1228,6 @@ TEST_CASE ("test_musical_bar", "test_musical_bar")
     REQUIRE(e2->get_status() == time_event::status::NONE);
   }
 
-
   c0->node->requested_tokens.clear();
   c1->node->requested_tokens.clear();
   // Tick enough to go past the next quantification value :
@@ -1163,30 +1240,24 @@ TEST_CASE ("test_musical_bar", "test_musical_bar")
     req.musical_start_position = 1;
     req.musical_end_position = 5;
     req.signature = {4, 4};
-    std::cerr << "start musical tick:" << std::endl;
+    std::cout << "start musical tick:" << std::endl;
     s.interval->tick(88200_tv, req); // go forward a whole bar
-    std::cerr << std::flush;
+    std::cout << std::flush;
     std::cout << std::flush;
 
-    REQUIRE(e1->get_status() == time_event::status::FINISHED);
+    REQUIRE(e1->get_status() & time_event::status::FINISHED);
     ossia::simple_token_request_vec expected0{
-        {.prev_date = 22050_tv, .date = 88199_tv, .offset = 0_tv}
-    };
+        {.prev_date = 22050_tv, .date = 88199_tv, .offset = 0_tv}};
 
     REQUIRE(c0->get_date() == 0_tv);
 
     REQUIRE(!c0->node->requested_tokens.empty());
     REQUIRE(c0->node->requested_tokens == expected0);
 
-    ossia::simple_token_request_vec expected1 {
-      ossia::simple_token_request {
-        .prev_date = 0_tv,
-        .date = 0_tv,
-        .offset = 66149_tv }, // == 88200_tv - 22050_tv
-      ossia::simple_token_request {
-        .prev_date = 0_tv,
-        .date = 22051_tv,
-        .offset = 66149_tv } // == 88200_tv - 22050_tv
+    ossia::simple_token_request_vec expected1{
+        ossia::simple_token_request{
+            .prev_date = 0_tv, .date = 22051_tv, .offset = 66149_tv}
+        // == 88200_tv - 22050_tv
     };
 
     REQUIRE(c1->get_date() == 22051_tv);
@@ -1196,8 +1267,7 @@ TEST_CASE ("test_musical_bar", "test_musical_bar")
   }
 }
 
-
-TEST_CASE ("test_musical_bar_offset", "test_musical_bar_offset")
+TEST_CASE("test_musical_bar_offset", "test_musical_bar_offset")
 {
 
   using namespace ossia;
@@ -1205,9 +1275,12 @@ TEST_CASE ("test_musical_bar_offset", "test_musical_bar_offset")
   root_scenario s;
   ossia::scenario& scenario = *s.scenario;
   std::shared_ptr<time_event> e0 = start_event(scenario);
-  std::shared_ptr<time_event> ex = create_event(scenario); ex->get_time_sync().set_expression(ossia::expressions::make_expression_true());
-  std::shared_ptr<time_event> e1 = create_event(scenario); e1->get_time_sync().set_expression(ossia::expressions::make_expression_false());
-  std::shared_ptr<time_event> e2 = create_event(scenario); e2->get_time_sync().set_expression(ossia::expressions::make_expression_false());
+  std::shared_ptr<time_event> ex = create_event(scenario);
+  ex->get_time_sync().set_expression(ossia::expressions::make_expression_true());
+  std::shared_ptr<time_event> e1 = create_event(scenario);
+  e1->get_time_sync().set_expression(ossia::expressions::make_expression_false());
+  std::shared_ptr<time_event> e2 = create_event(scenario);
+  e2->get_time_sync().set_expression(ossia::expressions::make_expression_false());
 
   // assume sampling rate is 44100 -> a quarter note is 22050
   e1->get_time_sync().set_sync_rate(1);
@@ -1216,24 +1289,26 @@ TEST_CASE ("test_musical_bar_offset", "test_musical_bar_offset")
     * ex -- e0 - - - - - - - - - - e1 - - - - - - - - - - e2
    */
 
-  std::shared_ptr<time_interval> cx = time_interval::create({}, *e0, *ex, 88200_tv * 1.5,88200_tv * 1.5,88200_tv * 1.5);
+  std::shared_ptr<time_interval> cx
+      = create_interval({}, *e0, *ex, 88200_tv * 1.5, 88200_tv * 1.5, 88200_tv * 1.5);
   cx->add_time_process(dummy_process());
 
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *ex, *e1, 0_tv, 0_tv, ossia::Infinite);
+  std::shared_ptr<time_interval> c0
+      = create_interval({}, *ex, *e1, 0_tv, 0_tv, ossia::Infinite);
   c0->add_time_process(dummy_process());
 
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e1, *e2, 0_tv, 0_tv, ossia::Infinite);
+  std::shared_ptr<time_interval> c1
+      = create_interval({}, *e1, *e2, 0_tv, 0_tv, ossia::Infinite);
   c1->add_time_process(dummy_process());
-
 
   s.scenario->add_time_interval(cx);
   s.scenario->add_time_interval(c0);
   s.scenario->add_time_interval(c1);
 
-  s.interval->start_and_tick();
+  start_and_tick(s.interval);
   {
     // we go past cx, 1/4 in c0
-    s.interval->tick( 88200_tv * 2, default_request());
+    s.interval->tick(88200_tv * 2, default_request());
 
     REQUIRE(c0->get_date() == 88200_tv * 0.5);
     REQUIRE(e1->get_status() == time_event::status::PENDING);
@@ -1242,8 +1317,8 @@ TEST_CASE ("test_musical_bar_offset", "test_musical_bar_offset")
     REQUIRE(e2->get_status() == time_event::status::NONE);
   }
 
-  e1->get_time_sync().set_expression(ossia::expressions::make_expression_atom(1, ossia::expressions::comparator::EQUAL, 1));
-
+  e1->get_time_sync().set_expression(ossia::expressions::make_expression_atom(
+      1, ossia::expressions::comparator::EQUAL, 1));
 
   // Tick a bit : nothing happens
   {
@@ -1255,7 +1330,6 @@ TEST_CASE ("test_musical_bar_offset", "test_musical_bar_offset")
     REQUIRE(c1->get_date() == 0_tv);
     REQUIRE(e2->get_status() == time_event::status::NONE);
   }
-
 
   c0->node->requested_tokens.clear();
   c1->node->requested_tokens.clear();
@@ -1276,31 +1350,22 @@ TEST_CASE ("test_musical_bar_offset", "test_musical_bar_offset")
     req.musical_start_position = (88200_tv * 2 + 500_tv).impl / 22050.;
     req.musical_end_position = (88200_tv * 3 + 500_tv).impl / 22050.;
     req.signature = {4, 4};
-    std::cerr << "start musical tick:" << std::endl;
+    std::cout << "start musical tick:" << std::endl;
     s.interval->tick(88200_tv, req); // go forward a whole bar
-    std::cerr << std::flush;
+    std::cout << std::flush;
     std::cout << std::flush;
 
-    REQUIRE(e1->get_status() == time_event::status::FINISHED);
+    REQUIRE(e1->get_status() & time_event::status::FINISHED);
     ossia::simple_token_request_vec expected0{
-        { .prev_date = 44600_tv, .date = 44600_tv + 87700_tv - 1_tv, .offset = 0_tv}
-    };
+        {.prev_date = 44600_tv, .date = 44600_tv + 87700_tv - 1_tv, .offset = 0_tv}};
 
     REQUIRE(c0->get_date() == 0_tv);
 
     REQUIRE(!c0->node->requested_tokens.empty());
     REQUIRE(c0->node->requested_tokens == expected0);
 
-    ossia::simple_token_request_vec expected1 {
-     {
-        .prev_date = 0_tv,
-        .date = 0_tv,
-        .offset = 88200_tv - 501_tv },
-     {
-        .prev_date = 0_tv,
-        .date = 501_tv,
-        .offset = 88200_tv - 501_tv }
-    };
+    ossia::simple_token_request_vec expected1{
+        {.prev_date = 0_tv, .date = 501_tv, .offset = 88200_tv - 501_tv}};
 
     REQUIRE(c1->get_date() == 501_tv);
     REQUIRE(!c1->node->requested_tokens.empty());
@@ -1309,7 +1374,7 @@ TEST_CASE ("test_musical_bar_offset", "test_musical_bar_offset")
   }
 }
 
-TEST_CASE ("test_musical_quarter", "test_musical_quarter")
+TEST_CASE("test_musical_quarter", "test_musical_quarter")
 {
 
   using namespace ossia;
@@ -1317,8 +1382,10 @@ TEST_CASE ("test_musical_quarter", "test_musical_quarter")
   root_scenario s;
   ossia::scenario& scenario = *s.scenario;
   std::shared_ptr<time_event> e0 = start_event(scenario);
-  std::shared_ptr<time_event> e1 = create_event(scenario); e1->get_time_sync().set_expression(ossia::expressions::make_expression_false());
-  std::shared_ptr<time_event> e2 = create_event(scenario); e2->get_time_sync().set_expression(ossia::expressions::make_expression_false());
+  std::shared_ptr<time_event> e1 = create_event(scenario);
+  e1->get_time_sync().set_expression(ossia::expressions::make_expression_false());
+  std::shared_ptr<time_event> e2 = create_event(scenario);
+  e2->get_time_sync().set_expression(ossia::expressions::make_expression_false());
 
   // assume sampling rate is 44100 -> a quarter note is 22050
   e1->get_time_sync().set_sync_rate(4);
@@ -1327,17 +1394,18 @@ TEST_CASE ("test_musical_quarter", "test_musical_quarter")
     * e0 - - - - - - - - - - e1 - - - - - - - - - - e2
    */
 
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 0_tv, 0_tv, ossia::Infinite);
+  std::shared_ptr<time_interval> c0
+      = create_interval({}, *e0, *e1, 0_tv, 0_tv, ossia::Infinite);
   c0->add_time_process(dummy_process());
 
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e1, *e2, 0_tv, 0_tv, ossia::Infinite);
+  std::shared_ptr<time_interval> c1
+      = create_interval({}, *e1, *e2, 0_tv, 0_tv, ossia::Infinite);
   c1->add_time_process(dummy_process());
-
 
   s.scenario->add_time_interval(c0);
   s.scenario->add_time_interval(c1);
 
-  s.interval->start_and_tick();
+  start_and_tick(s.interval);
   {
     s.interval->tick(50_tv, default_request());
 
@@ -1348,8 +1416,8 @@ TEST_CASE ("test_musical_quarter", "test_musical_quarter")
     REQUIRE(e2->get_status() == time_event::status::NONE);
   }
 
-
-  e1->get_time_sync().set_expression(ossia::expressions::make_expression_atom(1, ossia::expressions::comparator::EQUAL, 1));
+  e1->get_time_sync().set_expression(ossia::expressions::make_expression_atom(
+      1, ossia::expressions::comparator::EQUAL, 1));
 
   // Tick a bit : nothing happens
   {
@@ -1358,8 +1426,8 @@ TEST_CASE ("test_musical_quarter", "test_musical_quarter")
     req.speed = 1.;
     req.musical_start_last_bar = 0.;
     req.musical_end_last_bar = 0.;
-    req.musical_start_position = 50./22050.;
-    req.musical_end_position = 20050./22050.;
+    req.musical_start_position = 50. / 22050.;
+    req.musical_end_position = 20050. / 22050.;
     req.signature = {4, 4};
     s.interval->tick(20000_tv, req);
 
@@ -1379,18 +1447,17 @@ TEST_CASE ("test_musical_quarter", "test_musical_quarter")
     req.speed = 1.;
     req.musical_start_last_bar = 0.;
     req.musical_end_last_bar = 0.;
-    req.musical_start_position = 20050./22050.;
-    req.musical_end_position = 25050./22050.;
+    req.musical_start_position = 20050. / 22050.;
+    req.musical_end_position = 25050. / 22050.;
     req.signature = {4, 4};
-    std::cerr << "start musical tick:" << std::endl;
+    std::cout << "start musical tick:" << std::endl;
     s.interval->tick(5000_tv, req); // go forward past the first quarter note
-    std::cerr << std::flush;
+    std::cout << std::flush;
     std::cout << std::flush;
 
-    REQUIRE(e1->get_status() == time_event::status::FINISHED);
-    ossia::simple_token_request_vec expected0 {
-        {.prev_date = 20050_tv, .date = 22049_tv, .offset = 0_tv}
-    };
+    REQUIRE(e1->get_status() & time_event::status::FINISHED);
+    ossia::simple_token_request_vec expected0{
+        {.prev_date = 20050_tv, .date = 22049_tv, .offset = 0_tv}};
 
     REQUIRE(c0->get_date() == 0_tv);
 
@@ -1398,14 +1465,9 @@ TEST_CASE ("test_musical_quarter", "test_musical_quarter")
     REQUIRE(c0->node->requested_tokens == expected0);
 
     ossia::simple_token_request_vec expected1{
-        ossia::simple_token_request {
-        .prev_date = 0_tv,
-        .date = 0_tv,
-        .offset = 1999_tv }, // == 5000 - (22050 - 20050)
-        ossia::simple_token_request {
-        .prev_date = 0_tv,
-        .date = 3001_tv,
-        .offset = 1999_tv } // == 88200_tv - 22050_tv
+        ossia::simple_token_request{
+            .prev_date = 0_tv, .date = 3001_tv, .offset = 1999_tv}
+        // == 88200_tv - 22050_tv
     };
 
     REQUIRE(c1->get_date() == 3001_tv);
@@ -1415,16 +1477,17 @@ TEST_CASE ("test_musical_quarter", "test_musical_quarter")
   }
 }
 
-
-TEST_CASE ("test_musical_eighth", "test_musical_eighth")
+TEST_CASE("test_musical_eighth", "test_musical_eighth")
 {
   using namespace ossia;
 
   root_scenario s;
   ossia::scenario& scenario = *s.scenario;
   std::shared_ptr<time_event> e0 = start_event(scenario);
-  std::shared_ptr<time_event> e1 = create_event(scenario); e1->get_time_sync().set_expression(ossia::expressions::make_expression_false());
-  std::shared_ptr<time_event> e2 = create_event(scenario); e2->get_time_sync().set_expression(ossia::expressions::make_expression_false());
+  std::shared_ptr<time_event> e1 = create_event(scenario);
+  e1->get_time_sync().set_expression(ossia::expressions::make_expression_false());
+  std::shared_ptr<time_event> e2 = create_event(scenario);
+  e2->get_time_sync().set_expression(ossia::expressions::make_expression_false());
 
   // assume sampling rate is 44100 -> a quarter note is 22050
   e1->get_time_sync().set_sync_rate(8);
@@ -1433,17 +1496,18 @@ TEST_CASE ("test_musical_eighth", "test_musical_eighth")
     * e0 - - - - - - - - - - e1 - - - - - - - - - - e2
    */
 
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 0_tv, 0_tv, ossia::Infinite);
+  std::shared_ptr<time_interval> c0
+      = create_interval({}, *e0, *e1, 0_tv, 0_tv, ossia::Infinite);
   c0->add_time_process(dummy_process());
 
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e1, *e2, 0_tv, 0_tv, ossia::Infinite);
+  std::shared_ptr<time_interval> c1
+      = create_interval({}, *e1, *e2, 0_tv, 0_tv, ossia::Infinite);
   c1->add_time_process(dummy_process());
-
 
   s.scenario->add_time_interval(c0);
   s.scenario->add_time_interval(c1);
 
-  s.interval->start_and_tick();
+  start_and_tick(s.interval);
   {
     s.interval->tick(50_tv, default_request());
 
@@ -1454,8 +1518,8 @@ TEST_CASE ("test_musical_eighth", "test_musical_eighth")
     REQUIRE(e2->get_status() == time_event::status::NONE);
   }
 
-
-  e1->get_time_sync().set_expression(ossia::expressions::make_expression_atom(1, ossia::expressions::comparator::EQUAL, 1));
+  e1->get_time_sync().set_expression(ossia::expressions::make_expression_atom(
+      1, ossia::expressions::comparator::EQUAL, 1));
 
   // Tick a bit : nothing happens
   {
@@ -1464,8 +1528,8 @@ TEST_CASE ("test_musical_eighth", "test_musical_eighth")
     req.speed = 1.;
     req.musical_start_last_bar = 0.;
     req.musical_end_last_bar = 0.;
-    req.musical_start_position = 50./22050.;
-    req.musical_end_position = 60./22050.;
+    req.musical_start_position = 50. / 22050.;
+    req.musical_end_position = 60. / 22050.;
     req.signature = {4, 4};
     s.interval->tick(10_tv, req);
 
@@ -1485,18 +1549,17 @@ TEST_CASE ("test_musical_eighth", "test_musical_eighth")
     req.speed = 1.;
     req.musical_start_last_bar = 0.;
     req.musical_end_last_bar = 0.;
-    req.musical_start_position = 60./22050.;
+    req.musical_start_position = 60. / 22050.;
     req.musical_end_position = (60. + 20000.) / 22050.;
     req.signature = {4, 4};
-    std::cerr << "start musical tick:" << std::endl;
+    std::cout << "start musical tick:" << std::endl;
     s.interval->tick(20000_tv, req); // go forward past the first quarter note
-    std::cerr << std::flush;
+    std::cout << std::flush;
     std::cout << std::flush;
 
-    REQUIRE(e1->get_status() == time_event::status::FINISHED);
+    REQUIRE(e1->get_status() & time_event::status::FINISHED);
     ossia::simple_token_request_vec expected0{
-        {.prev_date = 60_tv, .date = 11024_tv, .offset = 0_tv}
-    };
+        {.prev_date = 60_tv, .date = 11024_tv, .offset = 0_tv}};
 
     REQUIRE(c0->get_date() == 0_tv);
 
@@ -1504,15 +1567,7 @@ TEST_CASE ("test_musical_eighth", "test_musical_eighth")
     REQUIRE(c0->node->requested_tokens == expected0);
 
     ossia::simple_token_request_vec expected1{
-      {
-        .prev_date = 0_tv,
-        .date = 0_tv,
-        .offset = 10964_tv },
-      {
-        .prev_date = 0_tv,
-        .date = 9036_tv,
-        .offset = 10964_tv }
-    };
+        {.prev_date = 0_tv, .date = 9036_tv, .offset = 10964_tv}};
 
     REQUIRE(c1->get_date() == 9036_tv);
     REQUIRE(!c1->node->requested_tokens.empty());
@@ -1521,7 +1576,7 @@ TEST_CASE ("test_musical_eighth", "test_musical_eighth")
   }
 }
 
-TEST_CASE ("test_exec_chain_loop", "test_exec_chain_loop")
+TEST_CASE("test_exec_chain_loop", "test_exec_chain_loop")
 {
   using namespace ossia;
 
@@ -1530,20 +1585,17 @@ TEST_CASE ("test_exec_chain_loop", "test_exec_chain_loop")
   std::shared_ptr<time_event> e0 = start_event(scenario);
   std::shared_ptr<time_event> e1 = create_event(scenario);
 
-  std::shared_ptr<time_interval> c0 = time_interval::create({}, *e0, *e1, 10_tv, 10_tv, 10_tv);
-  std::shared_ptr<time_interval> c1 = time_interval::create({}, *e1, *e0, 10_tv, 10_tv, 10_tv);
+  std::shared_ptr<time_interval> c0 = create_interval({}, *e0, *e1, 10_tv, 10_tv, 10_tv);
+  std::shared_ptr<time_interval> c1 = create_interval({}, *e1, *e0, 10_tv, 10_tv, 10_tv);
   c1->graphal = true;
 
   s.scenario->add_time_interval(c0);
   s.scenario->add_time_interval(c1);
 
   auto print = [&] {
-      std::cerr << e0->get_status() << " "
-                << e1->get_status() << " -- "
-                << c0->get_date() << " "
-                << c1->get_date()
-                << std::endl;
-  } ;
+    std::cout << e0->get_status() << " " << e1->get_status() << " -- " << c0->get_date()
+              << " " << c1->get_date() << std::endl;
+  };
 
   scenario.start();
   scenario.state(default_request(0_tv, 0_tv));

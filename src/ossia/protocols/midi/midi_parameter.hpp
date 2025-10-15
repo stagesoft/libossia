@@ -3,7 +3,6 @@
 #include <ossia/network/domain/domain.hpp>
 #include <ossia/protocols/midi/detail/channel.hpp>
 
-#include <boost/lexical_cast.hpp>
 namespace ossia::net
 {
 class protocol_base;
@@ -29,7 +28,7 @@ struct address_info
 
   ossia::val_type matchingType()
   {
-    switch (type)
+    switch(type)
     {
       case Type::NoteOn:
       case Type::NoteOff:
@@ -48,32 +47,44 @@ struct address_info
     return {};
   }
 
+  static const std::string* num_table_init() noexcept
+  {
+    static std::string num_table[257];
+    for(int i = 0; i < 257; i++)
+    {
+      num_table[i] = std::to_string(i);
+    }
+    return num_table;
+  }
+  static const std::string* num_table() noexcept
+  {
+    static auto ptr = num_table_init();
+    return ptr;
+  }
+
   std::string address()
   {
-    switch (type)
+    auto nums = num_table();
+    switch(type)
     {
       case Type::NoteOn:
-        return "/" + boost::lexical_cast<std::string>(channel) + "/note/on";
+        return "/" + nums[channel] + "/note/on";
       case Type::NoteOff:
-        return "/" + boost::lexical_cast<std::string>(channel) + "/note/off";
+        return "/" + nums[channel] + "/note/off";
       case Type::CC:
-        return "/" + boost::lexical_cast<std::string>(channel) + "/CC";
+        return "/" + nums[channel] + "/CC";
       case Type::NoteOn_N:
-        return "/" + boost::lexical_cast<std::string>(channel) + "/note/on/"
-               + boost::lexical_cast<std::string>(note);
+        return "/" + nums[channel] + "/note/on/" + nums[note];
       case Type::NoteOff_N:
-        return "/" + boost::lexical_cast<std::string>(channel) + "/note/off/"
-               + boost::lexical_cast<std::string>(note);
+        return "/" + nums[channel] + "/note/off/" + nums[note];
       case Type::CC_N:
-        return "/" + boost::lexical_cast<std::string>(channel) + "/CC/"
-               + boost::lexical_cast<std::string>(note);
+        return "/" + nums[channel] + "/CC/" + nums[note];
       case Type::PC:
-        return "/" + boost::lexical_cast<std::string>(channel) + "/PC";
+        return "/" + nums[channel] + "/PC";
       case Type::PC_N:
-        return "/" + boost::lexical_cast<std::string>(channel) + "/PC/"
-               + boost::lexical_cast<std::string>(note);
+        return "/" + nums[channel] + "/PC/" + nums[note];
       case Type::PB:
-        return "/" + boost::lexical_cast<std::string>(channel) + "/PB";
+        return "/" + nums[channel] + "/PB";
       case Type::Any:
         return "/";
     }
@@ -82,14 +93,14 @@ struct address_info
 
   ossia::value defaultValue(int32_t val)
   {
-    switch (type)
+    switch(type)
     {
       case Type::NoteOn:
       case Type::NoteOff:
       case Type::CC:
-        return std::vector<ossia::value>{int32_t{val}, int32_t{val}};
+        return value{std::vector<ossia::value>{int32_t{val}, int32_t{val}}};
       case Type::Any:
-        return std::vector<ossia::value>{};
+        return value{std::vector<ossia::value>{}};
       case Type::NoteOn_N:
       case Type::NoteOff_N:
       case Type::CC_N:
@@ -104,21 +115,26 @@ struct address_info
 
   ossia::domain defaultDomain()
   {
-    if (type != Type::PB && type != Type::Any)
+    if(type != Type::PB && type != Type::Any)
       return ossia::make_domain(defaultValue(0), defaultValue(127));
     return ossia::make_domain(0, 16384);
   }
 
-  address_info(Type t) : type{t}
+  address_info(Type t)
+      : type{t}
   {
   }
 
-  address_info(Type t, midi_size_t n) : type{t}, note{n}
+  address_info(Type t, midi_size_t n)
+      : type{t}
+      , note{n}
   {
   }
 
   address_info(midi_size_t chan, Type t, midi_size_t n)
-      : channel{chan}, type{t}, note{n}
+      : channel{chan}
+      , type{t}
+      , note{n}
   {
   }
   midi_size_t channel{};
@@ -130,7 +146,7 @@ class midi_parameter : public ossia::net::parameter_base
 {
 public:
   midi_parameter(address_info info, ossia::net::node_base& parent);
-  ossia::net::protocol_base& get_protocol() const
+  ossia::net::protocol_base& get_protocol() const noexcept override
   {
     return m_protocol;
   }
@@ -147,16 +163,16 @@ public:
   ossia::value set_value(const ossia::value& v) final override;
   ossia::value set_value(ossia::value&& v) final override;
 
-  ossia::val_type get_value_type() const final override;
+  ossia::val_type get_value_type() const noexcept final override;
   parameter_base& set_value_type(ossia::val_type) final override;
 
-  ossia::access_mode get_access() const final override;
+  ossia::access_mode get_access() const noexcept final override;
   parameter_base& set_access(ossia::access_mode) final override;
 
-  const ossia::domain& get_domain() const final override;
+  const ossia::domain& get_domain() const noexcept final override;
   parameter_base& set_domain(const ossia::domain&) final override;
 
-  ossia::bounding_mode get_bounding() const final override;
+  ossia::bounding_mode get_bounding() const noexcept final override;
   parameter_base& set_bounding(ossia::bounding_mode) final override;
 
   void on_first_callback_added() final override;

@@ -1,6 +1,6 @@
 #pragma once
-#include <ossia/network/domain/domain_base.hpp>
 #include <ossia/detail/algorithms.hpp>
+#include <ossia/network/domain/domain_base.hpp>
 
 namespace ossia
 {
@@ -16,15 +16,14 @@ struct value_set_clamp
   value operator()(bounding_mode b, U&& val)
   {
     const auto& values = domain.values;
-    if (b == bounding_mode::FREE || values.empty())
+    if(b == bounding_mode::FREE || values.empty())
     {
       return std::forward<U>(val);
     }
     else
     {
       auto it = ossia::find(values, val);
-      return (it != values.end()) ? ossia::value{std::forward<U>(val)}
-                                  : ossia::value{};
+      return (it != values.end()) ? ossia::value{std::forward<U>(val)} : ossia::value{};
     }
   }
 };
@@ -42,8 +41,7 @@ struct value_set_get_visitor
     return std::vector<ossia::value>{ossia::value{false}, ossia::value{true}};
   }
 
-  std::vector<ossia::value>
-  operator()(const ossia::domain_base<ossia::impulse>& dom)
+  std::vector<ossia::value> operator()(const ossia::domain_base<ossia::impulse>& dom)
   {
     return std::vector<ossia::value>{};
   }
@@ -51,10 +49,9 @@ struct value_set_get_visitor
   std::vector<ossia::value> operator()(const ossia::vector_domain& dom)
   {
     std::vector<ossia::value> v(dom.values.size());
-    for (std::size_t i = 0; i < dom.values.size(); i++)
+    for(std::size_t i = 0; i < dom.values.size(); i++)
     {
-      v[i] = std::vector<ossia::value>(
-          dom.values[i].begin(), dom.values[i].end());
+      v[i] = std::vector<ossia::value>(dom.values[i].begin(), dom.values[i].end());
     }
     return v;
   }
@@ -63,11 +60,12 @@ struct value_set_get_visitor
   std::vector<ossia::value> operator()(const ossia::vecf_domain<N>& dom)
   {
     std::vector<ossia::value> v(N);
-    for (std::size_t i = 0; i < N; i++)
+#if !defined(OSSIA_FREESTANDING)
+    for(std::size_t i = 0; i < N; i++)
     {
-      v[i] = std::vector<ossia::value>(
-          dom.values[i].begin(), dom.values[i].end());
+      v[i] = std::vector<ossia::value>(dom.values[i].begin(), dom.values[i].end());
     }
+#endif
     return v;
   }
 };
@@ -80,19 +78,19 @@ struct value_set_update_visitor
   {
     dom.values.clear();
     dom.values.reserve(values.size());
-    for (auto& value : values)
+    for(auto& value : values)
     {
-      if (auto r = value.target<T>())
+      if(auto r = value.target<T>())
         dom.values.push_back(*r);
     }
   }
 
   void operator()(ossia::vector_domain& dom)
   {
-    for (auto& set : dom.values)
+    for(auto& set : dom.values)
     {
       set.clear();
-      for (auto& value : values)
+      for(auto& value : values)
       {
         dom.values[0].insert(value);
       }
@@ -101,37 +99,37 @@ struct value_set_update_visitor
 
   void operator()(ossia::domain_base<ossia::value>& dom)
   {
+#if !defined(OSSIA_FREESTANDING)
     dom.values.clear();
-    for (auto& value : values)
+    for(auto& value : values)
     {
       dom.values.push_back(value);
     }
+#endif
   }
 
   template <std::size_t N>
   void operator()(ossia::vecf_domain<N>& dom)
   {
-    for (std::size_t i = 0; i < N; i++)
+#if !defined(OSSIA_FREESTANDING)
+    for(std::size_t i = 0; i < N; i++)
       dom.values[i].clear();
 
-    for (auto& value : values)
+    for(auto& value : values)
     {
-      if (auto r = value.target<float>())
+      if(auto r = value.target<float>())
       {
-        for (std::size_t i = 0; i < N; i++)
+        for(std::size_t i = 0; i < N; i++)
         {
           dom.values[i].insert(*r);
         }
       }
     }
+#endif
   }
 
-  void operator()(ossia::domain_base<impulse>&)
-  {
-  }
+  void operator()(ossia::domain_base<impulse>&) { }
 
-  void operator()(ossia::domain_base<bool>&)
-  {
-  }
+  void operator()(ossia::domain_base<bool>&) { }
 };
 }

@@ -23,8 +23,20 @@ enum class val_type : int8_t
   BOOL,    //! bool
   STRING,  //! std::string
   LIST,    //! std::vector<value>
-  CHAR,    //! char
+  MAP,     //! map<string, value>
   NONE = std::numeric_limits<int8_t>::max()
+};
+
+/**
+ * @brief Possible types of parameters / ports
+ */
+enum class parameter_type : int8_t
+{
+  MESSAGE,
+  AUDIO,
+  MIDI,
+  TEXTURE,
+  GEOMETRY
 };
 
 /**
@@ -42,12 +54,12 @@ enum class access_mode : int8_t
  */
 enum class bounding_mode : int8_t
 {
-  FREE, //! The bounds are ignored
-  CLIP, //! \see ossia::clamp
-  WRAP, //! \see ossia::wrap
-  FOLD, //! \see ossia::fold
-  LOW,  //! \see ossia::clamp_min
-  HIGH, //! \see ossia::clamp_max
+  FREE,       //! The bounds are ignored
+  CLIP,       //! \see ossia::clamp
+  WRAP,       //! \see ossia::wrap
+  FOLD,       //! \see ossia::fold
+  CLAMP_LOW,  //! \see ossia::clamp_min
+  CLAMP_HIGH, //! \see ossia::clamp_max
 };
 
 /**

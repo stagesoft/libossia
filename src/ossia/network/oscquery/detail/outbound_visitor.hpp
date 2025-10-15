@@ -7,95 +7,99 @@ namespace oscpack
 {
 class OutboundPacketStream;
 }
-namespace ossia
-{
-namespace oscquery
+namespace ossia::oscquery
 {
 struct osc_outbound_visitor
 {
 public:
-  explicit osc_outbound_visitor(oscpack::OutboundPacketStream& stream): p{stream} { }
+  explicit osc_outbound_visitor(oscpack::OutboundPacketStream& stream)
+      : p{stream}
+  {
+  }
 
   oscpack::OutboundPacketStream& p;
   void operator()(impulse) const
   {
-    if (m_depth > 0)
+    if(m_depth > 0)
       p << oscpack::Infinitum();
   }
 
-  void operator()(int32_t i) const
-  {
-    p << i;
-  }
+  void operator()(int32_t i) const { p << i; }
 
-  void operator()(float f) const
-  {
-    p << f;
-  }
+  void operator()(float f) const { p << f; }
 
-  void operator()(bool b) const
-  {
-    p << b;
-  }
+  void operator()(bool b) const { p << b; }
 
-  void operator()(char c) const
-  {
-    p << c;
-  }
+  void operator()(char c) const { p << c; }
 
-  void operator()(const std::string& str) const
-  {
-    p << std::string_view{str};
-  }
+  void operator()(const std::string& str) const { p << std::string_view{str}; }
 
   void operator()(vec2f vec) const
   {
     if(m_depth > 0)
-    { p << oscpack::BeginArray(); }
+    {
+      p << oscpack::BeginArray();
+    }
 
     p << vec[0] << vec[1];
 
     if(m_depth > 0)
-    { p << oscpack::EndArray(); }
+    {
+      p << oscpack::EndArray();
+    }
   }
 
   void operator()(vec3f vec) const
   {
     if(m_depth > 0)
-    { p << oscpack::BeginArray(); }
+    {
+      p << oscpack::BeginArray();
+    }
 
     p << vec[0] << vec[1] << vec[2];
 
     if(m_depth > 0)
-    { p << oscpack::EndArray(); }
+    {
+      p << oscpack::EndArray();
+    }
   }
 
   void operator()(vec4f vec) const
   {
     if(m_depth > 0)
-    { p << oscpack::BeginArray(); }
+    {
+      p << oscpack::BeginArray();
+    }
 
     p << vec[0] << vec[1] << vec[2] << vec[3];
 
     if(m_depth > 0)
-    { p << oscpack::EndArray(); }
+    {
+      p << oscpack::EndArray();
+    }
   }
 
   void operator()(const std::vector<value>& t) const
   {
     if(m_depth > 0)
-    { p << oscpack::BeginArray(); }
+    {
+      p << oscpack::BeginArray();
+    }
 
     m_depth++;
-    for (const auto& val : t)
+    for(const auto& val : t)
     {
       val.apply(*this);
     }
     m_depth--;
 
     if(m_depth > 0)
-    { p << oscpack::EndArray(); }
+    {
+      p << oscpack::EndArray();
+    }
   }
+
+  void operator()(const value_map_type& t) const { }
 
   template <typename T, typename U>
   void operator()(const T& t, const U& u) const
@@ -112,12 +116,9 @@ public:
     p << oscpack::RgbaColor(r + g + b + a);
   }
 
-  void operator()() const
-  {
-  }
+  void operator()() const { }
 
 private:
   mutable int m_depth = 0;
 };
-}
 }
