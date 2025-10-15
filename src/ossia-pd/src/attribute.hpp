@@ -1,11 +1,10 @@
 #pragma once
 
-#include <ossia-pd/src/parameter_base.hpp>
 #include <ossia/detail/optional.hpp>
 
-namespace ossia
-{
-namespace pd
+#include <ossia-pd/src/parameter_base.hpp>
+
+namespace ossia::pd
 {
 
 class attribute : public parameter_base
@@ -22,9 +21,11 @@ public:
   ossia::net::device_base* m_dev{};
 
   void on_parameter_created_callback(const ossia::net::parameter_base& addr);
-  static void click( attribute* x, t_floatarg xpos, t_floatarg ypos,
-                     t_floatarg shift, t_floatarg ctrl, t_floatarg alt);
-  static t_pd_err notify(attribute*x, t_symbol*s, t_symbol* msg, void* sender, void* data);
+  static void click(
+      attribute* x, t_floatarg xpos, t_floatarg ypos, t_floatarg shift, t_floatarg ctrl,
+      t_floatarg alt);
+  static t_pd_err
+  notify(attribute* x, t_symbol* s, t_symbol* msg, void* sender, void* data);
 
   static void destroy(attribute* x);
   static void* create(t_symbol* name, int argc, t_atom* argv);
@@ -33,5 +34,4 @@ public:
 
   void on_device_deleted(const ossia::net::node_base&);
 };
-} // namespace pd
 } // namespace ossia

@@ -1,6 +1,6 @@
 #pragma once
-#include <ossia/detail/logger.hpp>
 #include <ossia/detail/buffer_pool.hpp>
+#include <ossia/detail/logger.hpp>
 #include <ossia/network/base/parameter.hpp>
 #include <ossia/network/base/parameter_data.hpp>
 #include <ossia/network/common/network_logger.hpp>
@@ -12,7 +12,6 @@
 #include <oscpack/osc/OscOutboundPacketStream.h>
 #include <oscpack/osc/OscPrintReceivedElements.h>
 
-#include <iostream>
 #include <memory>
 #include <string>
 namespace osc
@@ -27,9 +26,7 @@ template <typename ValueWriter>
 class sender
 {
 public:
-  sender(
-      const ossia::net::network_logger& l, const std::string& ip,
-      const int port)
+  sender(const ossia::net::network_logger& l, const std::string& ip, const int port)
       : m_logger{l}
       , m_socket{oscpack::IpEndpointName(ip.c_str(), port)}
       , m_ip(ip)
@@ -54,30 +51,18 @@ public:
   }
 
   template <typename... Args>
-  void send(ossia::string_view address, Args&&... args)
+  void send(std::string_view address, Args&&... args)
   {
     send_base(address, std::forward<Args>(args)...);
   }
 
-  const std::string& ip() const
-  {
-    return m_ip;
-  }
+  const std::string& ip() const { return m_ip; }
 
-  int port() const
-  {
-    return m_port;
-  }
+  int port() const { return m_port; }
 
-  int localPort() const
-  {
-    return m_socket.LocalPort();
-  }
+  int localPort() const { return m_socket.LocalPort(); }
 
-  oscpack::UdpTransmitSocket& socket()
-  {
-    return m_socket;
-  }
+  oscpack::UdpTransmitSocket& socket() { return m_socket; }
 
 private:
   void debug(const oscpack::OutboundPacketStream& out)
@@ -91,14 +76,18 @@ private:
   void send_base(Args&&... args)
   {
     auto buf = m_pool.acquire();
-    while(buf.size() < ossia::net::max_osc_message_size) {
-      try {
+    while(buf.size() < ossia::net::max_osc_message_size)
+    {
+      try
+      {
         oscpack::OutboundPacketStream p{buf.data(), buf.size()};
-        oscpack::osc_message_generator<ossia::net::osc_1_0_outbound_stream_visitor> generate_message{p};
+        oscpack::osc_message_generator<ValueWriter> generate_message{p};
         generate_message(std::forward<Args>(args)...);
         send_impl(p);
         break;
-      } catch(...) {
+      }
+      catch(...)
+      {
         auto n = buf.size();
         buf.clear();
         buf.resize(n * 2 + 1);
@@ -106,12 +95,12 @@ private:
     }
 
     m_pool.release(std::move(buf));
-    if (m_logger.outbound_logger)
+    if(m_logger.outbound_logger)
     {
       std::string format_string;
       format_string.reserve(5 + 3 * sizeof...(args));
       format_string += "Out: ";
-      for (std::size_t i = 0; i < sizeof...(args); i++)
+      for(std::size_t i = 0; i < sizeof...(args); i++)
         format_string += "{} ";
       m_logger.outbound_logger->info(fmt::runtime(format_string), args...);
     }
@@ -123,7 +112,7 @@ private:
     {
       m_socket.Send(m.Data(), m.Size());
     }
-    catch (...)
+    catch(...)
     {
     }
   }

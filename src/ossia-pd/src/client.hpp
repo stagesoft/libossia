@@ -1,12 +1,11 @@
 #pragma once
-#include <ossia-pd/src/device_base.hpp>
 #include <ossia/network/local/local.hpp>
-#include <ossia/network/zeroconf/zeroconf.hpp>
 #include <ossia/network/oscquery/oscquery_mirror.hpp>
+#include <ossia/network/zeroconf/zeroconf.hpp>
 
-namespace ossia
-{
-namespace pd
+#include <ossia-pd/src/device_base.hpp>
+
+namespace ossia::pd
 {
 
 class client : public device_base
@@ -64,7 +63,5 @@ public:
 
   int m_argc{};
   t_atom* m_argv{};
-
 };
-}
 } // namespace

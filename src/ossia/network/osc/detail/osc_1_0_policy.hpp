@@ -1,11 +1,12 @@
 #pragma once
-#include <ossia/network/value/value.hpp>
-#include <ossia/network/osc/detail/osc_utils.hpp>
 #include <ossia/network/osc/detail/osc_common_policy.hpp>
-#include <oscpack/osc/OscTypes.h>
-#include <oscpack/osc/OscOutboundPacketStream.h>
+#include <ossia/network/osc/detail/osc_utils.hpp>
+#include <ossia/network/value/value.hpp>
 
 #include <boost/endian/conversion.hpp>
+
+#include <oscpack/osc/OscOutboundPacketStream.h>
+#include <oscpack/osc/OscTypes.h>
 
 namespace ossia::net
 {
@@ -15,29 +16,29 @@ struct osc_1_0_outbound_dynamic_policy : osc_common_outbound_dynamic_policy
 {
   using osc_common_outbound_dynamic_policy::operator();
   // Note: infinitum is not in OSC 1.0.
-  // But then we have no way to represent an array of impulses, which is *technically* possible
-  // in ossia
-  void operator()(impulse) const
-  {
-    p << int32_t(0);
-  }
+  // But then we have no way to represent an array of impulses, which is
+  // *technically* possible in ossia
+  void operator()(impulse) const { p << int32_t(0); }
 
-  void operator()(bool b) const
-  {
-    p << int32_t(b);
-  }
+  void operator()(bool b) const { p << int32_t(b); }
 
-  void operator()(char c) const
-  {
-    p << int32_t(c);
-  }
+  void operator()(char c) const { p << int32_t(c); }
 
   // Arrays are flattened
   void operator()(const std::vector<value>& t) const
   {
-    for (const auto& val : t)
+    for(const auto& val : t)
     {
       val.apply(*this);
+    }
+  }
+
+  void operator()(const value_map_type& t) const
+  {
+    for(const auto& [k, v] : t)
+    {
+      (*this)(k);
+      v.apply(*this);
     }
   }
 };
@@ -45,14 +46,13 @@ struct osc_1_0_outbound_dynamic_policy : osc_common_outbound_dynamic_policy
 struct osc_1_0_outbound_stream_visitor : osc_1_0_outbound_dynamic_policy
 {
   using osc_1_0_outbound_dynamic_policy::operator();
-  void operator()(impulse) const
-  {
-  }
+  void operator()(impulse) const { }
 
   void operator()(const std::vector<value>& t) const
   {
     // We separate this case because an ossia::impulse type on its own
-    // should not have anything but a vector{ossia::impulse, ossia::impulse} should be [00] in osc 1.0
+    // should not have anything but a vector{ossia::impulse, ossia::impulse}
+    // should be [00] in osc 1.0
     static_cast<const osc_1_0_outbound_dynamic_policy&>(*this)(t);
   }
 };
@@ -60,7 +60,7 @@ struct osc_1_0_outbound_stream_visitor : osc_1_0_outbound_dynamic_policy
 struct osc_1_0_outbound_static_policy : osc_common_outbound_static_policy
 {
   using osc_common_outbound_static_policy::operator();
-  std::size_t operator()(char* buffer, ossia::impulse v) const noexcept
+  std::size_t operator()(char* buffer, ossia::impulse v, const auto&...) const noexcept
   {
     buffer[0] = ',';
     buffer[1] = '\0';

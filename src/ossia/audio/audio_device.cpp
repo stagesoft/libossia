@@ -4,13 +4,20 @@
 namespace ossia
 {
 
-audio_device::audio_device(std::string name, int bufferSize, int sampleRate, int inputs, int outputs)
-    : audio_device{std::make_unique<audio_protocol>(), name, bufferSize, sampleRate, inputs, outputs}
+audio_device::audio_device(
+    std::string name, int bufferSize, int sampleRate, int inputs, int outputs)
+    : audio_device{std::make_unique<audio_protocol>(),
+                   name,
+                   bufferSize,
+                   sampleRate,
+                   inputs,
+                   outputs}
 {
 }
 
 audio_device::audio_device(
-    std::unique_ptr<audio_protocol> proto, std::string name, int bs, int rate, int ins, int outs)
+    std::unique_ptr<audio_protocol> proto, std::string name, int bs, int rate, int ins,
+    int outs)
     : device{std::move(proto), name}
     , protocol{static_cast<audio_protocol&>(device.get_protocol())}
 {
@@ -37,13 +44,12 @@ audio_device::audio_device(
   engine = std::unique_ptr<ossia::audio_engine>(make_audio_engine(
       default_protocol, name, default_in, default_out, ins, outs, rate, bs));
 
+  protocol.setup_tree(engine->effective_inputs, engine->effective_outputs);
   m_bs = bs;
   m_sr = rate;
 }
 
-audio_device::~audio_device()
-{
-}
+audio_device::~audio_device() = default;
 
 int audio_device::get_buffer_size() const
 {
@@ -58,15 +64,15 @@ int audio_device::get_sample_rate() const
 ossia::audio_parameter& audio_device::get_main_in()
 {
   return static_cast<ossia::audio_parameter&>(
-      *ossia::net::find_node(device.get_root_node(), "/in/main")
-           ->get_parameter());
+      *ossia::net::find_node(device.get_root_node(), "/in/main")->get_parameter());
 }
 
 ossia::audio_parameter& audio_device::get_main_out()
 {
-  return static_cast<ossia::audio_parameter&>(
-      *ossia::net::find_node(device.get_root_node(), "/out/main")
-           ->get_parameter());
+  auto node = ossia::net::find_node(device.get_root_node(), "/out/main");
+  assert(node);
+  assert(node->get_parameter());
+  return static_cast<ossia::audio_parameter&>(*node->get_parameter());
 }
 
 }

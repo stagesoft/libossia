@@ -1,27 +1,31 @@
 #pragma once
-#include <cinttypes>
 #include <cassert>
-#include <utility>
+#include <cinttypes>
+#include <optional>
 #include <type_traits>
+#include <utility>
 
 namespace ossia
 {
 /**
  * @brief A most simple pair type, to reduce binary bloat
  */
-template<typename T1, typename T2>
-struct pair {
+template <typename T1, typename T2>
+struct pair
+{
   T1 key;
   T2 value;
 };
 
 /**
- * @brief A container useful for mapping contiguous enums to strings without using too much memory
+ * @brief A container useful for mapping contiguous enums to strings without
+ * using too much memory
  */
-template<typename K, typename V, std::size_t N>
+template <typename K, typename V, std::size_t N>
 class enum_map
 {
   static_assert(std::is_enum_v<K>);
+
 public:
   constexpr enum_map() = default;
   constexpr enum_map(const enum_map&) = default;
@@ -29,7 +33,7 @@ public:
   constexpr enum_map& operator=(const enum_map&) = default;
   constexpr enum_map& operator=(enum_map&&) noexcept = default;
 
-  constexpr explicit enum_map(std::initializer_list<pair<K,V>> i)
+  constexpr explicit enum_map(std::initializer_list<pair<K, V>> i)
   {
     for(auto& [k, v] : i)
     {
@@ -88,10 +92,7 @@ public:
     return {static_cast<K>(i), m_map[i]};
   }
 
-  constexpr std::size_t size() const noexcept
-  {
-    return N;
-  }
+  [[nodiscard]] constexpr std::size_t size() const noexcept { return N; }
 
 private:
   V m_map[N];

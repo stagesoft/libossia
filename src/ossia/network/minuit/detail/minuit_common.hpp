@@ -6,9 +6,7 @@
 
 #include <exception>
 
-namespace ossia
-{
-namespace minuit
+namespace ossia::minuit
 {
 enum class minuit_command : char
 {
@@ -70,18 +68,18 @@ enum class minuit_attribute
 };
 
 OSSIA_EXPORT
-ossia::string_view to_minuit_attribute_text(minuit_attribute str);
+std::string_view to_minuit_attribute_text(minuit_attribute str);
 
 OSSIA_EXPORT
-minuit_attribute get_attribute(ossia::string_view str);
+minuit_attribute get_attribute(std::string_view str);
 
 OSSIA_EXPORT
-ossia::string_view to_minuit_type_text(const ossia::value& val);
+std::string_view to_minuit_type_text(const ossia::value& val);
 
-inline ossia::string_view to_minuit_type_text(ossia::val_type val)
+inline std::string_view to_minuit_type_text(ossia::val_type val)
 {
   // integer, decimal, string, generic, boolean, none, array.
-  switch (val)
+  switch(val)
   {
     case val_type::IMPULSE:
       constexpr_return(ossia::make_string_view("none"));
@@ -91,7 +89,6 @@ inline ossia::string_view to_minuit_type_text(ossia::val_type val)
       constexpr_return(ossia::make_string_view("decimal"));
     case val_type::BOOL:
       constexpr_return(ossia::make_string_view("boolean"));
-    case val_type::CHAR:
     case val_type::STRING:
       constexpr_return(ossia::make_string_view("string"));
     case val_type::VEC2F:
@@ -99,18 +96,20 @@ inline ossia::string_view to_minuit_type_text(ossia::val_type val)
     case val_type::VEC4F:
     case val_type::LIST:
       constexpr_return(ossia::make_string_view("array"));
+    case val_type::MAP:
+      constexpr_return(ossia::make_string_view("map"));
     default:
       throw invalid_value_type_error("to_minuit_type_text: Invalid type");
   }
   return {};
 }
 
-inline ossia::value value_from_minuit_type_text(ossia::string_view str)
+inline ossia::value value_from_minuit_type_text(std::string_view str)
 {
   // integer, decimal, string, generic, boolean, none, array.
   // we can differentiate them by the first character
 
-  switch (str[0])
+  switch(str[0])
   {
     case 'i': // integer
       return int32_t{};
@@ -124,18 +123,18 @@ inline ossia::value value_from_minuit_type_text(ossia::string_view str)
       return ossia::impulse{};
     case 'a': // array
     case 'g': // generic
-      return std::vector<ossia::value>{};
+      return value{std::vector<ossia::value>{}};
     default:
       return {};
   }
 }
 
-inline ossia::val_type type_from_minuit_type_text(ossia::string_view str)
+inline ossia::val_type type_from_minuit_type_text(std::string_view str)
 {
   // integer, decimal, string, generic, boolean, none, array.
   // we can differentiate them by the first character
 
-  switch (str[0])
+  switch(str[0])
   {
     case 'i': // integer
       return ossia::val_type::INT;
@@ -155,9 +154,9 @@ inline ossia::val_type type_from_minuit_type_text(ossia::string_view str)
   }
 }
 
-inline ossia::string_view to_minuit_service_text(ossia::access_mode acc)
+inline std::string_view to_minuit_service_text(ossia::access_mode acc)
 {
-  switch (acc)
+  switch(acc)
   {
     case ossia::access_mode::BI:
       constexpr_return(ossia::make_string_view("parameter"));
@@ -171,9 +170,9 @@ inline ossia::string_view to_minuit_service_text(ossia::access_mode acc)
   return {};
 }
 
-inline ossia::access_mode from_minuit_service_text(ossia::string_view str)
+inline ossia::access_mode from_minuit_service_text(std::string_view str)
 {
-  switch (str[0])
+  switch(str[0])
   {
     case 'p':
       return ossia::access_mode::BI;
@@ -187,9 +186,9 @@ inline ossia::access_mode from_minuit_service_text(ossia::string_view str)
   return {};
 }
 
-inline ossia::string_view to_minuit_bounding_text(ossia::bounding_mode b)
+inline std::string_view to_minuit_bounding_text(ossia::bounding_mode b)
 {
-  switch (b)
+  switch(b)
   {
     case ossia::bounding_mode::FREE:
       constexpr_return(ossia::make_string_view("none"));
@@ -199,9 +198,9 @@ inline ossia::string_view to_minuit_bounding_text(ossia::bounding_mode b)
       constexpr_return(ossia::make_string_view("wrap"));
     case ossia::bounding_mode::FOLD:
       constexpr_return(ossia::make_string_view("fold"));
-    case ossia::bounding_mode::LOW:
+    case ossia::bounding_mode::CLAMP_LOW:
       constexpr_return(ossia::make_string_view("low"));
-    case ossia::bounding_mode::HIGH:
+    case ossia::bounding_mode::CLAMP_HIGH:
       constexpr_return(ossia::make_string_view("high"));
     default:
       throw parse_error("to_minuit_bounding_text: Invalid bounding mode");
@@ -209,9 +208,9 @@ inline ossia::string_view to_minuit_bounding_text(ossia::bounding_mode b)
   return {};
 }
 
-inline ossia::bounding_mode from_minuit_bounding_text(ossia::string_view str)
+inline ossia::bounding_mode from_minuit_bounding_text(std::string_view str)
 {
-  switch (str[0])
+  switch(str[0])
   {
     case 'n': // none
       return ossia::bounding_mode::FREE;
@@ -222,9 +221,9 @@ inline ossia::bounding_mode from_minuit_bounding_text(ossia::string_view str)
     case 'f': // fold
       return ossia::bounding_mode::FOLD;
     case 'l': // low
-      return ossia::bounding_mode::LOW;
+      return ossia::bounding_mode::CLAMP_LOW;
     case 'h': // high
-      return ossia::bounding_mode::HIGH;
+      return ossia::bounding_mode::CLAMP_HIGH;
     default:
       throw parse_error("from_minuit_bounding_text: Invalid bounding mode");
   }
@@ -233,7 +232,7 @@ inline ossia::bounding_mode from_minuit_bounding_text(ossia::string_view str)
 
 inline minuit_command get_command(char str)
 {
-  switch (str)
+  switch(str)
   {
     case '?':
     case ':':
@@ -247,7 +246,7 @@ inline minuit_command get_command(char str)
 
 inline minuit_type get_type(char str)
 {
-  switch (str)
+  switch(str)
   {
     case 'A':
     case 'C':
@@ -265,7 +264,7 @@ inline minuit_type get_type(char str)
 
 inline minuit_operation get_operation(char str)
 {
-  switch (str)
+  switch(str)
   {
     case 'l':
     case 'n':
@@ -277,9 +276,8 @@ inline minuit_operation get_operation(char str)
   return {};
 }
 
-inline minuit_operation get_operation(ossia::string_view str)
+inline minuit_operation get_operation(std::string_view str)
 {
   return get_operation(str[0]);
-}
 }
 }

@@ -1,32 +1,29 @@
 #pragma once
-#include <ossia/network/context_functions.hpp>
+#include <ossia/detail/hash_map.hpp>
+#include <ossia/detail/timer.hpp>
 #include <ossia/network/base/protocol.hpp>
 #include <ossia/network/common/complex_type.hpp>
 #include <ossia/network/common/device_parameter.hpp>
+#include <ossia/network/context_functions.hpp>
 #include <ossia/network/domain/domain.hpp>
-#include <ossia/detail/timer.hpp>
-
 #include <ossia/protocols/wiimote/wiimote_parameter.hpp>
 
 #include <array>
-#include <cstdint>
 #include <cinttypes>
-#include <map>
+#include <cstdint>
 #include <thread>
 
 #define MAX_WIIMOTES_COUNT 4
 
 struct wiimote_t;
 
-namespace ossia
-{
-namespace net
+namespace ossia::net
 {
 class OSSIA_EXPORT wiimote_protocol final : public ossia::net::protocol_base
 {
   struct wiimote_parameters
   {
-    std::map<uint16_t, device_parameter*> button_parameters;
+    ossia::hash_map<uint16_t, device_parameter*> button_parameters;
 
     device_parameter* wiimote_axis{};
     device_parameter* wiimote_gravity{};
@@ -43,9 +40,7 @@ class OSSIA_EXPORT wiimote_protocol final : public ossia::net::protocol_base
   };
 
 public:
-  wiimote_protocol(
-      ossia::net::network_context_ptr ptr,
-      const bool enable_ir);
+  wiimote_protocol(ossia::net::network_context_ptr ptr, const bool enable_ir);
   ~wiimote_protocol();
 
   void set_device(ossia::net::device_base& dev) override;
@@ -75,5 +70,4 @@ private:
   unsigned int m_wiimote_count{};
   ossia::net::device_base* m_device{};
 };
-}
 }

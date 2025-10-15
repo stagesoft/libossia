@@ -1,6 +1,7 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 #include <ossia/detail/apply.hpp>
+#include <ossia/detail/case_insensitive.hpp>
 #include <ossia/network/base/node.hpp>
 #include <ossia/network/base/node_attributes.hpp>
 #include <ossia/network/base/parameter.hpp>
@@ -19,28 +20,21 @@ namespace ossia
 struct val_type_visitor
 {
   using ret = ossia::val_type;
-  ret operator()(ossia::val_type v) const
-  {
-    return v;
-  }
-  ret operator()(const ossia::unit_t& v) const
-  {
-    return ossia::matching_type(v);
-  }
+  ret operator()(ossia::val_type v) const { return v; }
+  ret operator()(const ossia::unit_t& v) const { return ossia::matching_type(v); }
   ret operator()(const ossia::extended_type& v) const
   {
     auto t = ossia::underlying_type(v);
-    if (!t.empty())
+    if(!t.empty())
     {
       return t[0];
     }
     return ossia::val_type::IMPULSE;
   }
 
-  ret operator()()
-  {
-    return ossia::val_type::IMPULSE;
-  }
+  ret operator()(ossia::monostate) { return ossia::val_type::IMPULSE; }
+
+  ret operator()() { return ossia::val_type::IMPULSE; }
 };
 
 ossia::val_type underlying_type(const complex_type& t)
@@ -54,7 +48,7 @@ struct setup_parameter_visitor
   ossia::net::node_base& n;
   ret operator()(ossia::val_type v) const
   {
-    if (auto p = n.get_parameter())
+    if(auto p = n.get_parameter())
     {
       p->set_value_type(v);
       return p;
@@ -68,7 +62,7 @@ struct setup_parameter_visitor
   {
     ossia::net::parameter_base* p{};
     auto t = ossia::matching_type(v);
-    if ((p = n.get_parameter()))
+    if((p = n.get_parameter()))
     {
       p->set_value_type(t);
     }
@@ -82,10 +76,10 @@ struct setup_parameter_visitor
   ret operator()(const ossia::extended_type& v) const
   {
     auto t = ossia::underlying_type(v);
-    if (!t.empty())
+    if(!t.empty())
     {
       ossia::net::parameter_base* p{};
-      if ((p = n.get_parameter()))
+      if((p = n.get_parameter()))
       {
         p->set_value_type(t[0]);
       }
@@ -99,25 +93,24 @@ struct setup_parameter_visitor
     return nullptr;
   }
 
-  ret operator()()
-  {
-    return nullptr;
-  }
+  ret operator()(ossia::monostate) { return nullptr; }
+
+  ret operator()() { return nullptr; }
 };
 
-net::parameter_base*
-setup_parameter(const complex_type& t, net::node_base& node)
+net::parameter_base* setup_parameter(const complex_type& t, net::node_base& node)
 {
-  if (!t)
+  if(!t)
     return nullptr;
 
   return ossia::apply(setup_parameter_visitor{node}, t);
 }
 
-static const ossia::string_map<net::parameter_data>& parameter_creation_map()
+static const ossia::case_insensitive_string_map<net::parameter_data>&
+parameter_creation_map()
 {
   static const auto map = [] {
-    ossia::string_map<net::parameter_data> t;
+    ossia::case_insensitive_string_map<net::parameter_data> t;
     ossia::detail::list_units([&](std::string e, ossia::unit_t u) {
       net::parameter_data p;
       p.type = u;
@@ -168,9 +161,13 @@ static const ossia::string_map<net::parameter_data>& parameter_creation_map()
     add_simple("bool", ossia::val_type::BOOL);
     add_simple("boolean", ossia::val_type::BOOL);
 
-    add_simple("char", ossia::val_type::CHAR);
-    add_simple("character", ossia::val_type::CHAR);
-    add_simple("byte", ossia::val_type::CHAR);
+    add_simple("char", ossia::val_type::INT);
+    add_simple("character", ossia::val_type::INT);
+    add_simple("byte", ossia::val_type::INT);
+
+    add_simple("map", ossia::val_type::MAP);
+    add_simple("dict", ossia::val_type::MAP);
+    add_simple("dictionary", ossia::val_type::MAP);
 
     add_simple("vec2", ossia::val_type::VEC2F);
     add_simple("vec3", ossia::val_type::VEC3F);
@@ -204,6 +201,8 @@ static const ossia::string_map<net::parameter_data>& parameter_creation_map()
     add_ext(integer_list_type());
     add_ext(string_list_type());
     add_ext(list_type());
+    add_ext(nil_type());
+    add_ext(empty_type());
 
     auto add_ext_2 = [&](auto e, auto ext) {
       net::parameter_data p;
@@ -242,20 +241,18 @@ static const ossia::string_map<net::parameter_data>& parameter_creation_map()
   return map;
 }
 
-const ossia::net::parameter_data*
-default_parameter_for_type(std::string_view type)
+const ossia::net::parameter_data* default_parameter_for_type(std::string_view type)
 {
   auto& map = parameter_creation_map();
   auto it = map.find(type);
-  return it != map.end() ? &(it.value()) : nullptr;
+  return it != map.end() ? &(it->second) : nullptr;
 }
 
-net::parameter_base* try_setup_parameter(std::string str, net::node_base& node)
+net::parameter_base* try_setup_parameter(std::string_view str, net::node_base& node)
 {
   auto& map = parameter_creation_map();
-  boost::algorithm::to_lower(str);
   auto it = map.find(str);
-  if (it != map.end())
+  if(it != map.end())
   {
     return setup_parameter(it->second.type, node);
   }
@@ -263,15 +260,13 @@ net::parameter_base* try_setup_parameter(std::string str, net::node_base& node)
 }
 
 net::parameter_base*
-create_parameter(net::node_base& parent, std::string node, std::string str)
+create_parameter(net::node_base& parent, std::string_view node, std::string_view str)
 {
   auto& map = parameter_creation_map();
-  boost::algorithm::to_lower(str);
   auto it = map.find(str);
-  if (it != map.end())
+  if(it != map.end())
   {
-    return setup_parameter(
-        it->second.type, ossia::net::create_node(parent, std::move(node)));
+    return setup_parameter(it->second.type, ossia::net::create_node(parent, node));
   }
   return nullptr;
 }
@@ -280,27 +275,20 @@ struct update_parameter_visitor
 {
   using ret = void;
   ossia::net::parameter_base& addr;
-  ret operator()(ossia::val_type v) const
-  {
-    addr.set_value_type(v);
-  }
-  ret operator()(const ossia::unit_t& v) const
-  {
-    addr.set_unit(v);
-  }
+  ret operator()(ossia::val_type v) const { addr.set_value_type(v); }
+  ret operator()(const ossia::unit_t& v) const { addr.set_unit(v); }
   ret operator()(const ossia::extended_type& v) const
   {
     auto t = ossia::underlying_type(v);
-    if (!t.empty())
+    if(!t.empty())
     {
       addr.set_value_type(t[0]);
     }
     ossia::net::set_extended_type(addr.get_node(), v);
   }
 
-  ret operator()()
-  {
-  }
+  ret operator()(ossia::monostate) { }
+  ret operator()() { }
 };
 
 void update_parameter_type(const complex_type& t, net::parameter_base& addr)
@@ -314,7 +302,7 @@ ossia::value convert(
 {
   auto src_u = source_t.target<ossia::unit_t>();
   auto tgt_u = dest_t.target<ossia::unit_t>();
-  if (src_u && tgt_u)
+  if(src_u && tgt_u)
   {
     return ossia::convert(v, *src_u, *tgt_u);
   }

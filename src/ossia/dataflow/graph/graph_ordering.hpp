@@ -19,16 +19,17 @@ struct node_sorter
 
   bool compare(const graph_node* lhs, const graph_node* rhs) const
   {
-    for (std::size_t i = 0, N = node_order.size(); i < N; i++)
+    for(std::size_t i = 0, N = node_order.size(); i < N; i++)
     {
-      if (node_order[i] == lhs)
+      if(node_order[i] == lhs)
         return true;
-      else if (node_order[i] == rhs)
+      else if(node_order[i] == rhs)
         return false;
       else
         continue;
     }
-    throw std::runtime_error("lhs and rhs have to be found");
+    ossia_do_throw(
+        std::runtime_error, "lhs and rhs have to be found");
   }
 
   bool operator()(const graph_node* lhs, const graph_node* rhs) const
@@ -38,11 +39,11 @@ struct node_sorter
     // A executes before B.
     bool c1 = lhs->has_port_inputs();
     bool c2 = rhs->has_port_inputs();
-    if (c1 && !c2)
+    if(c1 && !c2)
       return true;
-    else if (!c1 && c2)
+    else if(!c1 && c2)
       return false;
-    else if (c1 && c2)
+    else if(c1 && c2)
       // the nodes are already sorted through the toposort
       // so we can just keep their original order
       return compare(lhs, rhs);
@@ -50,20 +51,20 @@ struct node_sorter
     bool l1 = lhs->has_local_inputs(st);
     bool l2 = rhs->has_local_inputs(st);
 
-    if (l1 && !l2)
+    if(l1 && !l2)
       return true;
-    else if (!l1 && l2)
+    else if(!l1 && l2)
       return false;
-    else if (l1 && l2)
+    else if(l1 && l2)
       return compare(lhs, rhs);
 
     bool g1 = lhs->has_global_inputs();
     bool g2 = rhs->has_global_inputs();
-    if (g1 && !g2)
+    if(g1 && !g2)
       return true;
-    else if (!g1 && g2)
+    else if(!g1 && g2)
       return false;
-    else if (g1 && g2)
+    else if(g1 && g2)
       return compare(lhs, rhs);
 
     return compare(lhs, rhs);
@@ -79,58 +80,91 @@ struct init_node_visitor
   static void copy(const delay_line_type& out, std::size_t pos, inlet& in)
   {
     const auto w = out.which();
-    if (w == in.which() && w != data_type::npos)
+    if(w.to_std_index() == in.which() && w.valid())
     {
-      switch (w)
+      switch(w.index())
       {
-        case 0:
+        case delay_line_type::index_of<ossia::audio_delay_line>().index():
           copy_data_pos{pos}(
               *reinterpret_cast<const ossia::audio_delay_line*>(out.target()),
               in.cast<ossia::audio_port>());
           break;
-        case 1:
+        case delay_line_type::index_of<ossia::midi_delay_line>().index():
           copy_data_pos{pos}(
               *reinterpret_cast<const ossia::midi_delay_line*>(out.target()),
               in.cast<ossia::midi_port>());
           break;
-        case 2:
+        case delay_line_type::index_of<ossia::value_delay_line>().index():
           copy_data_pos{pos}(
               *reinterpret_cast<const ossia::value_delay_line*>(out.target()),
               in.cast<ossia::value_port>());
+          break;
+        case delay_line_type::index_of<ossia::geometry_delay_line>().index():
+          copy_data_pos{pos}(
+              *reinterpret_cast<const ossia::geometry_delay_line*>(out.target()),
+              in.cast<ossia::geometry_port>());
           break;
       }
     }
   }
 
-  static void copy(const outlet& out, inlet& in)
+  static void move(outlet& out, inlet& in)
   {
     const auto w = out.which();
-    if (w == in.which() && w != data_type::npos)
+    if(w == in.which())
     {
-      switch (w)
+      switch(w)
       {
-        case 0:
-          copy_data{}(
-              out.cast<ossia::audio_port>(),
-              in.cast<ossia::audio_port>());
+        case ossia::audio_port::which:
+          move_data{}(out.cast<ossia::audio_port>(), in.cast<ossia::audio_port>());
           break;
-        case 1:
-          copy_data{}(
-              out.cast<ossia::midi_port>(),
-              in.cast<ossia::midi_port>());
+        case ossia::midi_port::which:
+          move_data{}(out.cast<ossia::midi_port>(), in.cast<ossia::midi_port>());
           break;
-        case 2:
-          copy_data{}(
-              out.cast<ossia::value_port>(),
-              in.cast<ossia::value_port>());
+        case ossia::value_port::which:
+          move_data{}(out.cast<ossia::value_port>(), in.cast<ossia::value_port>());
           break;
+        case ossia::geometry_port::which:
+          move_data{}(out.cast<ossia::geometry_port>(), in.cast<ossia::geometry_port>());
+          break;
+      }
+    }
+  }
+  static void copy(outlet& out, inlet& in)
+  {
+    if(out.cables().size() == 1 && in.cables().size() == 1 && !out.address
+       && !in.address)
+    {
+      move(out, in);
+    }
+    else
+    {
+      const auto w = out.which();
+      if(w == in.which())
+      {
+        switch(w)
+        {
+          case ossia::audio_port::which:
+            copy_data{}(out.cast<ossia::audio_port>(), in.cast<ossia::audio_port>());
+            break;
+          case ossia::midi_port::which:
+            copy_data{}(out.cast<ossia::midi_port>(), in.cast<ossia::midi_port>());
+            break;
+          case ossia::value_port::which:
+            copy_data{}(out.cast<ossia::value_port>(), in.cast<ossia::value_port>());
+            break;
+          case ossia::geometry_port::which:
+            copy_data{}(
+                out.cast<ossia::geometry_port>(), in.cast<ossia::geometry_port>());
+            break;
+        }
       }
     }
   }
 
   bool operator()(immediate_glutton_connection) const
   {
-    if (edge.out_node->enabled())
+    if(edge.out_node->enabled())
     {
       copy(*edge.out, in);
       return false;
@@ -166,15 +200,9 @@ struct init_node_visitor
     return false;
   }
 
-  bool operator()(dependency_connection) const
-  {
-    return true;
-  }
+  bool operator()(dependency_connection) const { return true; }
 
-  bool operator()() const
-  {
-    return true;
-  }
+  bool operator()() const { return true; }
 };
 struct init_must_copy_visitor
 {
@@ -185,30 +213,15 @@ struct init_must_copy_visitor
     return !edge.out_node->enabled();
   }
 
-  bool operator()(const immediate_strict_connection&) const
-  {
-    return false;
-  }
+  bool operator()(const immediate_strict_connection&) const { return false; }
 
-  bool operator()(const delayed_glutton_connection&) const
-  {
-    return false;
-  }
+  bool operator()(const delayed_glutton_connection&) const { return false; }
 
-  bool operator()(const delayed_strict_connection&) const
-  {
-    return false;
-  }
+  bool operator()(const delayed_strict_connection&) const { return false; }
 
-  bool operator()(const dependency_connection&) const
-  {
-    return true;
-  }
+  bool operator()(const dependency_connection&) const { return true; }
 
-  bool operator()() const
-  {
-    return true;
-  }
+  bool operator()() const { return true; }
 };
 
 struct env_writer
@@ -222,7 +235,7 @@ struct env_writer
   bool operator()(const immediate_strict_connection& con) const
   {
     using rs = immediate_strict_connection::required_sides_t;
-    switch (con.required_sides)
+    switch(con.required_sides)
     {
       case rs::inbound:
       case rs::outbound:
@@ -241,24 +254,24 @@ struct env_writer
     // Copy to the buffer
     const auto con_w = con.buffer.which();
     const auto out_w = out.which();
-    if (con_w == out_w)
+    if(con_w.to_std_index() == out_w)
     {
-      switch (con_w)
+      switch(con_w.index())
       {
-        case 0:
-          copy_data{}(out.cast<ossia::audio_port>(),
-              *reinterpret_cast<ossia::audio_delay_line*>(
-                con.buffer.target()));
+        case delay_line_type::index_of<ossia::audio_delay_line>().index():
+          copy_data{}(
+              out.cast<ossia::audio_port>(),
+              *reinterpret_cast<ossia::audio_delay_line*>(con.buffer.target()));
           break;
-        case 1:
-          copy_data{}(out.cast<ossia::midi_port>(),
-              *reinterpret_cast<ossia::midi_delay_line*>(
-                con.buffer.target()));
+        case delay_line_type::index_of<ossia::midi_delay_line>().index():
+          copy_data{}(
+              out.cast<ossia::midi_port>(),
+              *reinterpret_cast<ossia::midi_delay_line*>(con.buffer.target()));
           break;
-        case 2:
-          copy_data{}(out.cast<ossia::value_port>(),
-              *reinterpret_cast<ossia::value_delay_line*>(
-                con.buffer.target()));
+        case delay_line_type::index_of<ossia::value_delay_line>().index():
+          copy_data{}(
+              out.cast<ossia::value_port>(),
+              *reinterpret_cast<ossia::value_delay_line*>(con.buffer.target()));
           break;
       }
     }
@@ -269,36 +282,30 @@ struct env_writer
     // Copy to the buffer
     const auto con_w = con.buffer.which();
     const auto out_w = out.which();
-    if (con_w == out_w)
+    if(con_w.to_std_index() == out_w)
     {
-      switch (con_w)
+      switch(con_w.index())
       {
-        case 0:
-          copy_data{}(out.cast<ossia::audio_port>(),
-              *reinterpret_cast<ossia::audio_delay_line*>(
-                con.buffer.target()));
+        case delay_line_type::index_of<ossia::audio_delay_line>().index():
+          copy_data{}(
+              out.cast<ossia::audio_port>(),
+              *reinterpret_cast<ossia::audio_delay_line*>(con.buffer.target()));
           break;
-        case 1:
-          copy_data{}(out.cast<ossia::midi_port>(),
-              *reinterpret_cast<ossia::midi_delay_line*>(
-                con.buffer.target()));
+        case delay_line_type::index_of<ossia::midi_delay_line>().index():
+          copy_data{}(
+              out.cast<ossia::midi_port>(),
+              *reinterpret_cast<ossia::midi_delay_line*>(con.buffer.target()));
           break;
-        case 2:
-          copy_data{}(out.cast<ossia::value_port>(),
-              *reinterpret_cast<ossia::value_delay_line*>(
-                con.buffer.target()));
+        case delay_line_type::index_of<ossia::value_delay_line>().index():
+          copy_data{}(
+              out.cast<ossia::value_port>(),
+              *reinterpret_cast<ossia::value_delay_line*>(con.buffer.target()));
           break;
       }
     }
     return false;
   }
-  bool operator()(const dependency_connection&) const
-  {
-    return false;
-  }
-  bool operator()() const
-  {
-    return false;
-  }
+  bool operator()(const dependency_connection&) const { return false; }
+  bool operator()() const { return false; }
 };
 }

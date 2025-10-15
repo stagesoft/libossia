@@ -1,21 +1,19 @@
 #pragma once
 
+#include <ossia/detail/config.hpp>
+
+#include <ossia/detail/nullable_variant.hpp>
 #include <ossia/editor/expression/expression_fwd.hpp>
 #include <ossia/editor/expression/operators.hpp>
 #include <ossia/network/base/parameter.hpp>
 #include <ossia/network/value/value.hpp>
-
-#include <eggs/variant.hpp>
-#include <ossia/detail/config.hpp>
 
 #include <memory>
 
 /**
  * \file expression_atom.hpp
  */
-namespace ossia
-{
-namespace expressions
+namespace ossia::expressions
 {
 /**
  * @brief expression_atom : numeric operators in expressions.
@@ -24,15 +22,13 @@ namespace expressions
 class OSSIA_EXPORT expression_atom final : public expression_callback_container
 {
 public:
-  using val_t = eggs::variant<ossia::value, ossia::destination>;
+  using val_t = ossia::nullable_variant<ossia::value, ossia::destination>;
   expression_atom(
-      const value& lhs, comparator op = comparator::EQUAL,
-      const value& rhs = impulse{});
+      const value& lhs, comparator op = comparator::EQUAL, const value& rhs = impulse{});
   expression_atom(
       const destination& lhs, comparator op = comparator::EQUAL,
       const value& rhs = impulse{});
-  expression_atom(
-      const destination& lhs, comparator op, const destination& rhs);
+  expression_atom(const destination& lhs, comparator op, const destination& rhs);
   expression_atom(const value& lhs, comparator op, const destination& rhs);
 
   struct dummy_t
@@ -57,12 +53,36 @@ public:
   const val_t& get_second_operand() const;
 
   bool operator()(const ossia::value& first, const ossia::value& second) const;
-  bool operator()(
-      const ossia::value& first, const ossia::destination& second) const;
-  bool operator()(
-      const ossia::destination& first, const ossia::value& second) const;
-  bool operator()(
-      const ossia::destination& first, const ossia::destination& second) const;
+  bool operator()(const ossia::value& first, const ossia::destination& second) const;
+  bool operator()(const ossia::destination& first, const ossia::value& second) const;
+  bool
+  operator()(const ossia::destination& first, const ossia::destination& second) const;
+
+  constexpr inline bool
+  operator()(const ossia::value& v, const ossia::monostate& m) const noexcept
+  {
+    return false;
+  }
+  constexpr inline bool
+  operator()(const ossia::destination& v, const ossia::monostate& m) const noexcept
+  {
+    return false;
+  }
+  constexpr inline bool
+  operator()(const ossia::monostate& v, const ossia::value& m) const noexcept
+  {
+    return false;
+  }
+  constexpr inline bool
+  operator()(const ossia::monostate& v, const ossia::destination& m) const noexcept
+  {
+    return false;
+  }
+  constexpr inline bool
+  operator()(const ossia::monostate& v, const ossia::monostate& m) const noexcept
+  {
+    return false;
+  }
 
 private:
   bool operator()(const ossia::value& first, const val_t& second) const;
@@ -80,5 +100,4 @@ private:
 
   comparator m_operator{};
 };
-}
 }

@@ -96,22 +96,16 @@ struct root_scenario
   }
 };
 
-inline
-std::ostream& operator<<(std::ostream& s, ossia::time_event::status st)
+inline auto dummy_process()
 {
-  switch(st)
+  struct node final : ossia::graph_node
   {
-    case ossia::time_event::status::NONE: s << "none"; break;
-    case ossia::time_event::status::PENDING: s << "pending"; break;
-    case ossia::time_event::status::HAPPENED: s << "happened"; break;
-    case ossia::time_event::status::DISPOSED: s << "disposed"; break;
-    case ossia::time_event::status::FINISHED: s << "finished"; break;
-  }
-  return s;
+    using ossia::graph_node::graph_node;
+    std::string label() const noexcept override { return "node"; }
+  };
+
+  return std::make_shared<ossia::node_process>(std::make_shared<node>());
 }
-
-inline auto dummy_process() { return std::make_shared<ossia::node_process>(std::make_shared<ossia::graph_node>()); }
-
 
 /*
 inline QDebug operator<<(QDebug d, ossia::time_event::status st)
@@ -162,6 +156,11 @@ std::ostream& operator<<(std::ostream& d, const ossia::time_value& t)
   d << t.impl;
   return d;
 }
+inline std::ostream&
+operator<<(std::ostream& d, const std::optional<ossia::time_value>& t)
+{
+  return t ? (d << t->impl) : (d << "nullopt");
+}
 inline
 std::ostream& operator<<(std::ostream& d, const ossia::token_request& t)
 {
@@ -193,5 +192,27 @@ std::ostream& operator<<(std::ostream& d, const decltype(ossia::graph_node::requ
     d << "  " << tk << ", \n";
   d << "}\n";
   return d;
+}
+inline std::ostream& operator<<(std::ostream& s, ossia::time_event::status st)
+{
+  switch(st)
+  {
+    case ossia::time_event::status::NONE:
+      s << "none";
+      break;
+    case ossia::time_event::status::PENDING:
+      s << "pending";
+      break;
+    case ossia::time_event::status::HAPPENED:
+      s << "happened";
+      break;
+    case ossia::time_event::status::DISPOSED:
+      s << "disposed";
+      break;
+    case ossia::time_event::status::FINISHED:
+      s << "finished";
+      break;
+  }
+  return s;
 }
 }

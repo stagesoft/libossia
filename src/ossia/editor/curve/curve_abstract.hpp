@@ -29,8 +29,7 @@ enum class curve_segment_type
  * curve_type::first is the abscissa
  * curve_type::second is the ordinate
  */
-using curve_type
-    = std::pair<ossia::curve_segment_type, ossia::curve_segment_type>;
+using curve_type = std::pair<ossia::curve_segment_type, ossia::curve_segment_type>;
 
 /**
  * @brief The curve_abstract class
@@ -45,7 +44,7 @@ public:
   virtual ~curve_abstract();
 
   /*! get the type of both coordinates */
-  virtual curve_type get_type() const = 0;
+  [[nodiscard]] virtual curve_type get_type() const = 0;
 
   /*! Clear internal data structures of the curve.
    * Call before a new execution. */

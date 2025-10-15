@@ -1,7 +1,11 @@
 #pragma once
 #include <ossia/dataflow/dataflow_fwd.hpp>
+#include <ossia/dataflow/graph_edge.hpp>
 #include <ossia/dataflow/transport.hpp>
+#include <ossia/detail/audio_spin_mutex.hpp>
 #include <ossia/detail/logger_fwd.hpp>
+
+#include <span>
 
 #include <smallfun.hpp>
 
@@ -11,20 +15,21 @@ class logger;
 }
 namespace ossia
 {
+struct edge_pool;
 struct bench_map;
+struct connection;
 class time_interval;
 class OSSIA_EXPORT graph_interface
 {
 public:
+  graph_interface();
   virtual ~graph_interface();
-  virtual void add_node(ossia::node_ptr) = 0;
-  virtual void remove_node(const ossia::node_ptr&) = 0;
-
-  virtual void connect(ossia::edge_ptr) = 0;
-  virtual void disconnect(const ossia::edge_ptr&) = 0;
-  virtual void disconnect(ossia::graph_edge*) = 0;
-
-  virtual void mark_dirty() = 0;
+  /* [[deprecated]] */ virtual void add_node(ossia::node_ptr) = 0;
+  /* [[deprecated]] */ virtual void remove_node(const ossia::node_ptr&) = 0;
+  /* [[deprecated]] */ virtual void connect(ossia::edge_ptr) = 0;
+  /* [[deprecated]] */ virtual void disconnect(const ossia::edge_ptr&) = 0;
+  /* [[deprecated]] */ virtual void disconnect(ossia::graph_edge*) = 0;
+  /* [[deprecated]] */ virtual void mark_dirty() = 0;
 
   virtual void state(execution_state& e) = 0;
 
@@ -32,8 +37,14 @@ public:
 
   virtual void print(std::ostream&) = 0;
 
-  virtual const std::vector<ossia::graph_node*>& get_nodes() const noexcept
+  [[nodiscard]] virtual std::span<ossia::graph_node* const> get_nodes() const noexcept
       = 0;
+
+  std::shared_ptr<edge_pool> pool;
+
+  ossia::edge_ptr allocate_edge(
+      connection c, outlet_ptr pout, inlet_ptr pin, node_ptr pout_node,
+      node_ptr pin_node);
 };
 
 struct graph_setup_options
@@ -60,6 +71,7 @@ struct graph_setup_options
   } merge{};
 
   bool parallel{};
+  int parallel_threads = 8;
   std::shared_ptr<ossia::logger_type> log{};
   std::shared_ptr<bench_map> bench{};
 };
@@ -71,7 +83,9 @@ struct tick_setup_options
     Default,
     Ordered,
     Priorized,
-    Merged
+    Merged,
+    MergedThreaded,
+    DirectThreaded
   } commit{};
   enum
   {

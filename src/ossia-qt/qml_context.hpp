@@ -1,20 +1,22 @@
 #pragma once
 #include <ossia/detail/config.hpp>
-#include <verdigris>
+
+#include <ossia/preset/preset.hpp>
+
+#include <ossia-qt/score/qml_util.hpp>
+
 #include <QDebug>
 #include <QFile>
 #include <QObject>
 #include <QQmlEngine>
 #include <QUrl>
-#include <ossia/preset/preset.hpp>
-#include <ossia-qt/score/qml_util.hpp>
+
+#include <verdigris>
 namespace spdlog
 {
 class logger;
 }
-namespace ossia
-{
-namespace qt
+namespace ossia::qt
 {
 class qml_device;
 class OSSIA_EXPORT qml_val_type
@@ -31,10 +33,10 @@ public:
     Impulse, //! \see ossia::impulse
     Bool,    //! \see bool
     String,  //! \see std::string
-    List,   //! \see std::vector<ossia::value>
-    Char     //! \see char
+    List,    //! \see std::vector<ossia::value>
+    Map      //! \see value_map_type
   };
-  W_ENUM(val_type, Float, Int, Vec2f, Vec3f, Vec4f, Impulse, Bool, String, List, Char)
+  W_ENUM(val_type, Float, Int, Vec2f, Vec3f, Vec4f, Impulse, Bool, String, List, Map)
 };
 
 class OSSIA_EXPORT qml_access_mode
@@ -83,14 +85,13 @@ class OSSIA_EXPORT qml_duration
 {
   W_GADGET(qml_duration)
 public:
-  enum duration: qint32
+  enum duration : qint32
   {
     Infinite = ossia::qt::infinite()
   };
 
   W_ENUM(duration, Infinite)
 };
-}
 }
 
 Q_DECLARE_METATYPE(ossia::qt::qml_val_type::val_type)

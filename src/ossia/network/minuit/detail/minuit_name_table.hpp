@@ -4,9 +4,7 @@
 
 #include <array>
 #include <string>
-namespace ossia
-{
-namespace minuit
+namespace ossia::minuit
 {
 class name_table
 {
@@ -26,7 +24,7 @@ public:
     m_actions[(int)minuit_action::ListenError] = name + "!listen";
   }
 
-  ossia::string_view get_action(minuit_action c) const
+  std::string_view get_action(minuit_action c) const
   {
     return m_actions[static_cast<int>(c)];
   }
@@ -34,5 +32,4 @@ public:
 private:
   std::array<std::string, 9> m_actions;
 };
-}
 }

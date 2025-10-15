@@ -1,9 +1,6 @@
 [submodule "CMake/cmake-modules"]
-	path = cmake/cmake-modules
+    path = cmake/cmake-modules
     url = https://github.com/OSSIA/cmake-modules
-[submodule "3rdparty/variant"]
-    path = 3rdparty/variant
-    url = https://github.com/eggs-cpp/variant
 [submodule "3rdparty/oscpack"]
     path = 3rdparty/oscpack
     url = https://github.com/jcelerier/oscpack
@@ -12,25 +9,16 @@
     url = https://github.com/jcelerier/nano-signal-slot
 [submodule "3rdparty/rapidjson"]
     path = 3rdparty/rapidjson
-    url = https://github.com/miloyip/rapidjson
+    url = https://github.com/jcelerier/rapidjson
 [submodule "3rdparty/spdlog"]
     path = 3rdparty/spdlog
     url = https://github.com/gabime/spdlog
-[submodule "3rdparty/brigand"]
-    path = 3rdparty/brigand
-    url = https://github.com/edouarda/brigand
 [submodule "3rdparty/fmt"]
     path = 3rdparty/fmt
     url = https://github.com/fmtlib/fmt
 [submodule "3rdparty/readerwriterqueue"]
     path = 3rdparty/readerwriterqueue
     url = https://github.com/cameron314/readerwriterqueue
-[submodule "3rdparty/hopscotch-map"]
-    path = 3rdparty/hopscotch-map
-    url = https://github.com/tessil/hopscotch-map.git
-[submodule "3rdparty/GSL"]
-    path = 3rdparty/GSL
-    url = https://github.com/Microsoft/GSL
 [submodule "3rdparty/pybind11"]
     path = 3rdparty/pybind11
     url = https://github.com/pybind/pybind11
@@ -40,21 +28,15 @@
 [submodule "3rdparty/Servus"]
     path = 3rdparty/Servus
     url = https://github.com/jcelerier/Servus
-[submodule "3rdparty/libartnet"]
-    path = 3rdparty/libartnet
-    url = https://github.com/jcelerier/libartnet
 [submodule "3rdparty/whereami"]
     path = 3rdparty/whereami
-    url = https://github.com/gpakosz/whereami
+    url = https://github.com/jcelerier/whereami
 [submodule "3rdparty/exprtk"]
     path = 3rdparty/exprtk
     url = https://github.com/ArashPartow/exprtk
 [submodule "3rdparty/SmallFunction"]
     path = 3rdparty/SmallFunction
     url = https://github.com/jcelerier/SmallFunction
-[submodule "3rdparty/flat_hash_map"]
-    path = 3rdparty/flat_hash_map
-    url = https://github.com/jcelerier/flat_hash_map
 [submodule "3rdparty/max-sdk"]
     path = 3rdparty/max-sdk
     url = https://github.com/ossia/max-sdk.git
@@ -70,9 +52,6 @@
 [submodule "3rdparty/libremidi"]
 	path = 3rdparty/libremidi
 	url = https://github.com/jcelerier/libremidi
-[submodule "3rdparty/flat"]
-	path = 3rdparty/flat
-	url = https://github.com/jcelerier/flat
 [submodule "3rdparty/wiiuse"]
 	path = 3rdparty/wiiuse
 	url = https://github.com/OSSIA/wiiuse.git
@@ -94,9 +73,6 @@
 [submodule "3rdparty/rnd"]
 	path = 3rdparty/rnd
 	url = https://github.com/jcelerier/rnd
-[submodule "3rdparty/cpp-taskflow"]
-	path = 3rdparty/cpp-taskflow
-	url = https://github.com/cpp-taskflow/cpp-taskflow
 [submodule "3rdparty/rapidfuzz-cpp"]
 	path = 3rdparty/rapidfuzz-cpp
 	url = https://github.com/maxbachmann/rapidfuzz-cpp.git 
@@ -118,3 +94,30 @@
 [submodule "3rdparty/kfr"]
 	path = 3rdparty/kfr
 	url = https://github.com/jcelerier/kfr
+[submodule "3rdparty/PerlinNoise"]
+	path = 3rdparty/PerlinNoise
+	url = https://github.com/jcelerier/PerlinNoise
+[submodule "3rdparty/span"]
+	path = 3rdparty/span
+	url = https://github.com/tcbrindle/span
+[submodule "3rdparty/re2"]
+	path = 3rdparty/re2
+	url = https://github.com/google/re2
+[submodule "3rdparty/compile-time-regular-expressions"]
+	path = 3rdparty/compile-time-regular-expressions
+	url = https://github.com/hanickadot/compile-time-regular-expressions
+[submodule "3rdparty/unordered_dense"]
+	path = 3rdparty/unordered_dense
+	url = https://github.com/jcelerier/unordered_dense
+[submodule "3rdparty/async-mqtt5"]
+	path = 3rdparty/async-mqtt5
+	url = https://github.com/mireo/async-mqtt5
+[submodule "3rdparty/magic_enum"]
+	path = 3rdparty/magic_enum
+	url = https://github.com/Neargye/magic_enum
+[submodule "3rdparty/miniaudio"]
+	path = 3rdparty/miniaudio
+	url = https://github.com/mackron/miniaudio
+[submodule "3rdparty/libcoap"]
+	path = 3rdparty/libcoap
+	url = https://github.com/obgm/libcoap

@@ -1,12 +1,12 @@
 #pragma once
+#include <ossia/detail/config.hpp>
+
 #include <ossia/dataflow/graph_node.hpp>
 #include <ossia/dataflow/port.hpp>
 #include <ossia/detail/optional.hpp>
 #include <ossia/editor/curve/behavior.hpp>
 #include <ossia/editor/curve/curve_segment/easing.hpp>
 #include <ossia/editor/mapper/detail/mapper_visitor.hpp>
-
-#include <ossia/detail/config.hpp>
 namespace ossia
 {
 template <typename Y, typename Easing>
@@ -34,28 +34,23 @@ public:
     m_outlets.push_back(&value_out);
   }
 
-  std::string label() const noexcept override
-  {
-    return "simple_mapping";
-  }
+  std::string label() const noexcept override { return "simple_mapping"; }
 
-  ~simple_mapping() override
-  {
-  }
+  ~simple_mapping() override { }
 
 private:
   void run(const ossia::token_request& t, ossia::exec_state_facade e) noexcept override
   {
-    if (!m_drive)
+    if(!m_drive)
       return;
 
     // TODO use correct unit / whatever ?
-    for (auto& tv : value_in.get_data())
+    for(auto& tv : value_in.get_data())
     {
-      if (tv.value.valid())
+      if(tv.value.valid())
       {
-        auto v = ossia::apply(
-            ossia::detail::mapper_compute_visitor{}, tv.value, m_drive.v);
+        auto v
+            = ossia::apply(ossia::detail::mapper_compute_visitor{}, tv.value, m_drive.v);
 
         op.write_value(std::move(v), tv.timestamp);
       }
@@ -73,7 +68,8 @@ private:
 
   ossia::value_outlet value_out;
 
-  using map_func = float(*)(float in, float min_in, float max_in, float min_out, float max_out);
+  using map_func
+      = float (*)(float in, float min_in, float max_in, float min_out, float max_out);
   ossia::flat_map<std::string, map_func> m_funcs;
 };
 }

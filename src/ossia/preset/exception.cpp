@@ -3,7 +3,6 @@
 #include "exception.hpp"
 
 #include <cstring>
-#include <iostream>
 #include <sstream>
 #include <string>
 
@@ -16,7 +15,7 @@ ossiaException::ossiaException(
     : m_message([&] {
       std::stringstream wh;
       wh << filename << " l." << lineno << ": Preset Exception: " << name;
-      if (details.size() > 0)
+      if(details.size() > 0)
       {
         wh << " (" << details << ")";
       }
@@ -48,8 +47,7 @@ ossiaException_InvalidXML::ossiaException_InvalidXML(
 }
 ossiaException_InvalidAddress::ossiaException_InvalidAddress(
     int line, const std::string& filename, const std::string& details)
-    : ossiaException::ossiaException(
-          line, filename, details, "Invalid address")
+    : ossiaException::ossiaException(line, filename, details, "Invalid address")
 {
 }
 }

@@ -1,10 +1,9 @@
 #pragma once
-#include <ossia-pd/src/object_base.hpp>
 #include <ossia/network/common/websocket_log_sink.hpp>
 
-namespace ossia
-{
-namespace pd
+#include <ossia-pd/src/object_base.hpp>
+
+namespace ossia::pd
 {
 
 class assert
@@ -21,6 +20,4 @@ public:
   static void* create(t_symbol* s, int argc, t_atom* argv);
   void quit();
 };
-} // pd namespace
 } // ossia namespace
-

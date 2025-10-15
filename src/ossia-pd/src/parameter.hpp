@@ -2,9 +2,7 @@
 
 #include <ossia-pd/src/parameter_base.hpp>
 
-namespace ossia
-{
-namespace pd
+namespace ossia::pd
 {
 
 class parameter : public parameter_base
@@ -19,15 +17,14 @@ public:
   bool unregister();
   void save_values();
 
-  static t_pd_err notify(
-      parameter*x, t_symbol*s, t_symbol* msg, void* sender, void* data);
-  static void update_attribute(
-      parameter* x, string_view attribute, const net::node_base* node);
+  static t_pd_err
+  notify(parameter* x, t_symbol* s, t_symbol* msg, void* sender, void* data);
+  static void
+  update_attribute(parameter* x, string_view attribute, const net::node_base* node);
 
   static void* create(t_symbol* name, int argc, t_atom* argv);
   static void destroy(parameter* x);
 
   static ossia::safe_set<parameter*>& quarantine();
 };
-} // namespace pd
 } // namespace ossia

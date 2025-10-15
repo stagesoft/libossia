@@ -1,12 +1,12 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
+#include <ossia/detail/algorithms.hpp>
 #include <ossia/editor/exceptions.hpp>
 #include <ossia/editor/expression/expression.hpp>
 #include <ossia/editor/scenario/time_event.hpp>
-#include <ossia/editor/scenario/time_sync.hpp>
 #include <ossia/editor/scenario/time_interval.hpp>
 #include <ossia/editor/scenario/time_process.hpp>
-#include <ossia/detail/algorithms.hpp>
+#include <ossia/editor/scenario/time_sync.hpp>
 
 namespace ossia
 {
@@ -18,7 +18,9 @@ time_event::time_event(
     , m_status(time_event::status::NONE)
     , m_expression(std::move(anExpression))
 {
-  if (!m_expression)
+  m_previous_time_intervals.reserve(4);
+  m_next_time_intervals.reserve(4);
+  if(!m_expression)
     m_expression = ossia::expressions::make_expression_true();
 }
 
@@ -31,11 +33,11 @@ void time_event::set_callback(time_event::exec_callback callback)
 
 void time_event::add_time_process(std::shared_ptr<time_process> timeProcess)
 {
-  if (!timeProcess)
+  if(!timeProcess)
     return;
 
   // store a TimeProcess if it is not already stored
-  if (find(m_processes, timeProcess) == m_processes.end())
+  if(find(m_processes, timeProcess) == m_processes.end())
   {
     if(m_timesync->muted())
       timeProcess->mute(true);
@@ -45,21 +47,20 @@ void time_event::add_time_process(std::shared_ptr<time_process> timeProcess)
 
 void time_event::remove_time_process(time_process* timeProcess)
 {
-  auto it = find_if(m_processes, [=](const auto& other) {
-    return other.get() == timeProcess;
-  });
-  if (it != m_processes.end())
+  auto it = find_if(
+      m_processes, [=](const auto& other) { return other.get() == timeProcess; });
+  if(it != m_processes.end())
   {
     m_processes.erase(it);
   }
 }
 
-void time_event::tick(ossia::time_value date, ossia::time_value offset)
+void time_event::tick(ossia::time_value date, ossia::time_value offset, double speed)
 {
-  for (auto& proc : m_processes)
+  for(auto& proc : m_processes)
   {
     proc->start();
-    proc->state(ossia::token_request{0_tv, date, 0_tv, offset, 1., {}, {}});
+    proc->state(ossia::token_request{0_tv, date, 0_tv, offset, speed, {}, {}});
     proc->stop();
   }
 }
@@ -106,7 +107,7 @@ time_event& time_event::set_offset_behavior(offset_behavior b)
 void time_event::set_status(status status)
 {
   m_status = status;
-  if (m_callback)
+  if(m_callback)
     (m_callback)(m_status);
 }
 

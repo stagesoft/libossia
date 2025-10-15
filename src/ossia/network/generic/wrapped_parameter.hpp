@@ -1,4 +1,5 @@
 #pragma once
+#include <ossia/network/base/osc_address.hpp>
 #include <ossia/network/base/protocol.hpp>
 #include <ossia/network/generic/generic_parameter.hpp>
 
@@ -15,12 +16,14 @@ class wrapped_node : public ossia::net::node_base
 public:
   using data_type = T;
   wrapped_node(
-      T&& data, ossia::net::device_base& aDevice,
-      ossia::net::node_base& aParent)
-      : m_device{aDevice}, m_parent{&aParent}
+      T&& data, ossia::net::device_base& aDevice, ossia::net::node_base& aParent)
+      : m_device{aDevice}
+      , m_parent{&aParent}
   {
     m_name = data.name;
-    if (data.valid())
+    m_extended = data.extended;
+    m_oscAddressCache = ossia::net::osc_parameter_string(*this);
+    if(data.valid())
       m_parameter.reset(new Parameter_T(std::move(data), *this));
   }
 
@@ -28,14 +31,13 @@ public:
       : m_device{aDevice}
   {
     m_name = data.name;
-    if (data.valid())
+    m_extended = data.extended;
+    m_oscAddressCache = ossia::net::osc_parameter_string(*this);
+    if(data.valid())
       m_parameter.reset(new Parameter_T(std::move(data), *this));
   }
 
-  ~wrapped_node() override
-  {
-    clear();
-  }
+  ~wrapped_node() override { clear(); }
 
   void clear()
   {
@@ -46,39 +48,24 @@ public:
     m_parameter.reset();
   }
 
-  device_base& get_device() const final override
-  {
-    return m_device;
-  }
+  device_base& get_device() const final override { return m_device; }
 
-  node_base* get_parent() const final override
-  {
-    return m_parent;
-  }
+  node_base* get_parent() const final override { return m_parent; }
 
-  node_base& set_name(std::string) final override
-  {
-    return *this;
-  }
+  node_base& set_name(std::string) final override { return *this; }
 
-  parameter_base* get_parameter() const final override
-  {
-    return m_parameter.get();
-  }
+  parameter_base* get_parameter() const final override { return m_parameter.get(); }
 
   parameter_base* create_parameter(val_type = val_type::IMPULSE) final override
   {
     return nullptr;
   }
 
-  bool remove_parameter() final override
-  {
-    return false;
-  }
+  bool remove_parameter() final override { return false; }
 
   void add_child(std::unique_ptr<ossia::net::node_base> p)
   {
-    if (p)
+    if(p)
     {
       write_lock_t lock{m_mutex};
       m_children.push_back(std::move(p));
@@ -88,12 +75,11 @@ public:
 private:
   std::unique_ptr<node_base> make_child(const std::string& name) final override
   {
+    return std::make_unique<generic_node>(name, m_device, *this);
     return nullptr;
   }
 
-  void removing_child(node_base& node_base) final override
-  {
-  }
+  void removing_child(node_base& node_base) final override { }
 };
 
 template <typename T>
@@ -113,27 +99,20 @@ public:
   wrapped_parameter(wrapped_parameter&& other) = delete;
   wrapped_parameter& operator=(const wrapped_parameter& other) = delete;
   wrapped_parameter& operator=(wrapped_parameter&& other) = delete;
-  ~wrapped_parameter()
-  {
-    callback_container<value_callback>::callbacks_clear();
-  }
+  ~wrapped_parameter() { callback_container<value_callback>::callbacks_clear(); }
 
-  const base_data_type& data() const
-  {
-    return m_data;
-  }
+  const base_data_type& data() const { return m_data; }
 
-  base_data_type& data()
-  {
-    return m_data;
-  }
+  base_data_type& data() { return m_data; }
 
 private:
   base_data_type m_data;
 };
 
 template <typename Node_T, typename Protocol_T>
-class wrapped_device final : public ossia::net::device_base, public Node_T
+class wrapped_device final
+    : public ossia::net::device_base
+    , public Node_T
 {
 public:
   wrapped_device() = delete;
@@ -146,27 +125,21 @@ public:
       : device_base(std::move(protocol_base))
       , Node_T{typename Node_T::data_type{name}, *this}
   {
+    m_capabilities.change_tree = true;
     m_protocol->set_device(*this);
   }
 
-  const ossia::net::node_base& get_root_node() const override
-  {
-    return *this;
-  }
-  ossia::net::node_base& get_root_node() override
-  {
-    return *this;
-  }
+  const ossia::net::node_base& get_root_node() const override { return *this; }
+  ossia::net::node_base& get_root_node() override { return *this; }
 
   using Node_T::get_name;
   using Node_T::set_name;
 
   ~wrapped_device()
   {
-    // TODO c.f. generic_device
-    this->remove_parameter();
-
     m_protocol->stop();
+
+    this->remove_parameter();
 
     {
       write_lock_t lock{this->m_mutex};

@@ -6,9 +6,7 @@
 #include <ossia/network/generic/generic_node.hpp>
 #include <ossia/network/local/local.hpp>
 
-namespace ossia
-{
-namespace net
+namespace ossia::net
 {
 generic_device::generic_device(std::string name)
     : device_base{std::make_unique<multiplex_protocol>()}
@@ -20,7 +18,8 @@ generic_device::generic_device(std::string name)
 
 generic_device::generic_device(
     std::unique_ptr<ossia::net::protocol_base> protocol, std::string name)
-    : device_base(std::move(protocol)), generic_node(std::move(name), *this)
+    : device_base(std::move(protocol))
+    , generic_node(std::move(name), *this)
 {
   m_capabilities.change_tree = true;
   m_protocol->set_device(*this);
@@ -38,6 +37,5 @@ generic_device::~generic_device()
   }
 
   m_protocol.reset();
-}
 }
 }

@@ -3,6 +3,11 @@
 #include <ossia/detail/config.hpp>
 
 #include <memory>
+
+#if !defined(OSSIA_HAS_FMT)
+#define OSSIA_BRUH_LOGGER 1
+#endif
+
 #if !defined(OSSIA_BRUH_LOGGER)
 namespace spdlog
 {
@@ -18,7 +23,8 @@ using logger_type = spdlog::logger;
 #include <vector>
 namespace spdlog
 {
-namespace sinks {
+namespace sinks
+{
 class sink;
 }
 }

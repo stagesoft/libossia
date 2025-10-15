@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include <ossia/network/base/node.hpp>
@@ -13,17 +12,16 @@ namespace ossia::net
 
 class OSSIA_EXPORT device_parameter : public ossia::net::parameter_base
 {
-
 public:
   device_parameter(
       ossia::net::node_base& node, const ossia::val_type type,
       const ossia::bounding_mode bounding, const ossia::access_mode access,
-      const ossia::domain domain);
+      ossia::domain domain);
 
   virtual ~device_parameter();
 
   //  Must be called when the hardware send a new value
-  //  (typicaly from an event loop)
+  //  (typically from an event loop)
   //  This will NOT call device_update_value() in order to avoid loop
   void device_value_change_event(const ossia::value& value);
 
@@ -37,25 +35,16 @@ public:
   ossia::value set_value(const ossia::value& val) override;
   ossia::value set_value(ossia::value&& v) override;
 
-  ossia::val_type get_value_type() const override;
-  ossia::net::parameter_base& set_value_type(ossia::val_type) override
-  {
-    return *this;
-  }
+  ossia::val_type get_value_type() const noexcept override;
+  ossia::net::parameter_base& set_value_type(ossia::val_type) override { return *this; }
 
-  ossia::access_mode get_access() const override;
-  ossia::net::parameter_base& set_access(ossia::access_mode) override
-  {
-    return *this;
-  }
+  ossia::access_mode get_access() const noexcept override;
+  ossia::net::parameter_base& set_access(ossia::access_mode) override { return *this; }
 
-  const ossia::domain& get_domain() const override;
-  ossia::net::parameter_base& set_domain(const ossia::domain&) override
-  {
-    return *this;
-  }
+  const ossia::domain& get_domain() const noexcept override;
+  ossia::net::parameter_base& set_domain(const ossia::domain&) override { return *this; }
 
-  ossia::bounding_mode get_bounding() const override;
+  ossia::bounding_mode get_bounding() const noexcept override;
   ossia::net::parameter_base& set_bounding(ossia::bounding_mode) override
   {
     return *this;
@@ -82,12 +71,8 @@ public:
 protected:
   virtual void device_update_value()
   {
-    //  Here should be the code that actualy make the hardware update to current value
-  }
-
-  auto& get_protocol()
-  {
-    return get_node().get_device().get_protocol();
+    //  Here should be the code that actually make the hardware update to
+    //  current value
   }
 
   ossia::value m_current_value{};

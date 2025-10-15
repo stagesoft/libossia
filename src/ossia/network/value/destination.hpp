@@ -1,17 +1,16 @@
 #pragma once
+#include <ossia/detail/config.hpp>
+
 #include <ossia/detail/destination_index.hpp>
 #include <ossia/network/common/parameter_properties.hpp>
 #include <ossia/network/dataspace/dataspace.hpp>
 #include <ossia/network/value/value.hpp>
 
-#include <ossia/detail/config.hpp>
-
 #include <functional>
+#include <initializer_list>
 #include <memory>
 #include <utility>
 #include <vector>
-
-#include <initializer_list>
 /**
  * \file destination.hpp
  */
@@ -36,25 +35,17 @@ public:
   ossia::unit_t unit;
 
   ossia::value pull() const;
-  ossia::net::parameter_base& address()
-  {
-    return value.get();
-  }
-  ossia::net::parameter_base& address() const
-  {
-    return value.get();
-  }
+  ossia::net::parameter_base& address() { return value.get(); }
+  ossia::net::parameter_base& address() const { return value.get(); }
 
   destination(net::parameter_base& v) noexcept;
   destination(net::parameter_base& v, destination_index) noexcept;
-  destination(
-      net::parameter_base& v, destination_index,
-      const ossia::unit_t&) noexcept;
+  destination(net::parameter_base& v, destination_index, const ossia::unit_t&) noexcept;
   destination(net::parameter_base& v, const ossia::unit_t&) noexcept;
 
-  destination(const destination& other) noexcept;
+  destination(const destination& other);
   destination(destination&& other) noexcept;
-  destination& operator=(const destination&) noexcept;
+  destination& operator=(const destination&);
   destination& operator=(destination&&) noexcept;
 
   bool operator==(const ossia::value&) const noexcept;

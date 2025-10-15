@@ -5,14 +5,19 @@
 #include <ossia/protocols/midi/midi_parameter.hpp>
 #include <ossia/protocols/midi/midi_protocol.hpp>
 
+#include <charconv>
 namespace ossia::net::midi
 {
 struct midi_name_table
 {
   midi_name_table()
   {
-    for (int i = 0; i < 128; i++)
-      names[i] = boost::lexical_cast<std::string>(i);
+    for(int i = 0; i < 128; i++)
+    {
+      char str[16] = {0};
+      std::to_chars(str, str + 16, i);
+      names[i] = str;
+    }
   }
 
   std::array<std::string, 128> names;
@@ -24,16 +29,16 @@ const std::string& midi_node_name(midi_size_t i)
   return tbl.names[i];
 }
 
-midi_node::~midi_node()
-{
-}
+midi_node::~midi_node() = default;
 
 midi_node::midi_node(midi_device& aDevice, node_base& aParent)
-    : m_device{aDevice}, m_parent{&aParent}
+    : m_device{aDevice}
+    , m_parent{&aParent}
 {
 }
 
-midi_node::midi_node(midi_device& aDevice) : m_device{aDevice}
+midi_node::midi_node(midi_device& aDevice)
+    : m_device{aDevice}
 {
 }
 
@@ -51,7 +56,6 @@ node_base& midi_node::set_name(std::string)
 {
   return *this;
 }
-
 parameter_base* midi_node::get_parameter() const
 {
   return m_parameter.get();
@@ -72,9 +76,7 @@ std::unique_ptr<node_base> midi_node::make_child(const std::string& name)
   return nullptr;
 }
 
-void midi_node::removing_child(node_base& node)
-{
-}
+void midi_node::removing_child(node_base& node) { }
 
 midi_node* midi_node::add_midi_node(std::unique_ptr<midi_node> n)
 {

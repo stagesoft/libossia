@@ -2,13 +2,13 @@
 #include <cstdint>
 #if SIZE_MAX == 0xFFFFFFFF // 32-bit
 #include <ossia/dataflow/audio_port.hpp>
-#include <ossia/dataflow/value_port.hpp>
 #include <ossia/dataflow/midi_port.hpp>
+#include <ossia/dataflow/value_port.hpp>
 #endif
 
 #include <ossia/dataflow/dataflow_fwd.hpp>
-#include <ossia/dataflow/token_request.hpp>
 #include <ossia/dataflow/exec_state_facade.hpp>
+#include <ossia/dataflow/token_request.hpp>
 #include <ossia/detail/small_vector.hpp>
 #include <ossia/detail/string_view.hpp>
 #include <ossia/editor/scenario/time_value.hpp>
@@ -29,7 +29,8 @@ inline bool operator==(const token_request_vec& lhs, const simple_token_request_
   auto it1 = lhs.begin();
   auto it2 = rhs.begin();
   auto e1 = lhs.end();
-  for(; it1 < e1; ++it1, ++it2) {
+  for(; it1 < e1; ++it1, ++it2)
+  {
     if(*it1 == *it2)
       continue;
     else
@@ -46,7 +47,8 @@ inline bool operator!=(const token_request_vec& lhs, const simple_token_request_
   auto it1 = lhs.begin();
   auto it2 = rhs.begin();
   auto e1 = lhs.end();
-  for(; it1 < e1; ++it1, ++it2) {
+  for(; it1 < e1; ++it1, ++it2)
+  {
     if(*it1 != *it2)
       continue;
     else
@@ -111,91 +113,76 @@ public:
   graph_node() noexcept;
   virtual ~graph_node();
 
-  bool enabled() const noexcept
-  {
-    return !requested_tokens.empty();
-  }
+  [[nodiscard]] bool enabled() const noexcept { return !requested_tokens.empty(); }
 
-  bool executed() const noexcept
-  {
-    return m_executed;
-  }
+  [[nodiscard]] bool executed() const noexcept { return m_executed; }
 
-  void set_start_discontinuous(bool b) noexcept
-  {
-    m_start_discontinuous = b;
-  }
-  void set_end_discontinuous(bool b) noexcept
-  {
-    m_end_discontinuous = b;
-  }
+  void set_start_discontinuous(bool b) noexcept { m_start_discontinuous = b; }
+  void set_end_discontinuous(bool b) noexcept { m_end_discontinuous = b; }
 
   virtual void prepare(const execution_state& st) noexcept;
-  virtual bool consumes(const execution_state&) const noexcept;
+  [[nodiscard]] virtual bool consumes(const execution_state&) const noexcept;
   virtual void run(const token_request&, exec_state_facade) noexcept;
-  virtual std::string label() const noexcept;
+  [[nodiscard]] virtual std::string label() const noexcept = 0;
 
-  bool has_port_inputs() const noexcept;
-  bool has_global_inputs() const noexcept;
-  bool has_local_inputs(const execution_state& st) const noexcept;
+  [[nodiscard]] bool has_port_inputs() const noexcept;
+  [[nodiscard]] bool has_global_inputs() const noexcept;
+  [[nodiscard]] bool has_local_inputs(const execution_state& st) const noexcept;
 
-  const inlets& root_inputs() const noexcept
-  {
-    return m_inlets;
-  }
-  const outlets& root_outputs() const noexcept
-  {
-    return m_outlets;
-  }
-  inlets& root_inputs() noexcept
-  {
-    return m_inlets;
-  }
-  outlets& root_outputs() noexcept
-  {
-    return m_outlets;
-  }
-
+  [[nodiscard]] const inlets& root_inputs() const noexcept { return m_inlets; }
+  [[nodiscard]] const outlets& root_outputs() const noexcept { return m_outlets; }
+  inlets& root_inputs() noexcept { return m_inlets; }
+  outlets& root_outputs() noexcept { return m_outlets; }
 
   virtual void clear() noexcept;
 
-  bool start_discontinuous() const noexcept
+  [[nodiscard]] bool start_discontinuous() const noexcept
   {
     return m_start_discontinuous;
   }
-  bool end_discontinuous() const noexcept
-  {
-    return m_end_discontinuous;
-  }
+  [[nodiscard]] bool end_discontinuous() const noexcept { return m_end_discontinuous; }
 
-  void set_executed(bool b) noexcept
-  {
-    m_executed = b;
-  }
+  void set_executed(bool b) noexcept { m_executed = b; }
 
   void request(const ossia::token_request& req) noexcept;
+  void process_time(const ossia::token_request& req, execution_state& st) noexcept;
 
-  void disable() noexcept
+  void disable() noexcept { requested_tokens.clear(); }
+
+  void set_logging(bool b) noexcept { m_logging = b; }
+  [[nodiscard]] bool logged() const noexcept { return m_logging; }
+
+  void set_mute(bool b) noexcept { m_muted = b; }
+  [[nodiscard]] bool muted() const noexcept { return m_muted; }
+
+  /**
+   * Indicates that the node implementation does manipulate the floating-point environment
+   */
+  [[nodiscard]]
+  bool not_fp_safe() const noexcept
   {
-    requested_tokens.clear();
+    return m_not_fp_safe;
+  }
+  void set_not_fp_safe() noexcept { m_not_fp_safe = true; }
+
+  /**
+   * Indicates that the node implementation must always be scheduled on the same thread.
+   * Main use case: QJSEngine which is not thread-safe.
+   */
+  [[nodiscard]]
+  bool not_threadable() const noexcept
+  {
+    return m_not_threadable;
   }
 
-  void set_logging(bool b) noexcept
+  /**
+   * Number of frames (physical time) processed through this node since the start 
+   * of the current execution.
+   */
+  [[nodiscard]]
+  int64_t processed_frames() const noexcept
   {
-    m_logging = b;
-  }
-  bool logged() const noexcept
-  {
-    return m_logging;
-  }
-
-  void set_mute(bool b) noexcept
-  {
-    m_muted = b;
-  }
-  bool muted() const noexcept
-  {
-    return m_muted;
+    return m_processed_frames;
   }
 
   virtual void all_notes_off() noexcept;
@@ -204,8 +191,11 @@ public:
 protected:
   inlets m_inlets;
   outlets m_outlets;
+  int64_t m_processed_frames{};
 
   bool m_executed{};
+  bool m_not_threadable{};
+  bool m_not_fp_safe{};
 
 private:
   bool m_start_discontinuous{};
@@ -223,8 +213,9 @@ public:
   void clear() noexcept override;
 };
 
-template<typename T, typename... Args>
-auto make_node(const execution_state& st, Args&&... args) {
+template <typename T, typename... Args>
+auto make_node(const execution_state& st, Args&&... args)
+{
   auto n = std::make_shared<T>(std::forward<Args>(args)...);
   n->prepare(st);
   return n;

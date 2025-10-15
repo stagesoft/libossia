@@ -1,37 +1,13 @@
 #pragma once
+#include <ossia/detail/config.hpp>
 
 #include <QMetaObject>
-#include <QTimer>
 
 namespace ossia::qt
 {
-
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 12, 0))
-
-template<typename T, typename Fun>
-inline void run_async(T* self, Fun&& fun)
+template <typename T, typename Fun>
+inline void run_async(T* self, Fun&& fun, Qt::ConnectionType type = Qt::QueuedConnection)
 {
-  QMetaObject::invokeMethod(self, std::forward<Fun>(fun), Qt::QueuedConnection);
+  QMetaObject::invokeMethod(self, std::forward<Fun>(fun), type);
 }
-
-#else
-
-template<typename T, typename Fun>
-inline void run_async(T* self, Fun&& fun)
-{
-  if constexpr(std::is_copy_constructible_v<Fun>) {
-    QTimer::singleShot(0, self, std::forward<Fun>(fun));
-  } else {
-    // Old Qt did not support move-only types such as unique_ptr,
-    // add a hack for that here
-    auto f = new Fun{std::move(fun)};
-    QTimer::singleShot(0, self, [f] {
-      (*f)();
-      delete f;
-    });
-  }
-}
-
-#endif
-
 }

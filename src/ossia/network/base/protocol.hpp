@@ -3,16 +3,19 @@
 
 #include <ossia/network/base/message_origin_identifier.hpp>
 #include <ossia/network/common/network_logger.hpp>
-#include <nano_signal_slot.hpp>
-#include <ossia/detail/config.hpp>
 
+#include <nano_signal_slot.hpp>
+
+#include <atomic>
 #include <future>
 #include <memory>
+#include <span>
 #include <vector>
 
 namespace ossia
 {
 class value;
+struct bundle_element;
 namespace net
 {
 class parameter_base;
@@ -21,7 +24,6 @@ class device_base;
 struct full_parameter_data;
 
 class protocol_base;
-
 
 /**
  * @brief The protocol_base class
@@ -37,12 +39,19 @@ class protocol_base;
 class OSSIA_EXPORT protocol_base
 {
 public:
-  enum flags {
+  enum flags
+  {
     SupportsMultiplex = (1 << 0)
   };
 
-  explicit protocol_base(): m_flags{} { }
-  explicit protocol_base(flags f): m_flags{f} { }
+  explicit protocol_base()
+      : m_flags{}
+  {
+  }
+  explicit protocol_base(flags f)
+      : m_flags{f}
+  {
+  }
   protocol_base(const protocol_base&) = delete;
   protocol_base(protocol_base&&) = delete;
   protocol_base& operator=(const protocol_base&) = delete;
@@ -77,15 +86,18 @@ public:
   /**
    * @brief called when some protocol on the same device received a message.
    *
-   * This can be used to echo the message to other protocols on the same device.
+   * This can be used to echo the message to other protocols on the same
+   * device.
    */
-  virtual bool echo_incoming_message(const message_origin_identifier&, const parameter_base&, const ossia::value& v);
+  virtual bool echo_incoming_message(
+      const message_origin_identifier&, const parameter_base&, const ossia::value& v);
 
   /**
    * @brief Send many values in one go if the protocol supports it
    */
-  virtual bool
-  push_bundle(const std::vector<const ossia::net::parameter_base*>&);
+  virtual bool push_bundle(const std::vector<const ossia::net::parameter_base*>&);
+  virtual bool push_bundle(std::span<ossia::bundle_element>);
+  virtual bool push_bundle_bounded(std::span<ossia::bundle_element>);
 
   /**
    * @brief Send a value to the network.
@@ -114,12 +126,25 @@ public:
   virtual bool observe(parameter_base&, bool) = 0;
 
   /**
+   * @brief Notify the network that a parameter is to be published
+   * 
+   * In some protocols (MQTT), this may send a message to the broker to indicate
+   * that a new topic is being made available for publication.
+   */
+  virtual bool publish(const parameter_base&);
+
+  /**
+   * @brief Notify the network that a parameter is to be removed
+   * 
+   * In some protocols (MQTT), this may send a message to the broker to indicate
+   * that a previously published topic is disappearing.
+   */
+  virtual bool unpublish(const parameter_base&);
+
+  /**
    * @brief Begin observation without notifying the other computers.
    */
-  virtual bool observe_quietly(parameter_base&, bool)
-  {
-    return false;
-  }
+  virtual bool observe_quietly(parameter_base&, bool) { return false; }
 
   /**
    * @brief If the protocol supports it, request the namespace corresponding
@@ -129,7 +154,8 @@ public:
 
   /**
    * @brief If the protocol supports it, request the namespace corresponding
-   * to this node. If the update takes too long, nodes may be dropped as there is a default timeout.
+   * to this node. If the update takes too long, nodes may be dropped as there
+   * is a default timeout.
    */
   virtual bool update(node_base& node_base) = 0;
 
@@ -141,15 +167,9 @@ public:
   virtual void set_device(ossia::net::device_base& dev);
 
   //! Replace the loggers used
-  virtual void set_logger(const network_logger& l)
-  {
-    m_logger = l;
-  }
+  virtual void set_logger(const network_logger& l) { m_logger = l; }
 
-  virtual const network_logger& get_logger() const noexcept
-  {
-    return m_logger;
-  }
+  virtual const network_logger& get_logger() const noexcept { return m_logger; }
 
   virtual bool connected() const noexcept;
   virtual void connect();
@@ -157,39 +177,32 @@ public:
   Nano::Signal<void()> on_connection_closed;
   Nano::Signal<void()> on_connection_failure;
 
-  virtual void start_execution()
-  {
-  }
-  virtual void stop_execution()
-  {
-  }
-  virtual void stop()
-  {
-  }
+  virtual void start_execution() { }
+  virtual void stop_execution() { }
+  virtual void stop() { }
 
-  flags get_flags() const noexcept { return m_flags;}
-  bool test_flag(flags f) const noexcept { return m_flags & f;}
+  // By default feedback is enabled. Disabling it means that the protocol
+  // won't send any data, just apply the incoming messages - useful for preventing feedback loops while
+  // loading things
+  virtual void set_feedback(bool feedback);
+
+  flags get_flags() const noexcept { return m_flags; }
+  bool test_flag(flags f) const noexcept { return m_flags & f; }
+
 protected:
   const flags m_flags{};
   network_logger m_logger;
 };
 
-template<typename T>
-class can_learn
-    : public T
+template <typename T>
+class can_learn : public T
 {
 public:
   using T::T;
 
-  bool learning() const noexcept
-  {
-    return m_learning;
-  }
+  bool learning() const noexcept { return m_learning; }
 
-  void set_learning(bool v) noexcept
-  {
-    m_learning = v;
-  }
+  void set_learning(bool v) noexcept { m_learning = v; }
 
 private:
   std::atomic_bool m_learning{};

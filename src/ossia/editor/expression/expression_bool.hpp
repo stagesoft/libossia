@@ -1,14 +1,12 @@
 #pragma once
-#include <ossia/editor/expression/expression_fwd.hpp>
-
 #include <ossia/detail/config.hpp>
+
+#include <ossia/editor/expression/expression_fwd.hpp>
 
 /**
  * \file expression_bool.hpp
  */
-namespace ossia
-{
-namespace expressions
+namespace ossia::expressions
 {
 /**
  * @brief expression_bool : a constant boolean value.
@@ -28,16 +26,8 @@ public:
 
   ~expression_bool();
 
-  bool evaluate() const
-  {
-    return m_result;
-  }
-  void update() const
-  {
-  }
-  void reset() const
-  {
-  }
+  bool evaluate() const noexcept { return m_result; }
+  void update() const noexcept { }
+  void reset() const noexcept { }
 };
-}
 }

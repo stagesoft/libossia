@@ -1,8 +1,8 @@
 #pragma once
+#include <ossia/detail/config.hpp>
+
 #include <ossia/network/value/destination.hpp>
 #include <ossia/network/value/value.hpp>
-
-#include <ossia/detail/config.hpp>
 
 #include <bitset>
 #include <memory>
@@ -30,10 +30,7 @@ struct OSSIA_EXPORT message
   ossia::destination dest;
   ossia::value message_value;
 
-  const ossia::unit_t& get_unit() const
-  {
-    return dest.unit;
-  }
+  const ossia::unit_t& get_unit() const { return dest.unit; }
   void launch();
 
   friend bool operator==(const message& lhs, const message& rhs)
@@ -53,19 +50,23 @@ struct OSSIA_EXPORT message
   message& operator=(message&&) = default;
 
   message(const destination& d, const ossia::value& v)
-      : dest{d}, message_value{v}
+      : dest{d}
+      , message_value{v}
   {
   }
   message(const destination& d, ossia::value&& v)
-      : dest{d}, message_value{std::move(v)}
+      : dest{d}
+      , message_value{std::move(v)}
   {
   }
   message(const destination& d, const ossia::value& v, const ossia::unit_t& u)
-      : dest{d.value, d.index, u}, message_value{v}
+      : dest{d.value, d.index, u}
+      , message_value{v}
   {
   }
   message(const destination& d, ossia::value&& v, const ossia::unit_t& u)
-      : dest{d.value, d.index, u}, message_value{std::move(v)}
+      : dest{d.value, d.index, u}
+      , message_value{std::move(v)}
   {
   }
 };
@@ -76,21 +77,16 @@ struct OSSIA_EXPORT piecewise_message
   std::vector<ossia::value> message_value;
   ossia::unit_t unit;
 
-  const ossia::unit_t& get_unit() const
-  {
-    return unit;
-  }
+  const ossia::unit_t& get_unit() const { return unit; }
   void launch();
 
-  friend bool
-  operator==(const piecewise_message& lhs, const piecewise_message& rhs)
+  friend bool operator==(const piecewise_message& lhs, const piecewise_message& rhs)
   {
     return &lhs.address.get() == &rhs.address.get()
            && lhs.message_value == rhs.message_value && lhs.unit == rhs.unit;
   }
 
-  friend bool
-  operator!=(const piecewise_message& lhs, const piecewise_message& rhs)
+  friend bool operator!=(const piecewise_message& lhs, const piecewise_message& rhs)
   {
     return &lhs.address.get() != &rhs.address.get()
            || lhs.message_value != rhs.message_value || lhs.unit != rhs.unit;
@@ -105,22 +101,19 @@ struct piecewise_vec_message
   ossia::unit_t unit;
   std::bitset<N> used_values; // True for each value that has been set.
 
-  const ossia::unit_t& get_unit() const
-  {
-    return unit;
-  }
+  const ossia::unit_t& get_unit() const { return unit; }
   void launch();
 
-  friend bool operator==(
-      const piecewise_vec_message& lhs, const piecewise_vec_message& rhs)
+  friend bool
+  operator==(const piecewise_vec_message& lhs, const piecewise_vec_message& rhs)
   {
     return &lhs.address.get() == &rhs.address.get()
            && lhs.message_value == rhs.message_value && lhs.unit == rhs.unit
            && lhs.used_values == rhs.used_values;
   }
 
-  friend bool operator!=(
-      const piecewise_vec_message& lhs, const piecewise_vec_message& rhs)
+  friend bool
+  operator!=(const piecewise_vec_message& lhs, const piecewise_vec_message& rhs)
   {
     return &lhs.address.get() != &rhs.address.get()
            || lhs.message_value != rhs.message_value || lhs.unit != rhs.unit

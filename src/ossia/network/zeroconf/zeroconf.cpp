@@ -2,10 +2,7 @@
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 #include "zeroconf.hpp"
 
-#include <boost/lexical_cast.hpp>
-
 #include <chrono>
-#include <iostream>
 #include <thread>
 
 #if defined(OSSIA_DNSSD)
@@ -18,9 +15,7 @@ class Servus
 };
 }
 #endif
-namespace ossia
-{
-namespace net
+namespace ossia::net
 {
 bool zeroconf_supported()
 {
@@ -34,20 +29,19 @@ std::vector<minuit_connection_data> list_minuit_devices()
 #if defined(OSSIA_DNSSD)
   auto browser = new servus::Servus("_minuit._tcp");
   browser->beginBrowsing(servus::Interface::IF_ALL);
-  for (int i = 0; i < 500; i++)
+  for(int i = 0; i < 500; i++)
   {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     browser->browse(0);
   }
   browser->endBrowsing();
 
-  for (const auto& instance : browser->getInstances())
+  for(const auto& instance : browser->getInstances())
   {
     minuit_connection_data dat;
     dat.name = instance;
     dat.host = browser->get(instance, "servus_host");
-    dat.local_port
-        = boost::lexical_cast<int>(browser->get(instance, "servus_port"));
+    dat.local_port = std::stoi(browser->get(instance, "servus_port"));
     cons.push_back(std::move(dat));
   }
 #endif
@@ -61,19 +55,19 @@ std::vector<oscquery_connection_data> list_oscquery_devices()
 #if defined(OSSIA_DNSSD)
   auto browser = new servus::Servus("_oscjson._tcp");
   browser->beginBrowsing(servus::Interface::IF_ALL);
-  for (int i = 0; i < 500; i++)
+  for(int i = 0; i < 500; i++)
   {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     browser->browse(0);
   }
   browser->endBrowsing();
 
-  for (const auto& instance : browser->getInstances())
+  for(const auto& instance : browser->getInstances())
   {
     oscquery_connection_data dat;
     dat.name = instance;
     dat.host = browser->get(instance, "servus_host");
-    dat.port = boost::lexical_cast<int>(browser->get(instance, "servus_port"));
+    dat.port = std::stoi(browser->get(instance, "servus_port"));
     cons.push_back(std::move(dat));
   }
 #endif
@@ -100,13 +94,12 @@ zeroconf_server make_zeroconf_server(
 }
 
 zeroconf_server::zeroconf_server() = default;
-zeroconf_server::zeroconf_server(zeroconf_server&&) = default;
-zeroconf_server& zeroconf_server::operator=(zeroconf_server&&) = default;
+zeroconf_server::zeroconf_server(zeroconf_server&&) noexcept = default;
+zeroconf_server& zeroconf_server::operator=(zeroconf_server&&) noexcept = default;
 zeroconf_server::~zeroconf_server() = default;
 
 zeroconf_server::zeroconf_server(std::unique_ptr<servus::Servus> s)
     : server{std::move(s)}
 {
-}
 }
 }

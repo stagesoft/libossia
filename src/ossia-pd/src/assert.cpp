@@ -1,13 +1,13 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check it.
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-#include <ossia-pd/src/assert.hpp>
-#include <ossia/network/common/websocket_log_sink.hpp>
 #include "ossia-pd.hpp"
-#include <ossia/detail/thread.hpp>
 
-namespace ossia
-{
-namespace pd
+#include <ossia/detail/thread.hpp>
+#include <ossia/network/common/websocket_log_sink.hpp>
+
+#include <ossia-pd/src/assert.hpp>
+
+namespace ossia::pd
 {
 
 static t_eclass* assert_class;
@@ -20,14 +20,14 @@ void* assert::create(t_symbol* s, int argc, t_atom* argv)
 
   x->m_name = gensym("");
   t_atom* a = x->m_atom;
-  SETFLOAT(a,0);
+  SETFLOAT(a, 0);
 
   ebox_attrprocess_viabinbuf(x, d);
 
   argc = argc > 256 ? 256 : argc;
-  x->m_size = atoms_get_attributes_offset(argc,argv);
+  x->m_size = atoms_get_attributes_offset(argc, argv);
 
-  memcpy(a, argv, x->m_size*sizeof(t_atom));
+  memcpy(a, argv, x->m_size * sizeof(t_atom));
 
   return x;
 }
@@ -36,27 +36,28 @@ void assert::in_anything(ossia::pd::assert* x, t_symbol* s, int argc, t_atom* ar
 {
   t_atom* a = x->m_atom;
 
-  if (argc != x->m_size)
+  if(argc != x->m_size)
     x->quit();
 
-  while (argc--)
+  while(argc--)
   {
-    if ( a->a_type == argv->a_type )
+    if(a->a_type == argv->a_type)
     {
       switch(a->a_type)
       {
         case A_FLOAT:
-          if (a->a_w.w_float != argv->a_w.w_float)
+          if(a->a_w.w_float != argv->a_w.w_float)
             x->quit();
           break;
         case A_SYMBOL:
-          if (a->a_w.w_symbol != argv->a_w.w_symbol)
+          if(a->a_w.w_symbol != argv->a_w.w_symbol)
             x->quit();
           break;
-        default:
-          ;
+        default:;
       }
-    } else {
+    }
+    else
+    {
       x->quit();
     }
     argv++;
@@ -73,9 +74,7 @@ void assert::quit()
     logpost(this, 0, "crash!!!");
 }
 
-void assert::destroy(assert* x)
-{
-}
+void assert::destroy(assert* x) { }
 
 extern "C" void setup_ossia0x2eassert(void)
 {
@@ -85,16 +84,13 @@ extern "C" void setup_ossia0x2eassert(void)
       "ossia.assert", (method)assert::create, (method)assert::destroy,
       (short)sizeof(assert), CLASS_DEFAULT, A_GIMME, 0);
 
-  class_addcreator((t_newmethod)assert::create,gensym("ø.assert"), A_GIMME, 0);
+  class_addcreator((t_newmethod)assert::create, gensym("ø.assert"), A_GIMME, 0);
 
-  eclass_addmethod(
-      c, (method)assert::in_anything,
-      "anything", A_GIMME, 0);
+  eclass_addmethod(c, (method)assert::in_anything, "anything", A_GIMME, 0);
 
   CLASS_ATTR_SYMBOL(c, "name", 0, assert, m_name);
 
   assert_class = c;
 }
 
-} // pd namespace
 } // ossia namespace

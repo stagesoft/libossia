@@ -2,12 +2,23 @@ include(Sanitize)
 include(DebugMode)
 include(UseGold)
 include(LinkerWarnings)
-include(StaticQt)
 
 if(MSVC)
   if(NOT "${CMAKE_CXX_FLAGS}" MATCHES "EHsc")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc")
   endif()
+
+  # Required for newer fmt and Qt versions
+  if(NOT "${CMAKE_CXX_FLAGS}" MATCHES "utf-8")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /utf-8")
+  endif()
+endif()
+
+if("${CMAKE_CXX_FLAGS}" MATCHES "sanitize=")
+  # Necessary to not get ODR issues due to static libraries linked in multiple .so's
+  set(OSSIA_PREFERRED_3RDPARTY_LIBRARY_FORMAT SHARED)
+else()
+  set(OSSIA_PREFERRED_3RDPARTY_LIBRARY_FORMAT STATIC)
 endif()
 
 # System detection
@@ -28,7 +39,7 @@ if(PLATFORM)
       message(FATAL_ERROR "kqueue NOT found!")
     endif()
 
-    # Hook up XCTest for the supported plaforms (all but WatchOS)
+    # Hook up XCTest for the supported platforms (all but WatchOS)
     if(NOT PLATFORM MATCHES ".*WATCHOS.*")
       # Use the standard find_package, broken between 3.14.0 and 3.14.4 at least for XCtest...
       find_package(XCTest REQUIRED)
@@ -40,6 +51,7 @@ else()
     set(OSSIA_PLATFORM macos)
 endif()
 
+# Linux
 if(UNIX AND NOT APPLE)
   find_program(LSB_RELEASE lsb_release)
   if(LSB_RELEASE)
@@ -49,6 +61,17 @@ if(UNIX AND NOT APPLE)
       )
   endif()
 endif()
+
+# macOS
+if(APPLE)
+  # Calling aligned_alloc in pre 10.15 just reuslts in a crash
+  if(CMAKE_OSX_DEPLOYMENT_TARGET)
+    if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS 10.15)
+      add_definitions(-DBOOST_ASIO_DISABLE_STD_ALIGNED_ALLOC=1)
+    endif()
+  endif()
+endif()
+
 
 if(${CMAKE_SYSTEM_PROCESSOR} MATCHES ".*arm.*")
     set(OSSIA_ARCHITECTURE arm)
@@ -68,35 +91,58 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(MSVC)
+  set(CMAKE_CXX_FLAGS " /EHsc /MP /Zc:__cplusplus /permissive- /volatile:iso ${CMAKE_CXX_FLAGS} ")
   if(OSSIA_TESTING OR OSSIA_EXAMPLES)
-    set(CMAKE_CXX_STANDARD 20)
-    set(CMAKE_CXX_FLAGS "/EHsc /MP /std:c++latest /Zc:__cplusplus /permissive- /volatile:iso ${CMAKE_CXX_FLAGS}")
+    set(CMAKE_CXX_STANDARD 23)
+    set(CMAKE_CXX_FLAGS "/std:c++latest ${CMAKE_CXX_FLAGS}")
+  elseif(OSSIA_CXX_STANDARD)
+    set(CMAKE_CXX_STANDARD ${OSSIA_CXX_STANDARD})
+    set(CMAKE_CXX_FLAGS "/std:c++${OSSIA_CXX_STANDARD} ${CMAKE_CXX_FLAGS}")
   else()
-    set(CMAKE_CXX_STANDARD 17)
-    set(CMAKE_CXX_FLAGS "/std:c++17 ${CMAKE_CXX_FLAGS}")
+    set(CMAKE_CXX_STANDARD 20)
+    set(CMAKE_CXX_FLAGS "/std:c++20 ${CMAKE_CXX_FLAGS}")
   endif()
 else()
-  if(NOT APPLE AND NOT WIN32 AND CMAKE_VERSION VERSION_GREATER 3.16)
-    check_cxx_compiler_flag(-std=c++20 has_std_20_flag)
-    check_cxx_compiler_flag(-std=c++2a has_std_2a_flag)
+  if(CMAKE_VERSION VERSION_GREATER 3.30)
+    check_cxx_compiler_flag(-std=c++26 has_std_26_flag)
   endif()
+  if(CMAKE_VERSION VERSION_GREATER 3.20)
+    check_cxx_compiler_flag(-std=c++2b has_std_2b_flag)
+  endif()
+  check_cxx_compiler_flag(-std=c++20 has_std_20_flag)
+  check_cxx_compiler_flag(-std=c++2a has_std_2a_flag)
   check_cxx_compiler_flag(-std=c++17 has_std_17_flag)
   check_cxx_compiler_flag(-std=c++1z has_std_1z_flag)
 
-  if (has_std_20_flag)
+  if(OSSIA_CXX_STANDARD)
+    if("${OSSIA_CXX_STANDARD}" EQUAL 26)
+      set(CMAKE_CXX_STANDARD 26)
+      set(CXX_STANDARD_FLAG -std=c++26)
+    elseif("${OSSIA_CXX_STANDARD}" EQUAL 23)
+        set(CMAKE_CXX_STANDARD 23)
+        set(CXX_STANDARD_FLAG -std=c++2b)
+    elseif("${OSSIA_CXX_STANDARD}" EQUAL 20)
+        set(CMAKE_CXX_STANDARD 20)
+        set(CXX_STANDARD_FLAG -std=c++20)
+    else()
+      set(CMAKE_CXX_STANDARD ${OSSIA_CXX_STANDARD})
+      set(CXX_STANDARD_FLAG "-std=c++${OSSIA_CXX_STANDARD}")
+    endif()
+  elseif(EMSCRIPTEN)
+    set(CMAKE_CXX_STANDARD 20)
+    set(CXX_STANDARD_FLAG -std=c++20)
+  # Broken as of boost-1.85 / clang-17 / libstdc++-14
+  # elseif (has_std_2b_flag)
+  #   set(CMAKE_CXX_STANDARD 23)
+  #   set(CXX_STANDARD_FLAG -std=c++2b)
+  elseif (has_std_20_flag)
     set(CMAKE_CXX_STANDARD 20)
     set(CXX_STANDARD_FLAG -std=c++20)
   elseif (has_std_2a_flag)
     set(CMAKE_CXX_STANDARD 20)
     set(CXX_STANDARD_FLAG -std=c++2a)
-  elseif (has_std_17_flag)
-    set(CMAKE_CXX_STANDARD 17)
-    set(CXX_STANDARD_FLAG -std=c++17)
-  elseif (has_std_1z_flag)
-    set(CMAKE_CXX_STANDARD 17)
-    set(CXX_STANDARD_FLAG -std=c++1z)
   else()
-    message(WARNING "check_cxx_compiler_flag was not able to find C++17 or C++20. We will assume C++20")
+    message(WARNING "check_cxx_compiler_flag was not able to find C++20 or C++23. We will assume C++20")
     set(CMAKE_CXX_STANDARD 20)
     set(CXX_STANDARD_FLAG -std=c++20)
   endif ()
@@ -105,11 +151,6 @@ endif()
 
 # So that make install after make all_unity does not rebuild everything :
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY True)
-
-# We disable debug infos on OS X on travis because it takes up too much space
-if(OSSIA_CI AND APPLE)
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g0")
-endif()
 
 if(OSSIA_STATIC)
   set(BUILD_SHARED_LIBS OFF)
@@ -154,17 +195,13 @@ else()
 
   if(CMAKE_COMPILER_IS_GNUCXX)
     set(OSSIA_LINK_OPTIONS ${OSSIA_LINK_OPTIONS}
-      -fvar-tracking-assignments
+      $<BUILD_INTERFACE:-fvar-tracking-assignments>
     )
 
     # Note: this may fail with -gsplit-dwarf
     set(OSSIA_LINK_OPTIONS ${OSSIA_LINK_OPTIONS}
-      -Wl,-Bsymbolic-functions
+      $<BUILD_INTERFACE:-Wl,-Bsymbolic-functions>
     )
-  endif()
-
-  if(OSSIA_CI AND NOT OSSIA_STATIC_EXPORT)
-    set(OSSIA_LINK_OPTIONS ${OSSIA_LINK_OPTIONS} -s)
   endif()
 
   if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
@@ -225,12 +262,6 @@ else()
         -Wno-variadic-macros
         -Wno-zero-length-array
     )
-  endif()
-
-  if(OSSIA_CI)
-    if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang" AND NOT OSSIA_STATIC_EXPORT)
-      set(OSSIA_LINK_OPTIONS ${OSSIA_LINK_OPTIONS} -Wl,-S)
-    endif()
   endif()
 
   if("${SUPPORTS_MISLEADING_INDENT_FLAG}")

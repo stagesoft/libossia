@@ -1,77 +1,46 @@
 name: ossia-max
 
-on: push
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+    tags:
+      - v*
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-macos:
-    runs-on: macos-latest
-    environment: 'Apple Certificate'
+    runs-on: macos-14
+    environment: "Apple Certificate"
     steps:
-    - uses: actions/checkout@v2
-    - name: build
-      run: ./tools/build-ossia-max.sh clean silent release
-    - name: Code Signing
-      shell: bash
-      env:
-        MAC_CERT_B64: ${{ secrets.MAC_CERT_B64 }}
-        MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
-        MAC_ALTOOL_PASSWORD: ${{ secrets.MAC_ALTOOL_PASSWORD }}
-      run: |
-        # Setup codesigning
-        # Thanks https://www.update.rocks/blog/osx-signing-with-travis/
-        (
-          set +x
-          KEY_CHAIN=build.keychain
-          echo "$MAC_CERT_B64" | base64 --decode > ossia-cert.p12
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/latest-mac-toolchain
+      - name: build
+        run: ./tools/build-ossia-max.sh clean silent release
 
-          security create-keychain -p azure $KEY_CHAIN
-          security default-keychain -s $KEY_CHAIN
-          security unlock-keychain -p azure $KEY_CHAIN
-          security import ossia-cert.p12 -k $KEY_CHAIN -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign;
-          security set-key-partition-list -S apple-tool:,apple: -s -k azure $KEY_CHAIN
+      - uses: ./.github/actions/mac-codesign
+        with:
+          path-to-sign: "artifacts/ossia"
+          output-name: "ossia-max-macos.zip"
+          MAC_CERT_B64: ${{ secrets.MAC_CERT_B64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          MAC_ALTOOL_PASSWORD: ${{ secrets.MAC_ALTOOL_PASSWORD }}
+      - name: Archive Max Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ossia-max-macos
+          path: artifacts/ossia
 
-          rm -rf *.p12
-        )
-
-        security unlock-keychain -p azure build.keychain
-
-        echo "Checking codesigning"
-        find . -name libossia-max.dylib
-        (
-          cd artifacts
-          echo "===== Content of artifacts"
-          ls
-          echo "===== Content of artifacts/ossia/support"
-          ls ossia/support
-          echo "===== Content of artifacts/ossia/externals"
-          ls ossia/externals
-
-          codesign --force --timestamp --sign "ossia.io" ossia/support/libossia-max.dylib
-          for mxo in ossia/externals/*.mxo;
-          do 
-            codesign --force --timestamp --sign "ossia.io" $mxo
-          done
-          
-          ditto -c -k --sequesterRsrc --keepParent ossia ossia-max.zip
-          xcrun altool \
-                --notarize-app \
-                -t osx \
-                -f "ossia-max.zip" \
-                --primary-bundle-id "io.ossia.ossia-max" \
-                -u jeanmichael.celerier@gmail.com -p "@env:MAC_ALTOOL_PASSWORD"
-          rm ossia-max.zip
-        )
-    - name: Archive Max Package
-      uses: actions/upload-artifact@v2
-      with:
-        name: ossia-max
-        path: artifacts/ossia
-    - name: Upload logs
-      if: ${{ always() }}
-      uses: actions/upload-artifact@v2
-      with:
-        name: logs
-        path: "*.log"
+      - name: Upload logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs
+          path: "*.log"
 
   build-windows:
     runs-on: windows-latest
@@ -79,43 +48,38 @@ jobs:
       APPVEYOR_BUILD_TYPE: max
       configuration: Release
     steps:
-    - uses: actions/checkout@v2
-    - name: install deps
-      run: cinst -y ninja
-    - name : build
-      shell: cmd
-      run: |
-        for /f "delims=" %%x in ('vswhere.exe -latest -property InstallationPath') do set VSPATH=%%x
-        call "%VSPATH%\VC\Auxiliary\Build\vcvarsall.bat" x64
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/latest-msvc-toolchain
+      - name: build
+        shell: cmd
+        run: |
+          cmake -B build -S %GITHUB_WORKSPACE% -GNinja -DOSSIA_MAX_ONLY=1 -DCMAKE_SYSTEM_VERSION=7 -DOSSIA_CI=1 -DCMAKE_INSTALL_PREFIX=install -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+          cmake --install build
 
-        echo Workspace: %GITHUB_WORKSPACE%
-        cd %GITHUB_WORKSPACE%
-        mkdir build
-        cd build
-        cmake -GNinja %GITHUB_WORKSPACE% -DOSSIA_MAX_ONLY=1 -DCMAKE_SYSTEM_VERSION=7 -DCMAKE_INSTALL_PREFIX=install -DCMAKE_BUILD_TYPE=Release
-        cmake --build .
-        cmake --build . --target install
-    - name: Archive Max Package
-      uses: actions/upload-artifact@v2
-      with:
-        name: ossia-max
-        path: build/install/ossia-max-package/ossia
-    - name: Upload logs
-      if: ${{ always() }}
-      uses: actions/upload-artifact@v2
-      with:
-        name: logs
-        path: "*.log"
+      - name: Archive Max Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ossia-max-windows
+          path: ./install/ossia-max-package/ossia
+
+      - name: Upload logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs
+          path: "*.log"
 
   upload_release:
     runs-on: ubuntu-latest
-    needs: [ build-macos, build-windows ]
+    needs: [build-macos, build-windows]
     if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
-          name: ossia-max
+          pattern: ossia-max-*
           path: ossia
+          merge-multiple: true
       - name: Rezip
         shell: bash
         run: |
@@ -127,3 +91,127 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: ossia-max*.zip
+
+  unit-tests-macos:
+    runs-on: [self-hosted, macOS]
+    needs: [build-macos]
+    if: false && github.repository == 'ossia/libossia'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Remove Downloaded Package
+        run: rm -rf "~/Documents/Max 8/Packages/ossia"
+
+      - uses: actions/download-artifact@v4.1.7
+        with:
+          name: ossia-max
+          path: "~/Documents/Max 8/Packages/ossia-new"
+
+      - name: Fix Signature
+        run: ditto "${HOME}/Documents/Max 8/Packages/ossia-new" "${HOME}/Documents/Max 8/Packages/ossia"
+
+      - name: Install Max
+        shell: bash
+        run: |
+          if [ ! -d "/Applications/Max.app" ]; then
+            wget -q https://akiaj5esl75o5wbdcv2a-maxmspjitter.s3.amazonaws.com/Max822_220208.dmg
+            hdiutil mount Max822_220208.dmg
+            mkdir -p /Applications
+            cp -R /Volumes/Max822/Max.app /Applications/Max.app
+            # disable first time dialog
+            xattr -r -d com.apple.quarantine /Applications/Max.app
+          fi
+          find "${HOME}/Documents/Max 8/Packages/ossia/" -name "*.mxo"   -exec  xattr -r -d com.apple.quarantine {} +
+          find "${HOME}/Documents/Max 8/Packages/ossia/" -name "*.dylib" -exec  xattr -r -d com.apple.quarantine {} +
+
+      - name: Install node-js
+        run: |
+          brew install node
+
+      - name: Run Tests
+        run: |
+          cd src/ossia-max/unit-test
+          npm install
+          node logger-server.js
+
+      - name: Upload Test Results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-result
+          path: "src/ossia-max/unit-test/*.csv"
+
+      - name: Upload logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs
+          path: |
+            "*.log"
+            "src/ossia-max/unit-test/*.log"
+
+  unit-tests-windows:
+    runs-on: [self-hosted, Windows]
+    if: false && github.repository == 'ossia/libossia'
+    needs: [build-windows]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Remove Downloaded Package
+        run: |
+          $package = "~/Documents/Max 8/Packages/ossia"
+          if( Test-Path $package ) {
+            Remove-Item -Recurse $package
+          }
+
+      - uses: actions/download-artifact@v4.1.7
+        with:
+          name: ossia-max
+          path: "~/Documents/Max 8/Packages/ossia"
+      - name: Install Max
+        run: |
+          if(-not(Test-path "C:/Program Files/Cycling '74/Max 8/Max.exe" -PathType leaf))
+          {
+            Invoke-WebRequest -Uri https://akiaj5esl75o5wbdcv2a-maxmspjitter.s3.amazonaws.com/Max822_220208.zip -OutFile Max822_220208.zip
+            Expand-Archive -F -LiteralPath Max822_220208.zip -DestinationPath .
+            $file = Get-Childitem . | where {$_.extension -eq ".msi"}
+            $DataStamp = get-date -Format yyyyMMddTHHmmss
+            $logFile = '{0}-{1}.log' -f $file.fullname,$DataStamp
+            $MSIArguments = @(
+                "/i"
+                ('"{0}"' -f $file.fullname)
+                "/qn"
+                "/norestart"
+                "/L*v"
+                $logFile
+            )
+            Start-Process "msiexec.exe" -ArgumentList $MSIArguments -Wait -NoNewWindow
+          }
+
+      - name: Install node-js
+        run: |
+          choco install -y nodejs.install
+
+      - name: Run Tests
+        run: |
+          cd src/ossia-max/unit-test
+          npm install
+          # Turn off firewall
+          Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
+          node logger-server.js
+
+      - name: Upload Test Results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-result
+          path: "src/ossia-max/unit-test/*.csv"
+
+      - name: Upload logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs
+          path: |
+            "*.log"
+            "src/ossia-max/unit-test/*.log"

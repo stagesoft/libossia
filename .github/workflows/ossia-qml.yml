@@ -1,6 +1,16 @@
 name: ossia-qml
 
-on: push
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+    tags:
+      - v*
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   qml-linux:
@@ -8,84 +18,85 @@ jobs:
     name: QML (Linux)
 
     steps:
-    - uses: actions/checkout@v2
-    - name: Install Build Dependencies
-      run: |
-        sudo apt-get update -qq
-        sudo apt-get install -yqq build-essential g++ ninja-build libavahi-client-dev
-    - name: Build
-      run: |
-        cmake  -B build -S ${GITHUB_WORKSPACE} -GNinja -DOSSIA_QML_ONLY=1 -DCMAKE_INSTALL_PREFIX=install -DCMAKE_BUILD_TYPE=Release
-        cmake --build build
-        cmake --build build --target install 
-    - name: Archive Package
-      uses: actions/upload-artifact@v2
-      with:
-        name: ossia-qml
-        path: install
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/latest-ubuntu-toolchain
+      - name: Build
+        run: |
+          cmake  -B build -S ${GITHUB_WORKSPACE} -GNinja \
+            -DOSSIA_CI=1 \
+            -DOSSIA_QML_ONLY=1 \
+            -DCMAKE_INSTALL_PREFIX=install \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+          cmake --build build --target install
+      - name: Archive Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ossia-qml-linux
+          path: install
 
   qml-mac:
     name: QML (macOS)
-    runs-on: macos-latest
+    runs-on: macos-14
+    environment: "Apple Certificate"
     steps:
-    - uses: actions/checkout@v2
-    - name: Install Dependencies
-      run: |
-        brew install ninja qt5
-    - name: Build
-      run: |
-        cmake -B build -S ${GITHUB_WORKSPACE} -GNinja -DOSSIA_QML_ONLY=1 -DCMAKE_INSTALL_PREFIX=install -DCMAKE_BUILD_TYPE=Release
-        cmake --build build
-        cmake --build build --target install 
-    - name: Code Signing
-      shell: bash
-      env:
-        MAC_CERT_B64: ${{ secrets.MAC_CERT_B64 }}
-        MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
-        MAC_ALTOOL_PASSWORD: ${{ secrets.MAC_ALTOOL_PASSWORD }}
-      run: |
-        source ${GITHUB_WORKSPACE}/ci/codesign_functions.sh
-        release_macos_folder "${GITHUB_WORKSPACE}/install/Ossia" "$PWD/ossia-qml-osx.zip" "io.ossia.ossia-qml"
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/latest-mac-toolchain
+      - name: Install Dependencies
+        run: |
+          brew install qt
+      - name: Build
+        run: |
+          cmake -B build -S ${GITHUB_WORKSPACE} -GNinja \
+            -DOSSIA_CI=1 \
+            -DOSSIA_QML_ONLY=1 \
+            -DCMAKE_INSTALL_PREFIX=install \
+            -DCMAKE_BUILD_TYPE=Release 
+          cmake --build build
+          cmake --build build --target install
+      # - name: Code Signing
+      #   shell: bash
+      #   env:
+      #     MAC_CERT_B64: ${{ secrets.MAC_CERT_B64 }}
+      #     MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+      #     MAC_ALTOOL_PASSWORD: ${{ secrets.MAC_ALTOOL_PASSWORD }}
+      #   run: |
+      #     source ${GITHUB_WORKSPACE}/ci/codesign_functions.sh
+      #     release_macos_folder "${GITHUB_WORKSPACE}/install/Ossia" "$PWD/ossia-qml-osx.zip" "io.ossia.ossia-qml"
 
-    - name: Archive Package
-      uses: actions/upload-artifact@v2
-      with:
-        name: ossia-qml
-        path: install
-    environment: 'Apple Certificate'
-      
+      - name: Archive Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ossia-qml-mac
+          path: install
+
   qml-windows:
     name: QML (Windows)
-    runs-on: 'windows-latest'
+    runs-on: "windows-latest"
 
     steps:
-    - uses: actions/checkout@v2
-    - name: Install Dependencies
-      run: cinst -y ninja
-    - name: Build
-      shell: cmd
-      run: |
-        pushd "C:\Program Files (x86)\Microsoft Visual Studio\Installer\"
-        for /f "delims=" %%x in ('.\vswhere.exe -latest -property InstallationPath') do set VSPATH=%%x
-        popd
-        call "%VSPATH%\VC\Auxiliary\Build\vcvarsall.bat" x64
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/latest-msvc-toolchain
+      - name: Build
+        shell: cmd
+        run: |
 
-        cmake -B build -S %GITHUB_WORKSPACE% -GNinja -DCMAKE_CXX_COMPILER="cl.exe" -DCMAKE_C_COMPILER="cl.exe" -DOSSIA_QML_ONLY=1 -DCMAKE_SYSTEM_VERSION=7 -DCMAKE_INSTALL_PREFIX=install -DCMAKE_BUILD_TYPE=Release
-        cmake --build build
-        cmake --build build --target install
-    - name: Archive Package
-      uses: actions/upload-artifact@v2
-      with:
-        name: ossia-qml
-        path: install
+          cmake -B build -S %GITHUB_WORKSPACE% -GNinja -DOSSIA_PCH=0 -DOSSIA_CI=1 -DOSSIA_QML_ONLY=1 -DCMAKE_SYSTEM_VERSION=7 -DCMAKE_INSTALL_PREFIX=install -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+          cmake --install build
+      - name: Archive Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ossia-qml-windows
+          path: install
 
   upload_release:
     runs-on: ubuntu-latest
-    needs: [ qml-linux, qml-mac, qml-windows ]
+    needs: [qml-linux, qml-mac, qml-windows]
     steps:
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4.1.7
         with:
-          name: ossia-qml
+          pattern: ossia-qml-*
           path: ossia
       - name: Rezip
         shell: bash

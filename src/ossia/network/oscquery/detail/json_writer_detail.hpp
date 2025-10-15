@@ -1,11 +1,8 @@
 #pragma once
 #include <ossia/detail/json.hpp>
 #include <ossia/network/base/node_attributes.hpp>
-namespace ossia
-{
-namespace oscquery
-{
-namespace detail
+
+namespace ossia::oscquery::detail
 {
 //! Implementation of the JSON serialisation mechanism for oscquery
 struct json_writer_impl
@@ -13,7 +10,7 @@ struct json_writer_impl
   using writer_t = ossia::json_writer;
   writer_t& writer;
 
-  void writeKey(ossia::string_view k) const;
+  void writeKey(std::string_view k) const;
 
   void writeValue(const ossia::value& val, const ossia::unit_t& unit) const;
   void writeValue(ossia::bounding_mode b) const;
@@ -25,14 +22,14 @@ struct json_writer_impl
   void writeValue(float i) const;
   void writeValue(double i) const;
   void writeValue(bool i) const;
-  void writeValue(const std::string& i) const;
+  void writeValue(std::string_view i) const;
   void writeValue(const ossia::repetition_filter& i) const;
   void writeValue(const ossia::net::instance_bounds& i) const;
 
   template <typename T, typename... Args>
   void writeValue(const std::optional<T>& t, Args&&... args) const
   {
-    if (t)
+    if(t)
     {
       writeValue(*t, std::forward<Args>(args)...);
     }
@@ -43,16 +40,12 @@ struct json_writer_impl
   }
 
   //! Writes a single attribute
-  void writeAttribute(
-      const ossia::net::node_base& n, ossia::string_view method) const;
+  void writeAttribute(const ossia::net::node_base& n, std::string_view method) const;
 
   //! Writes only the attributes
   void writeNodeAttributes(const ossia::net::node_base& n) const;
 
   //! Writes a node recursively. Creates a new object.
   void writeNode(const ossia::net::node_base& n);
-
 };
-}
-}
 }

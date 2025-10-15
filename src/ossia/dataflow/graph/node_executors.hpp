@@ -1,4 +1,5 @@
 #pragma once
+#include <ossia/detail/logger.hpp>
 #include <ossia/dataflow/graph/graph_utils.hpp>
 
 namespace ossia
@@ -10,7 +11,7 @@ struct node_exec
   void operator()(graph_node& node)
   try
   {
-    if (node.enabled())
+    if(node.enabled())
     {
       assert(graph_util::can_execute(node, *g));
       graph_util::exec_node(node, *g);
@@ -18,7 +19,7 @@ struct node_exec
   }
   catch(...)
   {
-    std::cerr << "Error while executing a node\n";
+    ossia::logger().error("Error while executing a node");
   }
 };
 struct node_exec_bench
@@ -29,9 +30,9 @@ struct node_exec_bench
   void operator()(graph_node& node)
   try
   {
-    if (perf.measure)
+    if(perf.measure)
     {
-      if (node.enabled())
+      if(node.enabled())
       {
         assert(graph_util::can_execute(node, *g));
 
@@ -39,8 +40,7 @@ struct node_exec_bench
         graph_util::exec_node(node, *g);
         auto t1 = std::chrono::steady_clock::now();
         perf[&node]
-            = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)
-                  .count();
+            = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
       }
       else
       {
@@ -50,7 +50,7 @@ struct node_exec_bench
   }
   catch(...)
   {
-    std::cerr << "Error while executing a node\n";
+    ossia::logger().error("Error while executing a node");
   }
 };
 
@@ -62,10 +62,10 @@ struct node_exec_logger
   void operator()(graph_node& node)
   try
   {
-    if (node.enabled())
+    if(node.enabled())
     {
       assert(graph_util::can_execute(node, *g));
-      if (!node.logged())
+      if(!node.logged())
         graph_util::exec_node(node, *g);
       else
         graph_util::exec_node(node, *g, logger);
@@ -73,7 +73,7 @@ struct node_exec_logger
   }
   catch(...)
   {
-    std::cerr << "Error while executing a node\n";
+    ossia::logger().error("Error while executing a node");
   }
 };
 
@@ -86,21 +86,20 @@ struct node_exec_logger_bench
   void operator()(graph_node& node)
   try
   {
-    if (perf.measure)
+    if(perf.measure)
     {
-      if (node.enabled())
+      if(node.enabled())
       {
         assert(graph_util::can_execute(node, *g));
 
         auto t0 = std::chrono::steady_clock::now();
-        if (!node.logged())
+        if(!node.logged())
           graph_util::exec_node(node, *g);
         else
           graph_util::exec_node(node, *g, logger);
         auto t1 = std::chrono::steady_clock::now();
         perf[&node]
-            = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)
-                  .count();
+            = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
       }
       else
       {
@@ -109,7 +108,7 @@ struct node_exec_logger_bench
     }
     else
     {
-      if (!node.logged())
+      if(!node.logged())
         graph_util::exec_node(node, *g);
       else
         graph_util::exec_node(node, *g, logger);
@@ -117,7 +116,7 @@ struct node_exec_logger_bench
   }
   catch(...)
   {
-    std::cerr << "Error while executing a node\n";
+    ossia::logger().error("Error while executing a node");
   }
 };
 
@@ -143,9 +142,9 @@ struct static_exec
       std::vector<graph_node*>& active_nodes)
   try
   {
-    for (auto node : active_nodes)
+    for(auto node : active_nodes)
     {
-      if (node->enabled())
+      if(node->enabled())
       {
         assert(graph_util::can_execute(*node, e));
         graph_util::exec_node(*node, e);
@@ -154,7 +153,7 @@ struct static_exec
   }
   catch(...)
   {
-    std::cerr << "Error while executing a node\n";
+    ossia::logger().error("Error while executing a node");
   }
 };
 
@@ -183,19 +182,18 @@ struct static_exec_bench
   try
   {
     auto& p = *perf;
-    if (p.measure)
+    if(p.measure)
     {
-      for (auto node : active_nodes)
+      for(auto node : active_nodes)
       {
-        if (node->enabled())
+        if(node->enabled())
         {
           assert(graph_util::can_execute(*node, e));
           auto t0 = std::chrono::steady_clock::now();
           graph_util::exec_node(*node, e);
           auto t1 = std::chrono::steady_clock::now();
           p[node]
-              = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)
-                    .count();
+              = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
         }
         else
         {
@@ -205,9 +203,9 @@ struct static_exec_bench
     }
     else
     {
-      for (auto node : active_nodes)
+      for(auto node : active_nodes)
       {
-        if (node->enabled())
+        if(node->enabled())
         {
           assert(graph_util::can_execute(*node, e));
           graph_util::exec_node(*node, e);
@@ -217,7 +215,7 @@ struct static_exec_bench
   }
   catch(...)
   {
-    std::cerr << "Error while executing a node\n";
+    ossia::logger().error("Error while executing a node");
   }
 };
 
@@ -245,12 +243,12 @@ struct static_exec_logger
       std::vector<graph_node*>& active_nodes)
   try
   {
-    for (auto node : active_nodes)
+    for(auto node : active_nodes)
     {
-      if (node->enabled())
+      if(node->enabled())
       {
         assert(graph_util::can_execute(*node, e));
-        if (!node->logged())
+        if(!node->logged())
           graph_util::exec_node(*node, e);
         else
           graph_util::exec_node(*node, e, *logger);
@@ -259,7 +257,7 @@ struct static_exec_logger
   }
   catch(...)
   {
-    std::cerr << "Error while executing a node\n";
+    ossia::logger().error("Error while executing a node");
   }
 };
 
@@ -290,22 +288,21 @@ struct static_exec_logger_bench
   try
   {
     auto& p = *perf;
-    if (p.measure)
+    if(p.measure)
     {
-      for (auto node : active_nodes)
+      for(auto node : active_nodes)
       {
-        if (node->enabled())
+        if(node->enabled())
         {
           assert(graph_util::can_execute(*node, e));
           auto t0 = std::chrono::steady_clock::now();
-          if (!node->logged())
+          if(!node->logged())
             graph_util::exec_node(*node, e);
           else
             graph_util::exec_node(*node, e, *logger);
           auto t1 = std::chrono::steady_clock::now();
           p[node]
-              = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)
-                    .count();
+              = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
         }
         else
         {
@@ -315,12 +312,12 @@ struct static_exec_logger_bench
     }
     else
     {
-      for (auto node : active_nodes)
+      for(auto node : active_nodes)
       {
-        if (node->enabled())
+        if(node->enabled())
         {
           assert(graph_util::can_execute(*node, e));
-          if (!node->logged())
+          if(!node->logged())
             graph_util::exec_node(*node, e);
           else
             graph_util::exec_node(*node, e, *logger);
@@ -330,7 +327,7 @@ struct static_exec_logger_bench
   }
   catch(...)
   {
-    std::cerr << "Error while executing a node\n";
+    ossia::logger().error("Error while executing a node");
   }
 };
 }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ossia/detail/config.hpp>
+
 #include <ossia/detail/flat_map.hpp>
 #include <ossia/detail/optional.hpp>
 #include <ossia/detail/ptr_container.hpp>
@@ -11,10 +13,7 @@
 #include <ossia/network/value/destination.hpp>
 #include <ossia/network/value/value.hpp>
 
-#include <ossia/detail/config.hpp>
-
 #include <functional>
-#include <map>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -27,32 +26,24 @@ namespace ossia
 {
 class destination;
 
-// TODO still broken in clang-11...
-#if defined(__clang__)
-#define CLANG_BUGGY_STATIC_VARIABLE_TEMPLATE static
-#else
-#define CLANG_BUGGY_STATIC_VARIABLE_TEMPLATE
-#endif
 template <typename T>
-static const constexpr std::nullptr_t curve_segment_type_map = nullptr;
-template <>
-CLANG_BUGGY_STATIC_VARIABLE_TEMPLATE const constexpr ossia::curve_segment_type
-    curve_segment_type_map<int> = ossia::curve_segment_type::INT;
-template <>
-CLANG_BUGGY_STATIC_VARIABLE_TEMPLATE const constexpr ossia::curve_segment_type
-    curve_segment_type_map<int64_t> = ossia::curve_segment_type::INT64;
-template <>
-CLANG_BUGGY_STATIC_VARIABLE_TEMPLATE const constexpr ossia::curve_segment_type
-    curve_segment_type_map<float> = ossia::curve_segment_type::FLOAT;
-template <>
-CLANG_BUGGY_STATIC_VARIABLE_TEMPLATE const constexpr ossia::curve_segment_type
-    curve_segment_type_map<double> = ossia::curve_segment_type::DOUBLE;
-template <>
-CLANG_BUGGY_STATIC_VARIABLE_TEMPLATE const constexpr ossia::curve_segment_type
-    curve_segment_type_map<bool> = ossia::curve_segment_type::BOOL;
-template <>
-CLANG_BUGGY_STATIC_VARIABLE_TEMPLATE const constexpr ossia::curve_segment_type
-    curve_segment_type_map<ossia::value> = ossia::curve_segment_type::ANY;
+static constexpr auto curve_segment_type_map()
+{
+  if constexpr(std::is_same_v<T, int>)
+    return ossia::curve_segment_type::INT;
+  else if constexpr(std::is_same_v<T, int64_t>)
+    return ossia::curve_segment_type::INT64;
+  else if constexpr(std::is_same_v<T, float>)
+    return ossia::curve_segment_type::FLOAT;
+  else if constexpr(std::is_same_v<T, double>)
+    return ossia::curve_segment_type::DOUBLE;
+  else if constexpr(std::is_same_v<T, bool>)
+    return ossia::curve_segment_type::BOOL;
+  else if constexpr(std::is_same_v<T, ossia::value>)
+    return ossia::curve_segment_type::ANY;
+  else
+    return nullptr;
+}
 
 template <typename K, typename V>
 using curve_map = ossia::flat_map<K, V>;
@@ -84,7 +75,7 @@ public:
     m_y0_cacheUsed = false;
   }
 
-  curve(curve&& other)
+  curve(curve&& other) noexcept
   {
     m_x0 = other.m_x0;
     m_y0 = other.m_y0;
@@ -106,7 +97,7 @@ public:
     m_y0_cacheUsed = false;
     return *this;
   }
-  curve& operator=(curve&& other)
+  curve& operator=(curve&& other) noexcept
   {
     m_x0 = other.m_x0;
     m_y0 = other.m_y0;
@@ -180,6 +171,8 @@ public:
   static Y convert_to_template_type_value(
       const ossia::value& value, ossia::destination_index::const_iterator idx);
 
+  void reserve(std::size_t count) { m_points.reserve(count); }
+
 private:
   mutable X m_x0;
   mutable Y m_y0;
@@ -220,9 +213,9 @@ inline Y curve<X, Y>::value_at(X abscissa) const
   Y lastValue = get_y0();
 
   auto end = m_points.end();
-  for (auto it = m_points.begin(); it != end; ++it)
+  for(auto it = m_points.begin(); it != end; ++it)
   {
-    if (abscissa > lastAbscissa && abscissa <= it->first)
+    if(abscissa > lastAbscissa && abscissa <= it->first)
     {
       lastValue = it->second.second(
           ((double)abscissa - (double)lastAbscissa)
@@ -230,7 +223,7 @@ inline Y curve<X, Y>::value_at(X abscissa) const
           lastValue, it->second.first);
       break;
     }
-    else if (abscissa > it->first)
+    else if(abscissa > it->first)
     {
       lastAbscissa = it->first;
       lastValue = it->second.first;
@@ -245,7 +238,9 @@ inline Y curve<X, Y>::value_at(X abscissa) const
 template <typename X, typename Y>
 inline curve_type curve<X, Y>::get_type() const
 {
-  return std::make_pair(curve_segment_type_map<X>, curve_segment_type_map<Y>);
+  static constexpr auto type
+      = std::make_pair(curve_segment_type_map<X>(), curve_segment_type_map<Y>());
+  return type;
 }
 
 template <typename X, typename Y>
@@ -257,11 +252,11 @@ inline X curve<X, Y>::get_x0() const
 template <typename X, typename Y>
 inline Y curve<X, Y>::get_y0() const
 {
-  if (!m_y0_destination)
+  if(!m_y0_destination)
     return m_y0;
   else
   {
-    if (m_y0_cacheUsed)
+    if(m_y0_cacheUsed)
       return m_y0_cache;
 
     const destination& dest = *m_y0_destination;
@@ -312,59 +307,53 @@ inline Y curve<X, Y>::convert_to_template_type_value(
   struct visitor
   {
     destination_index::const_iterator index;
-    Y operator()(int32_t i) const
-    {
-      return i;
-    }
-    Y operator()(float f) const
-    {
-      return f;
-    }
-    Y operator()(bool b) const
-    {
-      return b;
-    }
-    Y operator()(char c) const
-    {
-      return c;
-    }
-    Y operator()(vec2f vec) const
-    {
-      return vec[*index];
-    }
-    Y operator()(vec3f vec) const
-    {
-      return vec[*index];
-    }
-    Y operator()(vec4f vec) const
-    {
-      return vec[*index];
-    }
+    Y operator()(int32_t i) const { return i; }
+    Y operator()(float f) const { return f; }
+    Y operator()(bool b) const { return b; }
+    Y operator()(char c) const { return c; }
+    Y operator()(vec2f vec) const { return vec[*index]; }
+    Y operator()(vec3f vec) const { return vec[*index]; }
+    Y operator()(vec4f vec) const { return vec[*index]; }
     Y operator()(const std::vector<ossia::value>& t) const
     {
       auto& val = t[*index];
       return convert_to_template_type_value(val, index + 1);
     }
+    Y operator()(const value_map_type& t) const
+    {
+#if defined(__cpp_exceptions)
+      throw invalid_value_type_error(
+          "curve_impl::convertToTemplateTypeValue: "
+          "Cannot convert Map to a numeric type");
+#endif
+      return {};
+    }
 
     Y operator()(impulse) const
     {
+#if defined(__cpp_exceptions)
       throw invalid_value_type_error(
           "curve_impl::convertToTemplateTypeValue: "
           "Cannot convert Impulse to a numeric type");
+#endif
       return {};
     }
     Y operator()(const std::string& str) const
     {
+#if defined(__cpp_exceptions)
       throw invalid_value_type_error(
           "curve_impl::convertToTemplateTypeValue: "
           "Cannot convert String to a numeric type");
+#endif
       return {};
     }
     Y operator()() const
     {
+#if defined(__cpp_exceptions)
       throw invalid_value_type_error(
           "curve_impl::convertToTemplateTypeValue: "
           "No type provided");
+#endif
       return {};
     }
   } vis{idx};
@@ -381,12 +370,13 @@ inline Y curve<X, Y>::convert_to_template_type_value(
  *
  * [ 1, "a string", [ "another", 'c' ] ]
  *
- * while keeping the reste of the list intact.
+ * while keeping the rest of the list intact.
  */
 class OSSIA_EXPORT constant_curve final : public curve_abstract
 {
 public:
-  constant_curve(ossia::value v) : mValue{std::move(v)}
+  constant_curve(ossia::value v)
+      : mValue{std::move(v)}
   {
   }
   ~constant_curve() override;
@@ -396,20 +386,15 @@ public:
   constant_curve& operator=(const constant_curve&) = delete;
   constant_curve& operator=(constant_curve&&) = delete;
 
-  ossia::value value() const
-  {
-    return mValue;
-  }
+  [[nodiscard]] ossia::value value() const { return mValue; }
 
-  curve_type get_type() const override
+  [[nodiscard]] curve_type get_type() const override
   {
     return std::make_pair(
         ossia::curve_segment_type::DOUBLE, ossia::curve_segment_type::ANY);
   }
 
-  void reset() override
-  {
-  }
+  void reset() override { }
 
 private:
   const ossia::value mValue;

@@ -67,10 +67,7 @@ public:
    *
    * \see ossia::net::address_string_from_node
    */
-  const std::string& get_name() const
-  {
-    return m_name;
-  }
+  const std::string& get_name() const { return m_name; }
   virtual node_base& set_name(std::string) = 0;
 
   //! Allows a node to carry a value
@@ -99,19 +96,19 @@ public:
    * }
    * \endcode
    */
-  ossia::any get_attribute(ossia::string_view str) const;
+  ossia::any get_attribute(std::string_view str) const;
 
   template <typename T>
-  void set(ossia::string_view str, const T& val);
+  void set(std::string_view str, const T& val);
   template <typename T>
-  void set(ossia::string_view str, T&& val);
+  void set(std::string_view str, T&& val);
 
   template <typename T>
-  void set(ossia::string_view str, const std::optional<T>& val);
+  void set(std::string_view str, const std::optional<T>& val);
   template <typename T>
-  void set(ossia::string_view str, std::optional<T>&& val);
+  void set(std::string_view str, std::optional<T>&& val);
 
-  void set(ossia::string_view str, bool value);
+  void set(std::string_view str, bool value);
 
   template <typename Attribute, typename T>
   void set(Attribute a, const T& value);
@@ -150,7 +147,7 @@ public:
    * If you need to find a child recursively, see ossia::net::find_node.
    *
    */
-  node_base* find_child(ossia::string_view name);
+  node_base* find_child(std::string_view name);
 #if defined(OSSIA_QT)
   node_base* find_child(const QString& name);
 #endif
@@ -179,16 +176,20 @@ public:
   }
 
   //! Non mutex-protected version. With great powers, yada yada etc etc
-  const auto& unsafe_children() const
+  const auto& unsafe_children() const TS_REQUIRES(m_mutex)
   {
     return m_children;
   }
+  mutable shared_mutex_t m_mutex;
 
   //! Return a copy of the children vector to iterate without deadlocking.
   std::vector<node_base*> children_copy() const;
 
   //! A vector with all the names of the children.
   std::vector<std::string> children_names() const;
+
+  //! Return the count of children
+  int children_count() const;
 
   //! If childrens are /foo, /bar, bar.1, returns true only for bar.
   bool is_root_instance(const ossia::net::node_base& child) const;
@@ -210,8 +211,7 @@ protected:
   virtual void removing_child(node_base& node_base) = 0;
 
   std::string m_name;
-  children_t m_children;
-  mutable shared_mutex_t m_mutex;
+  children_t m_children TS_GUARDED_BY(m_mutex);
   extended_attributes m_extended{0};
   std::string m_oscAddressCache;
 };

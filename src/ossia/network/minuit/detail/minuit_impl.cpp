@@ -5,57 +5,59 @@
 #include <ossia/detail/string_map.hpp>
 #include <ossia/network/value/value.hpp>
 
-namespace ossia
-{
-namespace minuit
+namespace ossia::minuit
 {
 
-ossia::string_view to_minuit_type_text(const ossia::value& val)
+std::string_view to_minuit_type_text(const ossia::value& val)
 {
   // integer, decimal, string, generic, boolean, none, array.
   struct ValueStringVisitor
   {
-    ossia::string_view operator()(ossia::impulse) const
+    std::string_view operator()(ossia::impulse) const
     {
       constexpr_return(ossia::make_string_view("none"));
     }
-    ossia::string_view operator()(int32_t i) const
+    std::string_view operator()(int32_t i) const
     {
       constexpr_return(ossia::make_string_view("integer"));
     }
-    ossia::string_view operator()(float f) const
+    std::string_view operator()(float f) const
     {
       constexpr_return(ossia::make_string_view("decimal"));
     }
-    ossia::string_view operator()(bool b) const
+    std::string_view operator()(bool b) const
     {
       constexpr_return(ossia::make_string_view("boolean"));
     }
-    ossia::string_view operator()(char c) const
+    std::string_view operator()(char c) const
     {
       constexpr_return(ossia::make_string_view("string"));
     }
-    ossia::string_view operator()(const std::string& str) const
+    std::string_view operator()(const std::string& str) const
     {
       constexpr_return(ossia::make_string_view("string"));
     }
-    ossia::string_view operator()(const ossia::vec2f& vec) const
+    std::string_view operator()(const ossia::vec2f& vec) const
     {
       constexpr_return(ossia::make_string_view("array"));
     }
-    ossia::string_view operator()(const ossia::vec3f& vec) const
+    std::string_view operator()(const ossia::vec3f& vec) const
     {
       constexpr_return(ossia::make_string_view("array"));
     }
-    ossia::string_view operator()(const ossia::vec4f& vec) const
+    std::string_view operator()(const ossia::vec4f& vec) const
     {
       constexpr_return(ossia::make_string_view("array"));
     }
-    ossia::string_view operator()(const std::vector<ossia::value>& t) const
+    std::string_view operator()(const std::vector<ossia::value>& t) const
     {
       constexpr_return(ossia::make_string_view("array"));
     }
-    ossia::string_view operator()() const
+    std::string_view operator()(const value_map_type& t) const
+    {
+      constexpr_return(ossia::make_string_view("map"));
+    }
+    std::string_view operator()() const
     {
       throw invalid_value_type_error(
           "to_minuit_type_text: "
@@ -77,8 +79,7 @@ static const auto& attribute_unordered_map()
       {make_string_view("rangeBounds"), minuit_attribute::RangeBounds},
       {make_string_view("rangeClipmode"), minuit_attribute::RangeClipMode},
       {make_string_view("description"), minuit_attribute::Description},
-      {make_string_view("repetitionsFilter"),
-       minuit_attribute::RepetitionFilter},
+      {make_string_view("repetitionsFilter"), minuit_attribute::RepetitionFilter},
       {make_string_view("tags"), minuit_attribute::Tags},
       {make_string_view("active"), minuit_attribute::Active},
       {make_string_view("valueDefault"), minuit_attribute::ValueDefault},
@@ -93,20 +94,20 @@ static const auto& attribute_unordered_map()
   return attr;
 }
 
-minuit_attribute get_attribute(ossia::string_view str)
+minuit_attribute get_attribute(std::string_view str)
 {
   const auto& map = attribute_unordered_map();
   auto it = map.find(str);
-  if (it != map.end())
+  if(it != map.end())
     return it->second;
   else
     throw parse_error("get_attribute: unhandled attribute");
   return {};
 }
 
-ossia::string_view to_minuit_attribute_text(minuit_attribute str)
+std::string_view to_minuit_attribute_text(minuit_attribute str)
 {
-  switch (str)
+  switch(str)
   {
     case minuit_attribute::Value:
       constexpr_return(ossia::make_string_view("value"));
@@ -146,6 +147,5 @@ ossia::string_view to_minuit_attribute_text(minuit_attribute str)
       throw parse_error("to_minuit_attribute_text: unhandled attribute");
   }
   return {};
-}
 }
 }

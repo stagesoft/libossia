@@ -2,6 +2,7 @@
 
 #include <ossia/dataflow/nodes/media.hpp>
 #include <ossia/detail/math.hpp>
+
 #include <cstdint>
 #include <limits>
 
@@ -31,7 +32,7 @@ template <>
 constexpr uint8_t float_to_sample<uint8_t, 8>(ossia::audio_sample sample) noexcept
 {
   // 0 -> 255 to -1 -> 1
-  if constexpr (std::is_same_v<ossia::audio_sample, float>)
+  if constexpr(std::is_same_v<ossia::audio_sample, float>)
   {
     return (sample + 1.f) * 127.5f;
   }
@@ -45,7 +46,7 @@ template <>
 constexpr int16_t float_to_sample<int16_t, 16>(ossia::audio_sample sample) noexcept
 {
   // TODO division -> multiplication
-  if constexpr (std::is_same_v<ossia::audio_sample, float>)
+  if constexpr(std::is_same_v<ossia::audio_sample, float>)
   {
     return sample * (0x7FFF + .5f) - 0.5f;
   }
@@ -59,15 +60,29 @@ constexpr int16_t float_to_sample<int16_t, 16>(ossia::audio_sample sample) noexc
 template <>
 constexpr int32_t float_to_sample<int32_t, 24>(ossia::audio_sample sample) noexcept
 {
-  const constexpr ossia::audio_sample int24_max = std::numeric_limits<int32_t>::max() / 256.;
+  const constexpr ossia::audio_sample int24_max
+      = std::numeric_limits<int32_t>::max() / 256.;
   return int32_t(sample * int24_max);
 }
 
+/*
 template <>
-constexpr int32_t float_to_sample<int32_t, 32>(ossia::audio_sample sample) noexcept
+constexpr int32_t float_to_sample<int32_t, 24>(audio_sample x) noexcept
 {
-  const constexpr ossia::audio_sample int32_max = ossia::audio_sample(std::numeric_limits<int32_t>::max());
-  return sample * int32_max;
+  // TODO division -> multiplication
+  if constexpr(std::is_same_v<ossia::audio_sample, float>)
+  {
+    return (x * (0x7FFFFF + 0.5f)) - 0.5f;
+  }
+  else
+    return (x * (0x7FFFFF + 0.5)) - 0.5;
+}
+*/
+
+template <>
+constexpr int32_t float_to_sample<int32_t, 32>(audio_sample x) noexcept
+{
+  return x * (audio_sample)std::numeric_limits<int32_t>::max();
 }
 
 template <>
@@ -82,19 +97,45 @@ constexpr float float_to_sample<float, 32>(float sample) noexcept
 #define OSSIA_RESTRICT __restrict__
 #endif
 
-template<typename SampleFormat, int N>
-inline void interleave(const float* const* OSSIA_RESTRICT in, SampleFormat* OSSIA_RESTRICT out, int channels, int bs)
+template <typename SampleFormat, int N, int ByteIncrement, typename InputFormat>
+  requires(sizeof(SampleFormat) == ByteIncrement)
+inline void interleave(
+    const InputFormat* const* OSSIA_RESTRICT in, SampleFormat* OSSIA_RESTRICT out,
+    int channels, int bs)
 {
   for(int c = 0; c < channels; c++)
   {
     auto* in_channel = in[c];
     for(int k = 0; k < bs; k++)
+    {
       out[k * channels + c] = float_to_sample<SampleFormat, N>(in_channel[k]);
+    }
   }
 }
 
-template<typename SampleFormat, int N>
-inline void convert(const float* const* OSSIA_RESTRICT in, SampleFormat* OSSIA_RESTRICT out, int channels, int bs)
+template <typename SampleFormat, int N, int ByteIncrement, typename InputFormat>
+  requires(sizeof(SampleFormat) != ByteIncrement)
+inline void interleave(
+    const InputFormat* const* OSSIA_RESTRICT in, SampleFormat* out, int channels, int bs)
+{
+  for(int c = 0; c < channels; c++)
+  {
+    auto* in_channel = in[c];
+    for(int k = 0; k < bs; k++)
+    {
+      // Case packed 24-bit: we have to go through raw char*
+      char* out_raw = reinterpret_cast<char*>(out);
+      auto mem
+          = reinterpret_cast<SampleFormat*>(out_raw[(k * channels + c) * ByteIncrement]);
+      *mem = float_to_sample<SampleFormat, N>(in_channel[k]);
+    }
+  }
+}
+
+template <typename SampleFormat, int N, typename InputFormat>
+inline void convert(
+    const InputFormat* const* OSSIA_RESTRICT in, SampleFormat* OSSIA_RESTRICT out,
+    int channels, int bs)
 {
   for(int c = 0; c < channels; c++)
   {

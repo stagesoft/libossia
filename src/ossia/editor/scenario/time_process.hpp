@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ossia/editor/scenario/time_value.hpp>
-#include <ossia/dataflow/token_request.hpp>
-
 #include <ossia/detail/config.hpp>
+
+#include <ossia/dataflow/token_request.hpp>
+#include <ossia/editor/scenario/time_value.hpp>
 
 #include <memory>
 #include <string>
@@ -23,7 +23,9 @@ class time_interval;
 class OSSIA_EXPORT time_process
 {
 public:
+#if defined(OSSIA_SCENARIO_DATAFLOW)
   std::shared_ptr<ossia::graph_node> node;
+#endif
   /*! destructor */
   virtual ~time_process();
 
@@ -85,7 +87,7 @@ public:
   /**
    * @brief True if the process is not currently muted.
    */
-  bool unmuted() const;
+  [[nodiscard]] bool unmuted() const;
 
   /**
    * @brief Enables or disable the process.
@@ -97,7 +99,7 @@ public:
   /**
    * @brief True if the process is enabled.
    */
-  bool enabled() const;
+  [[nodiscard]] bool enabled() const;
 
   /**
    * @brief Enables looping of the process after every loop_duration
@@ -130,8 +132,7 @@ protected:
   bool m_enabled = true;
 };
 
-
-template<typename T>
+template <typename T>
 class looping_process : public time_process
 {
 public:
@@ -147,11 +148,10 @@ public:
     }
     else
     {
-      tok.loop(this->m_start_offset,
-               this->m_loop_duration,
-               [this] (const token_request& tr) { static_cast<T*>(this)->state_impl(tr); },
-               [this] (const time_value& t) { static_cast<T*>(this)->transport_impl(t); }
-      );
+      tok.loop(
+          this->m_start_offset, this->m_loop_duration,
+          [this](const token_request& tr) { static_cast<T*>(this)->state_impl(tr); },
+          [this](const time_value& t) { static_cast<T*>(this)->transport_impl(t); });
     }
   }
 };

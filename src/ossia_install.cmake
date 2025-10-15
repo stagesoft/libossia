@@ -95,9 +95,6 @@ endif()
 if(OSSIA_PROTOCOL_PHIDGETS)
   install_headers_rec("${OSSIA_PHIDGETS_HEADERS}")
 endif()
-if(OSSIA_PROTOCOL_LEAPMOTION)
-  install_headers_rec("${OSSIA_LEAPMOTION_HEADERS}")
-endif()
 if(OSSIA_C)
   install_headers_rec("${OSSIA_C_HEADERS}")
 endif()
@@ -139,21 +136,7 @@ install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/libremidi/include/libremidi"
         ${3RDPARTY_INSTALL_PATTERN}
 )
 
-install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/variant/include/"
-        DESTINATION include
-        COMPONENT Devel
-        MESSAGE_NEVER
-        ${3RDPARTY_INSTALL_PATTERN}
-)
-
 install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/nano-signal-slot/include/"
-        DESTINATION include
-        COMPONENT Devel
-        MESSAGE_NEVER
-        ${3RDPARTY_INSTALL_PATTERN}
-)
-
-install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/flat/"
         DESTINATION include
         COMPONENT Devel
         MESSAGE_NEVER
@@ -188,7 +171,14 @@ install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/rapidjson/include/"
         ${3RDPARTY_INSTALL_PATTERN}
 )
 
-install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/brigand/include/brigand"
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/unordered_dense/include/ankerl"
+        DESTINATION include
+        COMPONENT Devel
+        MESSAGE_NEVER
+        ${3RDPARTY_INSTALL_PATTERN}
+)
+
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/magic_enum/include/magic_enum"
         DESTINATION include
         COMPONENT Devel
         MESSAGE_NEVER
@@ -237,17 +227,6 @@ if(EXISTS "${OSSIA_3RDPARTY_FOLDER}/dr_libs/dr_wav.h")
           COMPONENT Devel)
 endif()
 
-install(FILES "${OSSIA_3RDPARTY_FOLDER}/flat_hash_map/flat_hash_map.hpp"
-        DESTINATION include/
-        COMPONENT Devel
-)
-
-install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/hopscotch-map/include/tsl"
-        DESTINATION include
-        COMPONENT Devel
-        MESSAGE_NEVER
-        ${3RDPARTY_INSTALL_PATTERN}
-)
 
 install(
   FILES
@@ -262,6 +241,7 @@ install(
 install(
     FILES
       "${OSSIA_3RDPARTY_FOLDER}/readerwriterqueue/readerwriterqueue.h"
+      "${OSSIA_3RDPARTY_FOLDER}/readerwriterqueue/readerwritercircularbuffer.h"
       "${OSSIA_3RDPARTY_FOLDER}/readerwriterqueue/atomicops.h"
     DESTINATION include/
     COMPONENT Devel
@@ -271,6 +251,7 @@ install(
       FILES
         "${OSSIA_3RDPARTY_FOLDER}/concurrentqueue/concurrentqueue.h"
         "${OSSIA_3RDPARTY_FOLDER}/concurrentqueue/blockingconcurrentqueue.h"
+        "${OSSIA_3RDPARTY_FOLDER}/concurrentqueue/lightweightsemaphore.h"
       DESTINATION include/
       COMPONENT Devel
 )
@@ -282,7 +263,7 @@ install(
       COMPONENT Devel
 )
 
-install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/GSL/include/gsl"
+install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/span/include/tcb"
         DESTINATION include
         COMPONENT Devel
         MESSAGE_NEVER
@@ -304,7 +285,7 @@ install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/weakjack"
 find_program(BOOST_BCP "bcp")
 if(BOOST_BCP)
    # install a subset of boost thanks to bcp
-   install(CODE "execute_process(COMMAND bcp --boost=${Boost_INCLUDE_DIR} boost/any.hpp boost/container/small_vector.hpp boost/container/static_vector.hpp boost/lexical_cast.hpp boost/algorithm/string/replace.hpp boost/endian/conversion.hpp ${CMAKE_INSTALL_PREFIX}/include)")
+   install(CODE "execute_process(COMMAND bcp --boost=${Boost_INCLUDE_DIR} boost/any.hpp boost/container/flat_map.hpp boost/container/flat_set.hpp boost/container/small_vector.hpp boost/container/static_vector.hpp boost/lexical_cast.hpp boost/algorithm/string/replace.hpp boost/endian/conversion.hpp boost/predef.h boost/variant2.hpp ${CMAKE_INSTALL_PREFIX}/include)")
 else()
   if(OSSIA_MUST_INSTALL_BOOST)
     install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/${BOOST_VERSION}/boost"
@@ -314,7 +295,7 @@ else()
             ${3RDPARTY_INSTALL_PATTERN}
     )
   endif(OSSIA_MUST_INSTALL_BOOST)
-endif(BOOST_BCP)
+endif()
 endif(NOT OSSIA_CPP_ONLY AND NOT OSSIA_C_ONLY)
 
 include(CMakePackageConfigHelpers)
@@ -328,10 +309,6 @@ configure_package_config_file(../cmake/ossiaConfig.cmake.in
   "${CMAKE_CURRENT_BINARY_DIR}/ossia/ossiaConfig.cmake"
     INSTALL_DESTINATION lib/cmake/ossia
 )
-export(EXPORT ossia-targets
-  FILE "${CMAKE_CURRENT_BINARY_DIR}/ossia/ossiaTargets.cmake"
-  NAMESPACE ossia::
-)
 
 install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/ossia/ossiaConfig.cmake
@@ -339,7 +316,6 @@ install(FILES
     DESTINATION lib/cmake/ossia
     COMPONENT Devel
 )
-
 
 set(ConfigPackageLocation lib/cmake/ossia)
 install(EXPORT ossia-targets

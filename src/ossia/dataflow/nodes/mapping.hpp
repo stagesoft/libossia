@@ -1,11 +1,11 @@
 #pragma once
+#include <ossia/detail/config.hpp>
+
 #include <ossia/dataflow/graph_node.hpp>
 #include <ossia/dataflow/port.hpp>
 #include <ossia/detail/optional.hpp>
 #include <ossia/editor/curve/behavior.hpp>
 #include <ossia/editor/mapper/detail/mapper_visitor.hpp>
-
-#include <ossia/detail/config.hpp>
 /**
  * \file mapper.hpp
  */
@@ -29,40 +29,35 @@ public:
     m_outlets.push_back(&value_out);
   }
 
-  std::string label() const noexcept override
-  {
-    return "mapping";
-  }
+  [[nodiscard]] std::string label() const noexcept override { return "mapping"; }
 
-  ~mapping() override
-  {
-  }
+  ~mapping() override = default;
 
-  void set_behavior(const ossia::behavior& b)
-  {
-    m_drive = b;
-  }
+  void set_behavior(const ossia::behavior& b) { m_drive = b; }
 
 private:
-  void
-  run(const ossia::token_request& t, ossia::exec_state_facade e) noexcept override
+  void run(const ossia::token_request& t, ossia::exec_state_facade e) noexcept override
   {
-    if (!m_drive)
+    if(!m_drive)
       return;
 
     const ossia::value_port& ip = *value_in;
     ossia::value_port& op = *value_out;
 
     // TODO use correct unit / whatever ?
-    for (auto& tv : ip.get_data())
+    for(auto& tv : ip.get_data())
     {
-      if (tv.value.valid())
-      {
-        auto v = ossia::apply(
-            ossia::detail::mapper_compute_visitor{}, tv.value, m_drive.v);
+      if(tv.value.valid())
+        try
+        {
+          auto v = ossia::apply(
+              ossia::detail::mapper_compute_visitor{}, tv.value, m_drive.v);
 
-        op.write_value(std::move(v), tv.timestamp);
-      }
+          op.write_value(std::move(v), tv.timestamp);
+        }
+        catch(...)
+        {
+        }
     }
   }
 

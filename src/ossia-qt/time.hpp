@@ -8,7 +8,8 @@
 namespace ossia
 {
 using musical_sync = double;
-struct bar_time {
+struct bar_time
+{
   int32_t bars{};
   int16_t quarters{};
   int8_t semiquavers{};
@@ -16,11 +17,8 @@ struct bar_time {
 
   friend bool operator==(const bar_time& lhs, const bar_time& rhs) noexcept
   {
-    return lhs.bars == rhs.bars
-        && lhs.quarters == rhs.quarters
-        && lhs.semiquavers == rhs.semiquavers
-        && lhs.cents == rhs.cents
-    ;
+    return lhs.bars == rhs.bars && lhs.quarters == rhs.quarters
+           && lhs.semiquavers == rhs.semiquavers && lhs.cents == rhs.cents;
   }
   friend bool operator!=(const bar_time& lhs, const bar_time& rhs) noexcept
   {

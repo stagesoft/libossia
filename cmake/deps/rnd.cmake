@@ -1,0 +1,10 @@
+if(OSSIA_USE_SYSTEM_LIBRARIES)
+  find_package(rnd CONFIG GLOBAL)
+endif()
+
+if(NOT TARGET rnd::rnd)
+  block()
+      set(BUILD_SHARED_LIBS 0)
+    add_subdirectory("${OSSIA_3RDPARTY_FOLDER}/rnd")
+  endblock()
+endif()

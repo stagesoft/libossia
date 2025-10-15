@@ -1,10 +1,12 @@
 #pragma once
-#include <ossia/dataflow/nodes/media.hpp>
-#include <ossia/detail/small_vector.hpp>
-#include <ossia/detail/math.hpp>
-#include <ossia/detail/buffer_pool.hpp>
-#include <vector>
 #include <ossia/detail/config.hpp>
+
+#include <ossia/dataflow/nodes/media.hpp>
+#include <ossia/detail/buffer_pool.hpp>
+#include <ossia/detail/math.hpp>
+#include <ossia/detail/small_vector.hpp>
+
+#include <vector>
 namespace ossia
 {
 
@@ -14,11 +16,19 @@ void ensure_vector_sizes(const audio_vector& src_vec, audio_vector& sink_vec);
 OSSIA_EXPORT
 void mix(const audio_vector& src_vec, audio_vector& sink_vec);
 
-struct OSSIA_EXPORT audio_buffer_pool
-    : object_pool<audio_channel>
+struct OSSIA_EXPORT audio_buffer_pool : private object_pool<audio_channel>
 {
   audio_buffer_pool();
   ~audio_buffer_pool();
+
+  using object_pool::acquire;
+
+  void release(audio_channel&& b)
+  {
+    b.clear();
+    buffers.enqueue(std::move(b));
+  }
+
   static audio_buffer_pool& instance() noexcept;
 
   static void set_channels(audio_vector& samples, std::size_t channels);
@@ -30,18 +40,12 @@ struct audio_port
 {
   static const constexpr int which = 0;
 
-  audio_port() noexcept
-  {
-    set_channels(2);
-  }
+  audio_port() noexcept { set_channels(2); }
 
-  audio_port(const audio_port& other) noexcept
-  {
-    *this = other;
-  }
+  audio_port(const audio_port& other) noexcept { *this = other; }
 
   audio_port(audio_port&& other) noexcept
-    : m_samples{std::move(other.m_samples)}
+      : m_samples{std::move(other.m_samples)}
   {
   }
 
@@ -50,7 +54,8 @@ struct audio_port
     audio_buffer_pool::set_channels(m_samples, other.channels());
     for(std::size_t c = 0; c < other.channels(); c++)
     {
-      channel(c) = other.channel(c);
+      const auto& src = other.channel(c);
+      channel(c).assign(src.begin(), src.end());
     }
     return *this;
   }
@@ -63,17 +68,16 @@ struct audio_port
     return *this;
   }
 
-  audio_channel& channel(std::size_t i) noexcept
-  { return m_samples[i]; }
+  audio_channel& channel(std::size_t i) noexcept { return m_samples[i]; }
 
-  const audio_channel& channel(std::size_t i) const noexcept
-  { return m_samples[i]; }
+  [[nodiscard]] const audio_channel& channel(std::size_t i) const noexcept
+  {
+    return m_samples[i];
+  }
 
-  std::size_t channels() const noexcept
-  { return m_samples.size(); }
+  [[nodiscard]] std::size_t channels() const noexcept { return m_samples.size(); }
 
-  bool empty() const noexcept
-  { return m_samples.empty(); }
+  [[nodiscard]] bool empty() const noexcept { return m_samples.empty(); }
 
   void set_channels(std::size_t channels)
   {
@@ -91,16 +95,16 @@ struct audio_port
   }
 
   audio_vector& get() noexcept { return m_samples; }
-  const audio_vector& get() const noexcept { return m_samples; }
+  [[nodiscard]] const audio_vector& get() const noexcept { return m_samples; }
 
-  auto begin() const noexcept { return m_samples.begin(); }
-  auto end() const noexcept { return m_samples.end(); }
-  auto cbegin() const noexcept { return m_samples.cbegin(); }
-  auto cend() const noexcept { return m_samples.cend(); }
-  auto rbegin() const noexcept { return m_samples.rbegin(); }
-  auto rend() const noexcept { return m_samples.rend(); }
-  auto crbegin() const noexcept { return m_samples.crbegin(); }
-  auto crend() const noexcept { return m_samples.crend(); }
+  [[nodiscard]] auto begin() const noexcept { return m_samples.begin(); }
+  [[nodiscard]] auto end() const noexcept { return m_samples.end(); }
+  [[nodiscard]] auto cbegin() const noexcept { return m_samples.cbegin(); }
+  [[nodiscard]] auto cend() const noexcept { return m_samples.cend(); }
+  [[nodiscard]] auto rbegin() const noexcept { return m_samples.rbegin(); }
+  [[nodiscard]] auto rend() const noexcept { return m_samples.rend(); }
+  [[nodiscard]] auto crbegin() const noexcept { return m_samples.crbegin(); }
+  [[nodiscard]] auto crend() const noexcept { return m_samples.crend(); }
   auto begin() noexcept { return m_samples.begin(); }
   auto end() noexcept { return m_samples.end(); }
   auto cbegin() noexcept { return m_samples.cbegin(); }
@@ -109,6 +113,7 @@ struct audio_port
   auto rend() noexcept { return m_samples.rend(); }
   auto crbegin() noexcept { return m_samples.crbegin(); }
   auto crend() noexcept { return m_samples.crend(); }
+
 private:
   friend void ensure_vector_sizes(const audio_vector& src_vec, audio_vector& sink_vec);
   audio_vector m_samples;

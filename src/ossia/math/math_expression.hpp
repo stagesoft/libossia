@@ -1,9 +1,10 @@
 #pragma once
 #include <ossia/detail/config.hpp>
 
+#include <ossia/network/value/value.hpp>
+
 #include <string>
 #include <vector>
-#include <ossia/network/value/value.hpp>
 
 namespace ossia
 {
@@ -13,10 +14,11 @@ public:
   math_expression();
   ~math_expression();
 
+  void seed_random(uint64_t seed1, uint64_t seed2);
   void add_variable(const std::string& var, double& value);
   void add_constant(const std::string& var, double& value);
   void add_vector(const std::string& var, std::vector<double>& value);
-  void remove_vector(const std::string& var);
+  void rebase_vector(const std::string& var, std::vector<double>& value);
   void add_constants();
   void register_symbol_table();
 

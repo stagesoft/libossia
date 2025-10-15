@@ -4,9 +4,7 @@
 #include <ossia/network/domain/domain_base.hpp>
 #include <ossia/network/generic/generic_node.hpp>
 
-namespace ossia
-{
-namespace net
+namespace ossia::net
 {
 
 /**
@@ -38,13 +36,13 @@ private:
   ossia::net::node_base* m_origin{};
 };
 
-class OSSIA_EXPORT alias_path final : public generic_node_base,
-                                      public ossia::net::parameter_base
+class OSSIA_EXPORT alias_path final
+    : public generic_node_base
+    , public ossia::net::parameter_base
 {
 public:
   alias_path(
-      std::string name, ossia::net::device_base& aDevice,
-      ossia::net::node_base& parent);
+      std::string name, ossia::net::device_base& aDevice, ossia::net::node_base& parent);
 
   ~alias_path();
 
@@ -74,13 +72,13 @@ private:
   ossia::value set_value(ossia::value&&) override;
   ossia::value set_value_quiet(const ossia::value& v) override;
   ossia::value set_value_quiet(ossia::value&& v) override;
-  val_type get_value_type() const override;
+  val_type get_value_type() const noexcept override;
   parameter_base& set_value_type(val_type) override;
-  access_mode get_access() const override;
+  access_mode get_access() const noexcept override;
   parameter_base& set_access(access_mode) override;
-  const domain& get_domain() const override;
+  const domain& get_domain() const noexcept override;
   parameter_base& set_domain(const domain&) override;
-  bounding_mode get_bounding() const override;
+  bounding_mode get_bounding() const noexcept override;
   parameter_base& set_bounding(bounding_mode) override;
 
   template <typename Fun>
@@ -89,5 +87,4 @@ private:
   std::vector<ossia::net::node_base*> m_roots;
   traversal::path m_path;
 };
-}
 }

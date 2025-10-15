@@ -44,9 +44,7 @@
  * \ref expression_generic
  */
 
-namespace ossia
-{
-namespace expressions
+namespace ossia::expressions
 {
 /**
  * @brief evaluate
@@ -88,10 +86,8 @@ inline void reset(const expression_ptr& e)
  *
  * Two expressions are comparable if they have all the same terms.
  */
-OSSIA_EXPORT bool
-operator==(const expression_base& lhs, const expression_base& rhs);
-OSSIA_EXPORT bool
-operator!=(const expression_base& lhs, const expression_base& rhs);
+OSSIA_EXPORT bool operator==(const expression_base& lhs, const expression_base& rhs);
+OSSIA_EXPORT bool operator!=(const expression_base& lhs, const expression_base& rhs);
 
 /**
  * @brief add_callback Add a callback to an expression.
@@ -102,8 +98,7 @@ add_callback(expression_base&, expression_result_callback);
 /**
  * @brief remove_callback Remove a callback to an expression.
  */
-OSSIA_EXPORT void
-remove_callback(expression_base&, expression_callback_iterator);
+OSSIA_EXPORT void remove_callback(expression_base&, expression_callback_iterator);
 
 /**
  * @brief callback_count
@@ -134,8 +129,13 @@ OSSIA_EXPORT const expression_base& expression_false();
  */
 inline expression_ptr make_expression_true()
 {
-  return std::make_unique<expression_base>(
-      eggs::variants::in_place<expression_bool>, true);
+  return std::make_unique<expression_base>(ossia::in_place_type<expression_bool>, true);
+}
+
+inline bool is_expression_true(ossia::expression& e) noexcept
+{
+  const auto p = e.target<expression_bool>();
+  return p && p->evaluate();
 }
 
 /**
@@ -145,8 +145,7 @@ inline expression_ptr make_expression_true()
  */
 inline expression_ptr make_expression_false()
 {
-  return std::make_unique<expression_base>(
-      eggs::variants::in_place<expression_bool>, false);
+  return std::make_unique<expression_base>(ossia::in_place_type<expression_bool>, false);
 }
 
 /**
@@ -158,7 +157,7 @@ template <typename... Args>
 expression_ptr make_expression_atom(Args&&... args)
 {
   return std::make_unique<expression_base>(
-      eggs::variants::in_place<expression_atom>, std::forward<Args>(args)...);
+      ossia::in_place_type<expression_atom>, std::forward<Args>(args)...);
 }
 OSSIA_EXPORT
 expression_ptr make_expression_atom(
@@ -167,8 +166,7 @@ expression_ptr make_expression_atom(
     const ossia::expressions::expression_atom::val_t& rhs);
 OSSIA_EXPORT
 expression_ptr make_expression_atom(
-    ossia::expressions::expression_atom::val_t&& lhs,
-    ossia::expressions::comparator c,
+    ossia::expressions::expression_atom::val_t&& lhs, ossia::expressions::comparator c,
     ossia::expressions::expression_atom::val_t&& rhs);
 
 /**
@@ -180,7 +178,7 @@ template <typename... Args>
 expression_ptr make_expression_bool(Args&&... args)
 {
   return std::make_unique<expression_base>(
-      eggs::variants::in_place<expression_bool>, std::forward<Args>(args)...);
+      ossia::in_place_type<expression_bool>, std::forward<Args>(args)...);
 }
 
 /**
@@ -192,8 +190,7 @@ template <typename... Args>
 expression_ptr make_expression_composition(Args&&... args)
 {
   return std::make_unique<expression_base>(
-      eggs::variants::in_place<expression_composition>,
-      std::forward<Args>(args)...);
+      ossia::in_place_type<expression_composition>, std::forward<Args>(args)...);
 }
 
 /**
@@ -205,7 +202,7 @@ template <typename... Args>
 expression_ptr make_expression_not(Args&&... args)
 {
   return std::make_unique<expression_base>(
-      eggs::variants::in_place<expression_not>, std::forward<Args>(args)...);
+      ossia::in_place_type<expression_not>, std::forward<Args>(args)...);
 }
 
 /**
@@ -217,7 +214,7 @@ template <typename... Args>
 expression_ptr make_expression_pulse(Args&&... args)
 {
   return std::make_unique<expression_base>(
-      eggs::variants::in_place<expression_pulse>, std::forward<Args>(args)...);
+      ossia::in_place_type<expression_pulse>, std::forward<Args>(args)...);
 }
 
 template <typename T, typename... Args>
@@ -228,8 +225,7 @@ expression_ptr make_expression_generic(Args&&... args)
       "Must inherit from expression_generic_base");
 
   return std::make_unique<expression_base>(
-      eggs::variants::in_place<expression_generic>,
+      ossia::in_place_type<expression_generic>,
       std::make_unique<T>(std::forward<Args>(args)...));
-}
 }
 }

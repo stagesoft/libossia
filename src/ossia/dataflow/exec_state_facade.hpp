@@ -1,7 +1,10 @@
 #pragma once
+#include <ossia/detail/config.hpp>
+
+#include <ossia/dataflow/dataflow_fwd.hpp>
+
 #include <cinttypes>
 #include <string_view>
-#include <ossia/detail/config.hpp>
 
 namespace ossia
 {
@@ -9,12 +12,17 @@ namespace net
 {
 class node_base;
 class parameter_base;
+namespace midi
+{
+class midi_parameter;
+}
 }
 
 struct execution_state;
 class audio_parameter;
 struct typed_value;
 struct audio_port;
+struct value_port;
 struct midi_port;
 struct token_request;
 class state;
@@ -22,27 +30,29 @@ class state;
 struct OSSIA_EXPORT exec_state_facade
 {
   ossia::execution_state* impl{};
-  int sampleRate() const noexcept;
-  int bufferSize() const noexcept;
-  double modelToSamples() const noexcept;
-  double samplesToModel() const noexcept;
-  int64_t samplesSinceStart() const noexcept;
-  double startDate() const noexcept;
-  double currentDate() const noexcept;
-  ossia::net::node_base* find_node(std::string_view name) const noexcept;
+  [[nodiscard]] int sampleRate() const noexcept;
+  [[nodiscard]] int bufferSize() const noexcept;
+  [[nodiscard]] double modelToSamples() const noexcept;
+  [[nodiscard]] double samplesToModel() const noexcept;
+  [[nodiscard]] int64_t samplesSinceStart() const noexcept;
+  [[nodiscard]] double startDate() const noexcept;
+  [[nodiscard]] double currentDate() const noexcept;
+  [[nodiscard]] ossia::net::node_base* find_node(std::string_view name) const noexcept;
 
-  struct sample_timings {
+  struct sample_timings
+  {
     int64_t start_sample;
     int64_t length;
   };
 
-  sample_timings timings(const token_request& t) const noexcept;
+  [[nodiscard]] sample_timings timings(const token_request& t) const noexcept;
 
-  void insert(ossia::net::parameter_base& dest, const typed_value& v);
-  void insert(ossia::net::parameter_base& dest, typed_value&& v);
+  void insert(ossia::net::parameter_base& dest, const value_port& v);
   void insert(ossia::audio_parameter& dest, const audio_port& v);
-  void insert(ossia::net::parameter_base& dest, const midi_port& v);
-  void insert(const ossia::state& v);
+  void insert(ossia::net::midi::midi_parameter& dest, const midi_port& v);
+
+  std::vector<ossia::net::node_base*> list_destinations(const destination_t& address);
+  ossia::net::node_base* get_first_destination(const destination_t& address);
 };
 
 }

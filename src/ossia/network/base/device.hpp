@@ -1,9 +1,10 @@
 #pragma once
+#include <ossia/detail/config.hpp>
+
 #include <ossia/network/base/node.hpp>
 #include <ossia/network/base/node_attributes.hpp>
 
 #include <nano_signal_slot.hpp>
-#include <ossia/detail/config.hpp>
 
 namespace ossia
 {
@@ -71,44 +72,25 @@ public:
   virtual const ossia::net::node_base& get_root_node() const = 0;
   virtual ossia::net::node_base& get_root_node() = 0;
 
-  device_capabilities get_capabilities() const
-  {
-    return m_capabilities;
-  }
+  device_capabilities get_capabilities() const { return m_capabilities; }
 
-  void set_name(const std::string& str)
-  {
-    get_root_node().set_name(str);
-  }
-  std::string get_name() const
-  {
-    return get_root_node().get_name();
-  }
+  void set_name(const std::string& str) { get_root_node().set_name(str); }
+  std::string get_name() const { return get_root_node().get_name(); }
 
-  bool has_echo()
-  {
-    return m_echo;
-  }
+  bool has_echo() { return m_echo; }
 
-  void set_echo(bool echo)
-  {
-    m_echo = echo;
-  }
+  void set_echo(bool echo) { m_echo = echo; }
 
   void apply_incoming_message(
-      const message_origin_identifier& id,
-      ossia::net::parameter_base& param,
+      const message_origin_identifier& id, ossia::net::parameter_base& param,
       ossia::value&& value);
 
   void apply_incoming_message_quiet(
-      const message_origin_identifier& id,
-      ossia::net::parameter_base& param,
+      const message_origin_identifier& id, ossia::net::parameter_base& param,
       ossia::value&& value);
 
-  Nano::Signal<void(node_base&)>
-      on_node_created; // The node being created
-  Nano::Signal<void(node_base&)>
-      on_node_removing; // The node being removed
+  Nano::Signal<void(node_base&)> on_node_created;  // The node being created
+  Nano::Signal<void(node_base&)> on_node_removing; // The node being removed
   Nano::Signal<void(node_base&, std::string)>
       on_node_renamed; // Node has the new name, second argument is the old
                        // name
@@ -134,7 +116,6 @@ public:
   //! Argument is the node to rename and the new name
   Nano::Signal<void(std::string, std::string)> on_rename_node_requested;
 
-
 protected:
   std::unique_ptr<ossia::net::protocol_base> m_protocol;
   device_capabilities m_capabilities{};
@@ -142,11 +123,11 @@ protected:
 };
 
 template <typename T>
-void node_base::set(ossia::string_view str, const T& value)
+void node_base::set(std::string_view str, const T& value)
 {
   static_assert(!is_parameter_attribute<T>::value, "No parameter");
   auto opt = ossia::get_optional_attribute<T>(*this, str);
-  if ((opt && *opt != value) || !opt)
+  if((opt && *opt != value) || !opt)
   {
     ossia::set_attribute((extended_attributes&)*this, str, value);
     get_device().on_attribute_modified(*this, std::string(str));
@@ -154,11 +135,11 @@ void node_base::set(ossia::string_view str, const T& value)
 }
 
 template <typename T>
-void node_base::set(ossia::string_view str, T&& value)
+void node_base::set(std::string_view str, T&& value)
 {
   static_assert(!is_parameter_attribute<T>::value, "No parameter");
   auto opt = ossia::get_optional_attribute<T>(*this, str);
-  if ((opt && *opt != value) || !opt)
+  if((opt && *opt != value) || !opt)
   {
     ossia::set_attribute((extended_attributes&)*this, str, std::move(value));
     get_device().on_attribute_modified(*this, std::string(str));
@@ -166,11 +147,11 @@ void node_base::set(ossia::string_view str, T&& value)
 }
 
 template <typename T>
-void node_base::set(ossia::string_view str, const std::optional<T>& value)
+void node_base::set(std::string_view str, const std::optional<T>& value)
 {
   static_assert(!is_parameter_attribute<T>::value, "No parameter");
   auto opt = ossia::get_optional_attribute<T>(*this, str);
-  if (opt != value)
+  if(opt != value)
   {
     ossia::set_optional_attribute((extended_attributes&)*this, str, value);
     get_device().on_attribute_modified(*this, std::string(str));
@@ -178,14 +159,13 @@ void node_base::set(ossia::string_view str, const std::optional<T>& value)
 }
 
 template <typename T>
-void node_base::set(ossia::string_view str, std::optional<T>&& value)
+void node_base::set(std::string_view str, std::optional<T>&& value)
 {
   static_assert(!is_parameter_attribute<T>::value, "No parameter");
   auto opt = ossia::get_optional_attribute<T>(*this, str);
-  if (opt != value)
+  if(opt != value)
   {
-    ossia::set_optional_attribute(
-        (extended_attributes&)*this, str, std::move(value));
+    ossia::set_optional_attribute((extended_attributes&)*this, str, std::move(value));
     get_device().on_attribute_modified(*this, std::string(str));
   }
 }

@@ -1,27 +1,43 @@
 #pragma once
+#include <ossia/detail/config.hpp>
+
+#if defined(OSSIA_ENABLE_LIBSAMPLERATE)
 #if __has_include(<samplerate.h>)
-#include <ossia/dataflow/graph_node.hpp>
-#include <ossia/dataflow/token_request.hpp>
 #include <ossia/dataflow/audio_port.hpp>
+#include <ossia/dataflow/audio_stretch_mode.hpp>
+#include <ossia/dataflow/graph_node.hpp>
 #include <ossia/dataflow/nodes/media.hpp>
-#include <cinttypes>
-#include <samplerate.h>
+#include <ossia/dataflow/token_request.hpp>
+
 #include <boost/circular_buffer.hpp>
+
+#include <samplerate.h>
+
+#include <cinttypes>
 namespace ossia
 {
+static constexpr auto get_samplerate_preset(ossia::audio_stretch_mode mode)
+{
+  int qmode = SRC_SINC_BEST_QUALITY;
+  if(mode == audio_stretch_mode::RepitchMediumQ)
+    qmode = SRC_SINC_FASTEST;
+  if(mode == audio_stretch_mode::RepitchFastestQ)
+    qmode = SRC_LINEAR;
+  return qmode;
+}
+
 struct repitch_stretcher
 {
   struct resample_channel
   {
-    resample_channel(int buffersize) noexcept
-      : resampler{src_new(SRC_SINC_BEST_QUALITY, 1, nullptr)}
-      , data(10 * buffersize)
+    explicit resample_channel(int preset, int buffersize) noexcept
+        : resampler{src_new(preset, 1, nullptr)}
+        , data(10 * buffersize)
     {
-
     }
     resample_channel(resample_channel&& other) noexcept
-      : resampler{other.resampler}
-      , data{std::move(other.data)}
+        : resampler{other.resampler}
+        , data{std::move(other.data)}
     {
       other.resampler = nullptr;
     }
@@ -47,13 +63,14 @@ struct repitch_stretcher
     boost::circular_buffer<float> data;
   };
 
-  repitch_stretcher(int channels, int bufferSize, int64_t pos)
-    : next_sample_to_read{pos}
+  repitch_stretcher(int preset, int channels, int bufferSize, int64_t pos)
+      : next_sample_to_read{pos}
+      , preset{preset}
   {
     repitchers.reserve(channels);
     while(int(repitchers.size()) < channels)
     {
-      repitchers.emplace_back(bufferSize);
+      repitchers.emplace_back(preset, bufferSize);
     }
   }
 
@@ -61,19 +78,16 @@ struct repitch_stretcher
   std::vector<float> output_buffer;
   std::vector<resample_channel> repitchers;
   int64_t next_sample_to_read{};
+  int preset{};
 
-  template<typename T>
-  void run(
-      T& audio_fetcher,
-      const ossia::token_request& t,
-      ossia::exec_state_facade e,
-      double tempo_ratio,
-      const std::size_t chan,
-      const int64_t len,
-      int64_t samples_to_read,
-      const int64_t samples_to_write,
-      const int64_t samples_offset,
-      const ossia::mutable_audio_span<double>& ap) noexcept
+  void transport(int64_t date) { next_sample_to_read = date; }
+
+  template <typename T>
+  void
+  run(T& audio_fetcher, const ossia::token_request& t, ossia::exec_state_facade e,
+      double tempo_ratio, const std::size_t chan, const int64_t len,
+      int64_t samples_to_read, const int64_t samples_to_write,
+      const int64_t samples_offset, const ossia::mutable_audio_span<double>& ap) noexcept
   {
     assert(chan > 0);
 
@@ -90,10 +104,11 @@ struct repitch_stretcher
 
     while(num_samples_available < samples_to_write)
     {
-      audio_fetcher.fetch_audio(next_sample_to_read, samples_to_read, input_channels.data());
+      audio_fetcher.fetch_audio(
+          next_sample_to_read, samples_to_read, input_channels.data());
 
       SRC_DATA data;
-      for (std::size_t i = 0; i < chan; ++i)
+      for(std::size_t i = 0; i < chan; ++i)
       {
         data.data_in = repitchers[i].input_buffer.data();
         data.data_out = output;
@@ -148,6 +163,24 @@ struct repitch_stretcher
 
 namespace ossia
 {
+static constexpr int get_samplerate_preset(ossia::audio_stretch_mode mode)
+{
+  return 0;
+}
+using repitch_stretcher = raw_stretcher;
+}
+#endif
+
+#else
+
+#include <ossia/dataflow/nodes/timestretch/raw_stretcher.hpp>
+
+namespace ossia
+{
+static constexpr int get_samplerate_preset(ossia::audio_stretch_mode mode)
+{
+  return 0;
+}
 using repitch_stretcher = raw_stretcher;
 }
 #endif

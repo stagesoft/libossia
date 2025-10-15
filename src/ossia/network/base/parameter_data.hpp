@@ -1,14 +1,13 @@
 #pragma once
 #include <ossia/detail/any_map.hpp>
+#include <ossia/network/base/node_attributes.hpp>
 #include <ossia/network/common/complex_type.hpp>
 #include <ossia/network/common/extended_types.hpp>
 #include <ossia/network/dataspace/dataspace.hpp>
 #include <ossia/network/domain/domain.hpp>
 #include <ossia/network/value/value.hpp>
 
-namespace ossia
-{
-namespace net
+namespace ossia::net
 {
 /**
  * @brief The data that can be found inside a parameter
@@ -26,7 +25,8 @@ struct parameter_data
   parameter_data& operator=(const parameter_data&) = default;
   parameter_data& operator=(parameter_data&&) = default;
 
-  parameter_data(std::string n) : name{std::move(n)}
+  parameter_data(std::string n)
+      : name{std::move(n)}
   {
   }
 
@@ -44,14 +44,8 @@ struct parameter_data
 
   extended_attributes extended;
 
-  operator const ossia::extended_attributes&() const
-  {
-    return extended;
-  }
-  operator ossia::extended_attributes&()
-  {
-    return extended;
-  }
+  operator const ossia::extended_attributes&() const { return extended; }
+  operator ossia::extended_attributes&() { return extended; }
 };
 
 /**
@@ -72,13 +66,14 @@ public:
   full_parameter_data& operator=(const full_parameter_data&) = default;
   full_parameter_data& operator=(full_parameter_data&&) = default;
 
-  explicit full_parameter_data(std::string n) : address{std::move(n)}
+  explicit full_parameter_data(std::string n)
+      : address{std::move(n)}
   {
   }
 
   full_parameter_data(std::string n, ossia::value v)
-    : address{std::move(n)}
-    , val{std::move(v)}
+      : address{std::move(n)}
+      , val{std::move(v)}
   {
   }
 
@@ -101,14 +96,8 @@ public:
 
   extended_attributes extended;
 
-  operator const ossia::extended_attributes&() const
-  {
-    return extended;
-  }
-  operator ossia::extended_attributes&()
-  {
-    return extended;
-  }
+  operator const ossia::extended_attributes&() const { return extended; }
+  operator ossia::extended_attributes&() { return extended; }
 
   void set_value(const ossia::value& v)
   {
@@ -128,46 +117,15 @@ public:
                && v == previous_val);
   }
 
-  const ossia::value& value() const
-  {
-    return this->val;
-  }
-  ossia::val_type get_value_type() const
-  {
-    return type;
-  }
-  access_mode get_access() const
-  {
-    return access;
-  }
-  const ossia::domain& get_domain() const
-  {
-    return domain;
-  }
-  bounding_mode get_bounding() const
-  {
-    return bounding;
-  }
-  repetition_filter get_repetition_filter() const
-  {
-    return rep_filter;
-  }
-  const ossia::unit_t& get_unit() const
-  {
-    return unit;
-  }
-  bool get_disabled() const
-  {
-    return muted;
-  }
-  bool get_muted() const
-  {
-    return muted;
-  }
-  bool get_critical() const
-  {
-    return critical;
-  }
+  const ossia::value& value() const { return this->val; }
+  ossia::val_type get_value_type() const { return type; }
+  access_mode get_access() const { return access; }
+  const ossia::domain& get_domain() const { return domain; }
+  bounding_mode get_bounding() const { return bounding; }
+  repetition_filter get_repetition_filter() const { return rep_filter; }
+  const ossia::unit_t& get_unit() const { return unit; }
+  bool get_disabled() const { return muted; }
+  bool get_muted() const { return muted; }
+  bool get_critical() const { return critical; }
 };
-}
 }

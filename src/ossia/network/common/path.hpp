@@ -1,4 +1,5 @@
 #pragma once
+#include <ossia/detail/hash.hpp>
 #include <ossia/detail/optional.hpp>
 #include <ossia/detail/regex_fwd.hpp>
 #include <ossia/network/base/address_scope.hpp>
@@ -38,28 +39,28 @@ namespace regex_path
 struct OSSIA_EXPORT path_element
 {
   std::string address;
-  path_element(std::string s) : address{std::move(s)}
+  path_element(std::string s)
+      : address{std::move(s)}
   {
   }
 
   template <int N>
-  path_element(const char (&s)[N]) : address(s, N - 1)
+  path_element(const char (&s)[N])
+      : address(s, N - 1)
   {
   }
 
-  OSSIA_EXPORT
-  friend std::ostream& operator<<(std::ostream& s, const path_element& p);
-
-  operator std::string() const
-  {
-    return address;
-  }
+  operator std::string() const { return address; }
 };
+
+OSSIA_EXPORT
+std::ostream& operator<<(std::ostream& s, const path_element& p);
 
 //! Represents a device in a path, e.g. "foo:"
 struct OSSIA_EXPORT device : public path_element
 {
-  explicit device(std::string s) : path_element{"^" + std::move(s) + ":"}
+  explicit device(std::string s)
+      : path_element{"^" + std::move(s) + ":"}
   {
   }
 };
@@ -70,8 +71,7 @@ struct OSSIA_EXPORT any_instance : public path_element
   static std::string instance_regex()
   {
     static const auto str
-        = "(\\.[" + std::string(ossia::net::name_characters_no_instance())
-          + "]+)?";
+        = "(\\.[" + std::string(ossia::net::name_characters_no_instance()) + "]+)?";
     return str;
   }
   explicit any_instance(std::string s)
@@ -84,21 +84,23 @@ struct OSSIA_EXPORT any_instance : public path_element
 //! foo:/bin/baz
 struct OSSIA_EXPORT any_between : public path_element
 {
-  any_between(std::string s) : path_element{std::move(s)}
+  any_between(std::string s)
+      : path_element{std::move(s)}
   {
   }
 
-  any_between(std::initializer_list<std::string> args) : path_element{""}
+  any_between(std::initializer_list<std::string> args)
+      : path_element{""}
   {
     const auto N = args.size();
-    if (N > 0)
+    if(N > 0)
     {
       address += '(';
 
       auto it = args.begin();
       address += *it;
 
-      for (std::size_t i = 1; i < N; i++)
+      for(std::size_t i = 1; i < N; i++)
       {
         ++it;
         address += '|';
@@ -137,14 +139,14 @@ inline path_element operator/(const path_element& lhs, const any_instance& rhs)
 
 inline path_element operator/(const path_element& lhs, const any_node&)
 {
-  return path_element{lhs.address + "\\/["
-                      + std::string(ossia::net::name_characters()) + "]*"};
+  return path_element{
+      lhs.address + "\\/[" + std::string(ossia::net::name_characters()) + "]*"};
 }
 
 inline path_element operator/(const path_element& lhs, const any_path&)
 {
-  return path_element{lhs.address + "(\\/["
-                      + std::string(ossia::net::name_characters()) + "]*)+"};
+  return path_element{
+      lhs.address + "(\\/[" + std::string(ossia::net::name_characters()) + "]*)+"};
 }
 
 inline path_element operator/(const any_path&, const path_element& rhs)
@@ -214,8 +216,7 @@ struct OSSIA_EXPORT path
    * Each function will be called on the next step.
    */
   using child_function = smallfun::function<
-      void(std::vector<ossia::net::node_base*>&),
-      sizeof_regex + sizeof(void*)>;
+      void(std::vector<ossia::net::node_base*>&), 32 + sizeof(void*)>;
   std::vector<child_function> child_functions;
 
   friend bool operator==(const path& lhs, const path& rhs)
@@ -229,12 +230,12 @@ struct OSSIA_EXPORT path
 };
 
 //! True if this is a pattern match address
-OSSIA_EXPORT bool is_pattern(ossia::string_view address);
+OSSIA_EXPORT bool is_pattern(std::string_view address);
 
 /**
  * @brief Tries to parse a parameter into a path.
  */
-OSSIA_EXPORT std::optional<path> make_path(ossia::string_view address);
+OSSIA_EXPORT std::optional<path> make_path(std::string_view address);
 
 /**
  * @brief Get all the nodes matching a path, from a given list of root nodes.
@@ -244,19 +245,20 @@ OSSIA_EXPORT std::optional<path> make_path(ossia::string_view address);
  * it once to the
  * nodes, instead of applying it every time.
  */
-OSSIA_EXPORT void
-apply(const path& p, std::vector<ossia::net::node_base*>& nodes);
+OSSIA_EXPORT void apply(const path& p, std::vector<ossia::net::node_base*>& nodes);
 
 //! Root is the device node
 OSSIA_EXPORT bool match(const path& p, const ossia::net::node_base& node);
 
 //! Try to match from the given root.
-OSSIA_EXPORT bool match(
-    const path& p, const ossia::net::node_base& node,
-    ossia::net::node_base& root);
+OSSIA_EXPORT bool
+match(const path& p, const ossia::net::node_base& node, ossia::net::node_base& root);
 
 //! Convert ossia regex syntax to std::regex
 OSSIA_EXPORT std::string substitute_characters(const std::string& path);
+
+//! Only useful for tests
+OSSIA_EXPORT bool match(std::string_view address, const regex_path::path_element& e);
 
 }
 }
@@ -268,7 +270,7 @@ struct hash<ossia::traversal::path>
 {
   std::size_t operator()(const ossia::traversal::path& p) const
   {
-    return std::hash<std::string>{}(p.pattern);
+    return ossia::hash<std::string>{}(p.pattern);
   }
 };
 }

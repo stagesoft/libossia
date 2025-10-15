@@ -1,22 +1,27 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
+#include <ossia/detail/thread.hpp>
 #include <ossia/network/generic/generic_device.hpp>
 #include <ossia/network/generic/generic_parameter.hpp>
 #include <ossia/network/rate_limiting_protocol.hpp>
 
+#if defined(__cpp_exceptions)
 namespace ossia::net
 {
 struct rate_limiter
 {
   rate_limiting_protocol& self;
-  void operator()() const noexcept {
+  void operator()() const noexcept
+  {
+    ossia::set_thread_name("ossia ratelim");
     using namespace std::literals;
     using clock = rate_limiting_protocol::clock;
     const auto duration = self.m_duration.load();
     thread_local auto time_to_sleep = duration;
     while(self.m_running)
     {
-      try {
+      try
+      {
         auto prev_time = clock::now();
         if(time_to_sleep > 1ms)
           std::this_thread::sleep_for(time_to_sleep);
@@ -30,7 +35,7 @@ struct rate_limiter
         }
 
         // Copy newest messages in local map
-        for(auto& msg : self.m_buffer.container)
+        for(auto& msg : self.m_buffer)
         {
           if(msg.second.first.valid())
           {
@@ -40,7 +45,7 @@ struct rate_limiter
         }
 
         // Push the actual messages
-        for(auto& v : self.m_threadMessages.container)
+        for(auto& v : self.m_threadMessages)
         {
           auto val = v.second.first;
           if(val.valid())
@@ -49,9 +54,9 @@ struct rate_limiter
           }
         }
 
-        // Clear both containers (while keeping memory allocated for sent messages
-        // so that it stays fast)
-        for(auto& v : self.m_buffer.container)
+        // Clear both containers (while keeping memory allocated for sent
+        // messages so that it stays fast)
+        for(auto& v : self.m_buffer)
         {
           if(v.second.first.valid())
           {
@@ -59,7 +64,7 @@ struct rate_limiter
           }
         }
 
-        for(auto& v : self.m_threadMessages.container)
+        for(auto& v : self.m_threadMessages)
         {
           if(v.second.first.valid())
           {
@@ -67,36 +72,37 @@ struct rate_limiter
           }
         }
         auto new_time = clock::now();
-        auto observed_duration = std::chrono::duration_cast<std::chrono::milliseconds>(new_time - prev_time);
+        auto observed_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+            new_time - prev_time);
         if(observed_duration > duration)
         {
           if(observed_duration >= 2 * duration)
             time_to_sleep = 0ms;
           else
-            time_to_sleep = 2 * duration - observed_duration ;
+            time_to_sleep = 2 * duration - observed_duration;
         }
         else
         {
           time_to_sleep = duration;
         }
-      } catch(...) {
-
+      }
+      catch(...)
+      {
       }
     }
   }
 };
 
 rate_limiting_protocol::rate_limiting_protocol(
-    rate_limiting_protocol::duration d
-    , std::unique_ptr<protocol_base> arg)
-  : protocol_base{flags{SupportsMultiplex}}
-  , m_duration{d}
-  , m_protocol{std::move(arg)}
+    rate_limiting_protocol::duration d, std::unique_ptr<protocol_base> arg)
+    : protocol_base{flags{SupportsMultiplex}}
+    , m_duration{d}
+    , m_protocol{std::move(arg)}
 
 {
-  m_userMessages.container.reserve(4096);
-  m_buffer.container.reserve(4096);
-  m_threadMessages.container.reserve(4096);
+  m_userMessages.reserve(4096);
+  m_buffer.reserve(4096);
+  m_threadMessages.reserve(4096);
   m_lastTime = clock::now();
   m_thread = std::thread{rate_limiter{*this}};
 }
@@ -117,7 +123,8 @@ bool rate_limiting_protocol::pull(ossia::net::parameter_base& address)
   return m_protocol->pull(address);
 }
 
-bool rate_limiting_protocol::push(const ossia::net::parameter_base& address, const ossia::value& v)
+bool rate_limiting_protocol::push(
+    const ossia::net::parameter_base& address, const ossia::value& v)
 {
   std::lock_guard lock{m_msgMutex};
   m_userMessages[&address] = {v, {}};
@@ -129,8 +136,7 @@ bool rate_limiting_protocol::push_raw(const full_parameter_data& address)
   return m_protocol->push_raw(address);
 }
 
-bool rate_limiting_protocol::observe(
-    ossia::net::parameter_base& address, bool enable)
+bool rate_limiting_protocol::observe(ossia::net::parameter_base& address, bool enable)
 {
   return m_protocol->observe(address, enable);
 }
@@ -145,7 +151,7 @@ void rate_limiting_protocol::set_logger(const network_logger& l)
   m_protocol->set_logger(l);
 }
 
-const network_logger&rate_limiting_protocol::get_logger() const noexcept
+const network_logger& rate_limiting_protocol::get_logger() const noexcept
 {
   return m_protocol->get_logger();
 }
@@ -162,3 +168,4 @@ void rate_limiting_protocol::set_device(device_base& dev)
 }
 
 }
+#endif

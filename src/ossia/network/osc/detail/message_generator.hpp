@@ -7,15 +7,13 @@
 #include <oscpack/osc/OscOutboundPacketStream.h>
 
 #include <array>
-#include <iostream>
 #include <vector>
 namespace oscpack
 {
-inline oscpack::OutboundPacketStream& operator<<(
-    oscpack::OutboundPacketStream& p,
-    const std::vector<ossia::string_view>& values)
+inline oscpack::OutboundPacketStream&
+operator<<(oscpack::OutboundPacketStream& p, const std::vector<std::string_view>& values)
 {
-  for (auto val : values)
+  for(auto val : values)
   {
     p << val;
   }
@@ -23,21 +21,20 @@ inline oscpack::OutboundPacketStream& operator<<(
   return p;
 }
 
-inline oscpack::OutboundPacketStream& operator<<(
-    oscpack::OutboundPacketStream& p,
-    const ossia::net::parameter_base& address)
+inline oscpack::OutboundPacketStream&
+operator<<(oscpack::OutboundPacketStream& p, const ossia::net::parameter_base& address)
 {
   p << address.get_node().osc_address();
 
   return p;
 }
 
-inline oscpack::OutboundPacketStream& operator<<(
-    oscpack::OutboundPacketStream& p, const std::vector<std::string>& values)
+inline oscpack::OutboundPacketStream&
+operator<<(oscpack::OutboundPacketStream& p, const std::vector<std::string>& values)
 {
-  for (const auto& val : values)
+  for(const auto& val : values)
   {
-    p << ossia::string_view(val);
+    p << std::string_view(val);
   }
 
   return p;
@@ -48,27 +45,29 @@ class osc_message_generator
 {
 public:
   osc_message_generator(oscpack::OutboundPacketStream& stream)
-    : p{stream} {
-
+      : p{stream}
+  {
   }
 
-  const oscpack::OutboundPacketStream&
-  operator()(ossia::string_view name, const char* v) = delete;
+  const oscpack::OutboundPacketStream& operator()(std::string_view name, const char* v)
+      = delete;
 
-  void write(const char* arg) {
-    p << std::string_view(arg);
-  }
+  void write(const char* arg) { p << std::string_view(arg); }
 
-  template<typename Arg>
-  void write(const Arg& arg) {
+  template <typename Arg>
+  void write(const Arg& arg)
+  {
     p << arg;
   }
   void write(const ossia::value& v) { v.apply(ValueWriter{{p, ossia::unit_t{}}}); };
-  void write(const std::vector<ossia::value>& v) { ValueWriter{{p, ossia::unit_t{}}}(v); };
+  void write(const std::vector<ossia::value>& v)
+  {
+    ValueWriter{{p, ossia::unit_t{}}}(v);
+  };
 
-  template<typename... Args>
+  template <typename... Args>
   const oscpack::OutboundPacketStream&
-  operator()(ossia::string_view name, const Args&... args)
+  operator()(std::string_view name, const Args&... args)
   {
     p << oscpack::BeginMessageN(name);
     (write(args), ...);
@@ -76,15 +75,9 @@ public:
     return p;
   }
 
-
-  const oscpack::OutboundPacketStream& stream() const
-  {
-    return p;
-  }
+  const oscpack::OutboundPacketStream& stream() const { return p; }
 
   oscpack::OutboundPacketStream& p;
 };
-
-
 
 }

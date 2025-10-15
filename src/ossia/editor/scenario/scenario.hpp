@@ -1,4 +1,7 @@
 #pragma once
+#include <ossia/detail/config.hpp>
+
+#include <ossia/dataflow/graph/small_graph.hpp>
 #include <ossia/detail/flat_map.hpp>
 #include <ossia/detail/flat_set.hpp>
 #include <ossia/detail/pod_vector.hpp>
@@ -10,17 +13,17 @@
 
 #include <boost/graph/adjacency_list.hpp>
 
-#include <ossia/detail/config.hpp>
+#include <ankerl/unordered_dense.h>
+
 namespace ossia
 {
-class graph;
 class time_event;
 class time_interval;
 class time_sync;
 using interval_set = ossia::flat_set<time_interval*>;
 using sync_set = ossia::flat_set<time_sync*>;
 using small_sync_vec = ossia::small_vector<time_sync*, 4>;
-using small_event_vec = ossia::small_vector<time_event*, 4>;
+using small_event_vec = std::vector<time_event*>;
 struct overtick
 {
   ossia::time_value min;
@@ -33,14 +36,26 @@ class scenario;
 using scenario_graph_vertex = time_sync*;
 using scenario_graph_edge = time_interval*;
 
+using scenario_graph_t = boost::adjacency_list<
+    boost::smallvecS, boost::smallvecS, boost::undirectedS, scenario_graph_vertex,
+    scenario_graph_edge>;
+
+inline void
+remove_vertex(typename scenario_graph_t::vertex_descriptor v, scenario_graph_t& g)
+{
+  typedef typename scenario_graph_t::directed_category Cat;
+  g.removing_vertex(v, boost::graph_detail::iterator_stability(g.m_vertices));
+  boost::detail::remove_vertex_dispatch(g, v, Cat());
+}
+
+/*
+template <typename T, typename V>
+using dense_ptr_map = ankerl::unordered_dense::map<
+    T, V, EgurHash<std::remove_pointer_t<T>>, std::equal_to<T>,
+    ossia::small_vector<std::pair<T, V>, 1024>>;
 struct scenario_graph
 {
-  using graph_t = boost::adjacency_list<
-      boost::vecS, boost::vecS, boost::undirectedS, scenario_graph_vertex,
-      scenario_graph_edge>;
-
   scenario& scenar;
-  graph_t graph;
 
   scenario_graph(scenario& sc);
 
@@ -50,18 +65,24 @@ struct scenario_graph
   void remove_edge(scenario_graph_edge itv);
 
   void reset_component(ossia::time_sync& sync) const;
+
 private:
   void recompute_maps();
   void update_components_cache() const;
+  scenario_graph_t graph;
   mutable ossia::int_vector m_components_cache;
   mutable bool dirty = false;
-  ossia::ptr_map<const time_sync*, graph_t::vertex_descriptor> vertices;
-  ossia::ptr_map<const time_interval*, graph_t::edge_descriptor> edges;
-};
+  ossia::dense_ptr_map<const time_sync*, scenario_graph_t::vertex_descriptor> vertices;
+  ossia::dense_ptr_map<const time_interval*, scenario_graph_t::edge_descriptor> edges;
+
+  std::vector<std::shared_ptr<ossia::time_sync>> to_disable_sync;
+  std::vector<std::shared_ptr<ossia::time_interval>> to_disable_itv;
+};  */
 
 class OSSIA_EXPORT scenario final : public looping_process<scenario>
 {
   friend class looping_process<scenario>;
+
 public:
   scenario();
   ~scenario() override;
@@ -112,14 +133,16 @@ public:
 
   /*! Used to play an off-time interval,
    *  disregarding all the rules of the scenario.
-   *  e.g. this is used when pressing the "play" button on a random interval in score.
+   *  e.g. this is used when pressing the "play" button on a random interval in
+   * score.
    */
-  void start_interval(ossia::time_interval&, double ratio = 0.0);
+  void request_start_interval(ossia::time_interval&, double ratio = 0.0);
   /*! Used to stop an interval,
    *  disregarding all the rules of the scenario.
-   *  e.g. this is used when pressing the "stop" button on a random interval in score.
+   *  e.g. this is used when pressing the "stop" button on a random interval in
+   * score.
    */
-  void stop_interval(ossia::time_interval&, double ratio = 0.0);
+  void request_stop_interval(ossia::time_interval&, double ratio = 0.0);
 
   small_sync_vec get_roots() const noexcept;
 
@@ -128,7 +151,12 @@ public:
       time_sync& root);
 
   ossia::time_value last_date() const noexcept { return m_last_date; }
+
+  void set_exclusive(bool excl) noexcept;
+  bool exclusive(bool excl) const noexcept;
+
 private:
+  void stop_all_intervals();
   ossia::time_value m_last_date{ossia::Infinite};
 
   ptr_container<time_interval> m_intervals;
@@ -143,11 +171,17 @@ private:
   overtick_map m_overticks; // used as cache
   ossia::flat_map<time_interval*, time_value> m_itv_end_map;
   sync_set m_retry_syncs; // used as cache
-  sync_set m_endNodes; // used as cache
-  scenario_graph m_sg; // used as cache
+  sync_set m_endNodes;    // used as cache
+  // scenario_graph m_sg;    // used as cache
+
+  sync_set m_component_visit_cache;
+  std::vector<ossia::time_sync*> m_component_visit_stack;
+
+  bool m_exclusive{};
 
   // Used to start intervals off-time
-  struct quantized_interval {
+  struct quantized_interval
+  {
     ossia::time_interval* interval{};
     double quantization_ratio{};
     operator ossia::time_interval*() const noexcept { return interval; }
@@ -156,42 +190,42 @@ private:
   ossia::small_vector<quantized_interval, 2> m_itv_to_start;
   ossia::small_vector<quantized_interval, 2> m_itv_to_stop;
 
-
   static void make_happen(
       time_event& event, interval_set& started, interval_set& stopped,
       ossia::time_value tick_offset, const ossia::token_request& tok);
 
   static void make_dispose(time_event& event, interval_set& stopped);
 
-  sync_status process_this(time_sync& node, small_event_vec& pendingEvents,
-      small_event_vec& maxReachedEvents, interval_set& started,
-      interval_set& stopped, ossia::time_value tick_offset, const token_request& tok);
+  sync_status process_this(
+      time_sync& node, small_event_vec& pendingEvents, small_event_vec& maxReachedEvents,
+      interval_set& started, interval_set& stopped, ossia::time_value tick_offset,
+      const token_request& tok);
 
-  sync_status trigger_sync(time_sync& node, small_event_vec& pending, small_event_vec& maxReachedEv,
-      interval_set& started, interval_set& stopped,
-      ossia::time_value tick_offset, const token_request& req, bool maxReached);
+  sync_status trigger_sync(
+      time_sync& node, small_event_vec& pending, small_event_vec& maxReachedEv,
+      interval_set& started, interval_set& stopped, ossia::time_value tick_offset,
+      const token_request& req, bool maxReached);
 
   sync_status process_this_musical(
-      time_sync& node, small_event_vec& pendingEvents,
-      small_event_vec& maxReachedEvents, ossia::time_value tick_offset,
-      const token_request& tok) noexcept;
+      time_sync& node, small_event_vec& pendingEvents, small_event_vec& maxReachedEvents,
+      ossia::time_value tick_offset, const token_request& tok) noexcept;
 
   sync_status trigger_sync_musical(
-      time_sync& node, small_event_vec& maxReachedEvents,
-      ossia::time_value tick_offset, const token_request& req,
-      bool maxReached) noexcept;
+      time_sync& node, small_event_vec& maxReachedEvents, ossia::time_value tick_offset,
+      const token_request& req, bool maxReached) noexcept;
 
-  sync_status quantify_time_sync(
-      time_sync& sync, const ossia::token_request& tk) noexcept;
+  sync_status
+  quantify_time_sync(time_sync& sync, const ossia::token_request& tk) noexcept;
 
-  sync_status trigger_quantified_time_sync(
-      time_sync& sync, bool& maximalDurationReached) noexcept;
+  sync_status
+  trigger_quantified_time_sync(time_sync& sync, bool& maximalDurationReached) noexcept;
 
   void run_interval(
-      ossia::time_interval& interval,
-      const ossia::token_request& tk,
-      const time_value& tick_ms,
-      ossia::time_value tick,
-      ossia::time_value offset);
+      ossia::time_interval& interval, const ossia::token_request& tk,
+      const time_value& tick_ms, ossia::time_value tick, ossia::time_value offset);
+
+  void stop_interval(ossia::time_interval& itv);
+  void reset_component(ossia::time_sync& n);
+  void reset_all_components_except(ossia::time_sync& n);
 };
 }

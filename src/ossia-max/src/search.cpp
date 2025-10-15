@@ -1,12 +1,11 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check it.
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-#include <ossia-max/src/search.hpp>
 #include <ossia/detail/thread.hpp>
+#include <ossia/network/common/path.hpp>
 
 #include <ossia-max/src/ossia-max.hpp>
+#include <ossia-max/src/search.hpp>
 #include <ossia-max/src/utils.hpp>
-
-#include <ossia/network/common/path.hpp>
 
 #include <boost/algorithm/string/predicate.hpp>
 
@@ -30,18 +29,10 @@ extern "C" void ossia_search_setup()
       (long)sizeof(search), 0L, A_GIMME, 0);
 
   auto& c = ossia_library.ossia_search_class;
-  class_addmethod(
-      c, (method)search::execute_method,
-      "search", A_GIMME, 0);
-  class_addmethod(
-      c, (method)search::execute_method,
-      "open", A_GIMME, 0);
-  class_addmethod(
-      c, (method)search::assist,
-      "assist", A_CANT, 0);
-  class_addmethod(
-      c, (method)search::notify,
-      "notify", A_CANT, 0);
+  class_addmethod(c, (method)search::execute_method, "search", A_GIMME, 0);
+  class_addmethod(c, (method)search::execute_method, "open", A_GIMME, 0);
+  class_addmethod(c, (method)search::assist, "assist", A_CANT, 0);
+  class_addmethod(c, (method)search::notify, "notify", A_CANT, 0);
 
   search_filter::setup_attribute<search>(c);
 
@@ -50,35 +41,31 @@ extern "C" void ossia_search_setup()
 
 extern "C" void* ossia_search_new(t_symbol*, long argc, t_atom* argv)
 {
-  auto x = make_ossia<search>(argc, argv);
+  auto x = make_ossia<search>();
   x->m_dumpout = outlet_new(x, NULL);
   x->m_otype = object_class::search;
 
   object_attach_byptr_register(x, x, CLASS_BOX);
-
-  ossia_max::instance().searchs.push_back(x);
 
   return x;
 }
 
 void search::free(search* x)
 {
-  if (x)
+  if(x)
   {
-    ossia_max::instance().searchs.remove_all(x);
     x->~search();
   }
 }
 
-t_max_err search::notify(
-    search* x, t_symbol *s, t_symbol *msg, void *sender, void *data)
+t_max_err search::notify(search* x, t_symbol* s, t_symbol* msg, void* sender, void* data)
 {
   return 0;
 }
 
-void search::assist(search *x, void *b, long m, long a, char *s)
+void search::assist(search* x, void* b, long m, long a, char* s)
 {
-  if (m == ASSIST_INLET)
+  if(m == ASSIST_INLET)
   {
     sprintf(s, "Log messages inlet");
   }
@@ -87,10 +74,7 @@ void search::assist(search *x, void *b, long m, long a, char *s)
 #pragma mark -
 #pragma mark t_search structure functions
 
-search::search(long argc, t_atom *argv)
-{
-
-}
+search::search() = default;
 
 search::~search()
 {
@@ -112,8 +96,9 @@ void search::execute_method(search* x, t_symbol* s, long argc, t_atom* argv)
 
   auto matchers = x->find_or_create_matchers();
 
-  ossia::remove_erase_if(matchers, [&](const std::shared_ptr<matcher>& m)
-                         { return x->filter(*m->get_node()); });
+  ossia::remove_erase_if(matchers, [&](const std::shared_ptr<matcher>& m) {
+    return x->filter(*m->get_node());
+  });
 
   if(s == s_search)
   {
@@ -123,8 +108,17 @@ void search::execute_method(search* x, t_symbol* s, long argc, t_atom* argv)
     for(const auto& match : matchers)
     {
       auto node = match->get_node();
-      auto all = ossia_max::s_node_matchers_map[node].reference();
 
+      auto& omax = ossia_max::instance();
+      std::lock_guard _{omax.s_node_matchers_mut};
+
+      auto candidates_it = omax.s_node_matchers_map.find(node);
+
+      // If it's an intermediary node it does not match any proper ossia object
+      if(candidates_it == omax.s_node_matchers_map.end())
+        continue;
+
+      auto& all = candidates_it->second.reference();
       for(const auto& c : all)
       {
         if(c->get_owner() != x)
@@ -146,7 +140,7 @@ void search::execute_method(search* x, t_symbol* s, long argc, t_atom* argv)
       {
         std::string addr = ossia::net::address_string_from_node(*m->get_node());
         A_SETSYM(a, object_classname(m->get_owner()));
-        A_SETSYM(a+1, gensym(addr.c_str()));
+        A_SETSYM(a + 1, gensym(addr.c_str()));
         outlet_anything(x->m_dumpout, s_result, 2, a);
       }
     }
@@ -156,13 +150,23 @@ void search::execute_method(search* x, t_symbol* s, long argc, t_atom* argv)
     for(const auto& m : matchers)
     {
       auto node = m->get_node();
-      auto candidates = ossia_max::s_node_matchers_map[node].reference();
+      auto& omax = ossia_max::instance();
+      std::lock_guard _{omax.s_node_matchers_mut};
+
+      auto candidates_it = omax.s_node_matchers_map.find(node);
+
+      // If it's an intermediary node it does not match any proper ossia object
+      if(candidates_it == omax.s_node_matchers_map.end())
+        continue;
+
+      auto& candidates = candidates_it->second.reference();
+
       for(const auto& m : candidates)
       {
         object_base* obj = m->get_owner();
         if(obj != x)
         {
-          typedmess(obj->m_patcher, gensym("front"), 0, NULL);	// opens the subpatcher
+          typedmess(obj->m_patcher, gensym("front"), 0, NULL); // opens the subpatcher
           obj->highlight();
         }
       }
@@ -174,8 +178,6 @@ bool search::unregister()
 {
   m_node_selection.clear();
   m_matchers.clear();
-
-  ossia_max::instance().searchs.push_back(this);
 
   return true;
 }

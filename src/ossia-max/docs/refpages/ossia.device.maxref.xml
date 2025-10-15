@@ -63,7 +63,7 @@
 			</digest>
 			<description>
 				Sending the <m>expose</m> message without any argument will print in Max Console various protocol and configuration options available
-				Sending the <m>expose</m> message followed by a protocol name will explose the device to the network using the optional configuration option (ie. network ports)
+				Sending the <m>expose</m> message followed by a protocol name will expose the device to the network using the optional configuration option (ie. network ports)
 			</description>
 		</method>
 
@@ -120,7 +120,7 @@
 
 		<attribute name="description" get="1" set="1" type="atom" size="1">
 			<digest>
-				Descirption of this node
+				Description of this node
 			</digest>
 			<description>
 				The <at>description</at> attribute allows to give a textual description for this node. This helps documenting the parameter.

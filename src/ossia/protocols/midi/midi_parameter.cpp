@@ -3,21 +3,15 @@
 #include <ossia/protocols/midi/midi.hpp>
 #include <ossia/protocols/midi/midi_parameter.hpp>
 
-namespace ossia
-{
-namespace net
-{
-namespace midi
+namespace ossia::net::midi
 {
 midi_parameter::midi_parameter(address_info info, node_base& parent)
     : ossia::net::parameter_base{parent}
     , m_info{info}
-    , m_protocol{dynamic_cast<midi_protocol&>(
-          parent.get_device().get_protocol())}
+    , m_protocol{dynamic_cast<midi_protocol&>(parent.get_device().get_protocol())}
     , m_domain{m_info.defaultDomain()}
     , m_type{m_info.matchingType()}
-    , m_value{
-          m_info.defaultValue(m_info.type == address_info::Type::PB ? 0 : 64)}
+    , m_value{m_info.defaultValue(m_info.type == address_info::Type::PB ? 0 : 64)}
 {
 }
 
@@ -63,7 +57,7 @@ ossia::value midi_parameter::value() const
 
 ossia::value midi_parameter::set_value(const ossia::value& v)
 {
-  if (m_type == v.get_type())
+  if(m_type == v.get_type())
     m_value = v;
   else
     m_value = ossia::convert(v, m_type);
@@ -74,7 +68,7 @@ ossia::value midi_parameter::set_value(const ossia::value& v)
 
 ossia::value midi_parameter::set_value(ossia::value&& v)
 {
-  if (m_type == v.get_type())
+  if(m_type == v.get_type())
     m_value = std::move(v);
   else
     m_value = ossia::convert(std::move(v), m_type);
@@ -83,7 +77,7 @@ ossia::value midi_parameter::set_value(ossia::value&& v)
   return m_value;
 }
 
-val_type midi_parameter::get_value_type() const
+val_type midi_parameter::get_value_type() const noexcept
 {
   return m_type;
 }
@@ -93,7 +87,7 @@ parameter_base& midi_parameter::set_value_type(val_type)
   return *this;
 }
 
-access_mode midi_parameter::get_access() const
+access_mode midi_parameter::get_access() const noexcept
 {
   return ossia::access_mode::BI;
 }
@@ -103,7 +97,7 @@ parameter_base& midi_parameter::set_access(access_mode)
   return *this;
 }
 
-const ossia::domain& midi_parameter::get_domain() const
+const ossia::domain& midi_parameter::get_domain() const noexcept
 {
   return m_domain;
 }
@@ -113,7 +107,7 @@ parameter_base& midi_parameter::set_domain(const ossia::domain&)
   return *this;
 }
 
-bounding_mode midi_parameter::get_bounding() const
+bounding_mode midi_parameter::get_bounding() const noexcept
 {
   return ossia::bounding_mode::CLIP;
 }
@@ -136,7 +130,5 @@ void midi_parameter::on_removing_last_callback()
 void midi_parameter::value_callback(const ossia::value& val)
 {
   this->set_value(val);
-}
-}
 }
 }
