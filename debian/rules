@@ -13,4 +13,4 @@ export CLASSPATH=/usr/share/java/csv.jar:/usr/share/java/debug-disable.jar:/usr/
 override_dh_auto_configure:
 	dh_auto_configure -- \
 	      -DCMAKE_LIBRARY_ARCHITECTURE="$(DEB_TARGET_MULTIARCH)" \
-		  -DOSSIA_FRAMEWORK=ON -DOSSIA_PYTHON=ON
+		  -DOSSIA_PYTHON_ONLY=1
