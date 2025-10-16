@@ -1,3 +1,9 @@
+libossia (2.0.0-rc6+124) bookworm; urgency=medium
+
+  * Update package to upstream 2.0 rc-6 +git 2025-05-08
+  * add python error handling
+
+ -- ion <ion@stagelab.coop>  Thu, 15 Oct 2025 20:39:38 +0200
 libossia (1.2.9-6.1) bookworm; urgency=medium
 
   * Update package to upstream 2.0 rc-6 +git 2025-05-08
