@@ -13,7 +13,7 @@ X-Python3-Version: >= 3.11
 Package: python3-pyossia
 Section: libs
 Architecture: amd64
-Depends: ${python3:Depends}, ${shlibs:Depends}, ${misc:Depends}, libossia, libavahi-client-dev
+Depends: ${python3:Depends}, ${shlibs:Depends}, ${misc:Depends}, libavahi-client-dev
 Suggests: python-pyossia-doc
 Description: Python bindings for libossia
  .

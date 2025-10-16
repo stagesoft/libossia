@@ -1,3 +1,15 @@
+pyossia (2.0.0-rc6+124) bookworm; urgency=medium
+
+  * Update package to upstream 2.0 rc-6 +git 2025-05-08
+  * add python error handling
+
+ -- ion <ion@stagelab.coop>  Thu, 16 Oct 2025 18:30:38 +0200
+pyossia (1.2.9-1.1) bookworm; urgency=medium
+
+  * Update package to upstream 2.0 rc-2
+  * Update for bookworm
+
+ -- ion <ion@stagelab.coop>  Thu, 08 May 2025 12:39:38 +0200
 pyossia (1.2.9-1.1) bookworm; urgency=medium
 
   * Update package to upstream 2.0 rc-2
