@@ -1,0 +1,29 @@
+Metadata-Version: 2.1
+Name: pyossia
+Version: 2.0.0rc6+124.gddabfabe4.dirty
+Summary: libossia is a modern C++, cross-environment distributed object model for creative coding and interaction scoring Edit
+Home-page: https://github.com/ossia/libossia/ossia-python
+Author: OSSIA team
+Author-email: contact@ossia.io
+License: GPLv3+
+Keywords: creative,controls,osc,oscquery,websocket,libossia,midi
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+
+PyOssia
+=======
+
+PyOssia is a python package for `libossia <http://ossia.io>`, a modern C++, cross-environment distributed object model for creative coding and interaction scoring Edit.
+
+thanks to pybind11
+
+
+Change Log
+-------------
+* ``1.0.0`` - First alpha version
+

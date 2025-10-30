@@ -1,0 +1,14 @@
+Package: python3-pyossia
+Source: pyossia
+Version: 2.0.0-rc6+124
+Architecture: amd64
+Maintainer: Ion Reguera <ion@stagelab.com>
+Installed-Size: 58
+Depends: python3:any (>= 3.11~), libavahi-client-dev
+Suggests: python-pyossia-doc
+Section: libs
+Priority: optional
+Homepage: https://ossia.io/site-libossia/about.html
+Description: Python bindings for libossia
+ .
+ This package installs the library for Python 3.
