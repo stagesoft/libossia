@@ -6,6 +6,7 @@ namespace py = pybind11;
 }
 
 #include <ossia/detail/logger.hpp>
+#include <ossia/network/base/bundle.hpp>
 #include <ossia/network/base/message_queue.hpp>
 #include <ossia/network/base/node_attributes.hpp>
 #include <ossia/network/base/osc_address.hpp>
@@ -350,6 +351,27 @@ public:
     return ossia::net::find_node(m_device.get_root_node(), address);
   }
 
+  bool push_bundle(const std::vector<ossia::net::parameter_base*>& parameters)
+  {
+    ExceptionContext ctx;
+    ctx.operation = "push_bundle";
+    ctx.object_type = "OSCQueryDevice";
+    ctx.object_name = m_device.get_name();
+
+    try {
+      std::vector<const ossia::net::parameter_base*> const_params;
+      const_params.reserve(parameters.size());
+      for (auto* p : parameters) {
+        if (p) const_params.push_back(p);
+      }
+      return m_oscquery_protocol.push_bundle(const_params);
+    } catch (const std::exception& e) {
+      throw OssiaNetworkError(ctx.format_message(e.what()));
+    } catch (...) {
+      throw OssiaNetworkError(ctx.format_message("Unknown error occurred"));
+    }
+  }
+
   ossia::net::node_base* get_root_node() { return &m_device.get_root_node(); }
 };
 
@@ -417,6 +439,27 @@ public:
   ossia::net::node_base* find_node(const std::string& address)
   {
     return ossia::net::find_node(m_device.get_root_node(), address);
+  }
+
+  bool push_bundle(const std::vector<ossia::net::parameter_base*>& parameters)
+  {
+    ExceptionContext ctx;
+    ctx.operation = "push_bundle";
+    ctx.object_type = "OSCDevice";
+    ctx.object_name = m_device.get_name();
+
+    try {
+      std::vector<const ossia::net::parameter_base*> const_params;
+      const_params.reserve(parameters.size());
+      for (auto* p : parameters) {
+        if (p) const_params.push_back(p);
+      }
+      return m_osc_protocol.push_bundle(const_params);
+    } catch (const std::exception& e) {
+      throw OssiaNetworkError(ctx.format_message(e.what()));
+    } catch (...) {
+      throw OssiaNetworkError(ctx.format_message("Unknown error occurred"));
+    }
   }
 
   ossia::net::node_base* get_root_node() { return &m_device.get_root_node(); }
@@ -550,6 +593,7 @@ PYBIND11_MODULE(ossia_python, m)
       .def(
           "find_node", &ossia_oscquery_device::find_node,
           py::return_value_policy::reference)
+      .def("push_bundle", &ossia_oscquery_device::push_bundle)
       .def_property_readonly(
           "root_node", &ossia_oscquery_device::get_root_node,
           py::return_value_policy::reference);
@@ -567,6 +611,7 @@ PYBIND11_MODULE(ossia_python, m)
           "learning", &ossia_osc_device::get_learning, &ossia_osc_device::set_learning)
       .def("add_node", &ossia_osc_device::add_node, py::return_value_policy::reference)
       .def("find_node", &ossia_osc_device::find_node, py::return_value_policy::reference)
+      .def("push_bundle", &ossia_osc_device::push_bundle)
       .def_property_readonly(
           "root_node", &ossia_osc_device::get_root_node,
           py::return_value_policy::reference);
@@ -919,6 +964,48 @@ PYBIND11_MODULE(ossia_python, m)
       .def(py::init<int32_t, int32_t>())
       .def_readwrite("min", &ossia::net::instance_bounds::min_instances)
       .def_readwrite("max", &ossia::net::instance_bounds::max_instances);
+
+  py::class_<ossia::bundle_element>(m, "BundleElement")
+      .def(py::init())
+      .def(py::init<ossia::net::parameter_base*, ossia::value>())
+      .def_readwrite("parameter", &ossia::bundle_element::parameter)
+      .def_property(
+          "values",
+          [](const ossia::bundle_element& elem) -> py::object {
+            ExceptionContext ctx;
+            ctx.operation = "get_values";
+            ctx.object_type = "BundleElement";
+
+            try {
+              return elem.values.apply(ossia::python::to_python_value{});
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
+          },
+          [](ossia::bundle_element& elem, const py::object& v) {
+            ExceptionContext ctx;
+            ctx.operation = "set_values";
+            ctx.object_type = "BundleElement";
+
+            try {
+              elem.values = ossia::python::from_python_value(v.ptr());
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
+          })
+      .def("__repr__", [](const ossia::bundle_element& elem) {
+        std::ostringstream oss;
+        oss << "<BundleElement parameter=" << elem.parameter << ">";
+        return oss.str();
+      });
+
+  // Note: ossia::bundle is std::span<bundle_element>, which is handled by pybind11/stl.h
+  // We expose it as a list-like interface
+  py::bind_vector<std::vector<ossia::bundle_element>>(m, "Bundle");
 
   py::class_<ossia::message_queue>(m, "MessageQueue")
       .def(py::init<ossia_local_device&>())
