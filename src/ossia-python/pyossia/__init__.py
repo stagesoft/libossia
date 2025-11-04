@@ -247,9 +247,11 @@ try:
     Parameter = ossia.Parameter
     MinuitDevice = ossia.MinuitDevice
     MidiDevice = ossia.MidiDevice
+    OSCDevice = ossia.OSCDevice
     OSCQueryDevice = ossia.OSCQueryDevice
     MessageQueue = ossia.MessageQueue
     GlobalMessageQueue = ossia.GlobalMessageQueue
+    Bundle = ossia.Bundle
 
 except ImportError as error:
     logging.info("Can't import module 'ossia_python'")

@@ -206,19 +206,21 @@ ossia::value from_python_value(PyObject* source)
 }
 
 // Bundle wrapper class - defined early to be used by device classes
+// Note: NOT using any list/vector base class to avoid pybind11 auto-detection
 class ossia_bundle {
-public:
-  std::vector<ossia::bundle_element> elements;
+private:
+  std::vector<ossia::bundle_element> m_data;
   
+public:
   void append(ossia::net::parameter_base& param, const py::object& value) {
     auto ossia_val = ossia::python::from_python_value(value.ptr());
-    elements.emplace_back(ossia::bundle_element{&param, std::move(ossia_val)});
+    m_data.emplace_back(ossia::bundle_element{&param, std::move(ossia_val)});
   }
   
-  size_t size() const { return elements.size(); }
-  void clear() { elements.clear(); }
+  size_t size() const { return m_data.size(); }
+  void clear() { m_data.clear(); }
   
-  const std::vector<ossia::bundle_element>& get_elements() const { return elements; }
+  const std::vector<ossia::bundle_element>& elements() const { return m_data; }
 };
 
 /**
@@ -573,12 +575,12 @@ public:
 
     try {
       // Push each element with its value
-      for (const auto& elem : bundle.elements) {
+      for (const auto& elem : bundle.elements()) {
         if (elem.parameter) {
           elem.parameter->push_value(elem.values);
         }
       }
-      return !bundle.elements.empty();
+      return !bundle.elements().empty();
     } catch (const std::exception& e) {
       throw OssiaNetworkError(ctx.format_message(e.what()));
     } catch (...) {
@@ -806,12 +808,12 @@ public:
 
     try {
       // Push each element with its value
-      for (const auto& elem : bundle.elements) {
+      for (const auto& elem : bundle.elements()) {
         if (elem.parameter) {
           elem.parameter->push_value(elem.values);
         }
       }
-      return !bundle.elements.empty();
+      return !bundle.elements().empty();
     } catch (const std::exception& e) {
       throw OssiaNetworkError(ctx.format_message(e.what()));
     } catch (...) {
