@@ -1,11 +1,14 @@
-pyossia (2.0.0-rc6+124+cuems1) bookworm; urgency=medium
+pyossia (2.0.0-rc6+124+cuems2) bookworm; urgency=medium
 
   * Add bundle support for OSC/OSCQuery protocols
-  * Add BundleElement and Bundle Python bindings
+  * Add Bundle Python bindings with simplified API (no recursion)
   * Add push_bundle() methods to OSCQueryDevice and OSCDevice
+  * Bundle API: use bundle.append(param, value) directly
+  * Fix bundle recursion errors - now production-ready
+  * Support all value types including lists (DMX-compatible)
   * Fix missing midi_protocol constructor implementation
 
- -- ion <ion@stagelab.coop>  Tue, 04 Nov 2025 18:30:38 +0200
+ -- ion <ion@stagelab.coop>  Tue, 04 Nov 2025 22:15:00 +0200
 
 pyossia (2.0.0-rc6+124) bookworm; urgency=medium
 
