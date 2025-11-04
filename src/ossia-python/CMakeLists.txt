@@ -48,6 +48,15 @@ if(CMAKE_CROSSCOMPILING)
       set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".cpython-35m-arm-linux-gnueabihf.so")
     endif()
 
+    # Copy the built .so file to the source pyossia directory for debuild
+    install(CODE "
+        file(GLOB SO_FILE \"${CMAKE_BINARY_DIR}/src/ossia-python/pyossia/ossia_python*.so\")
+        if(SO_FILE)
+            message(STATUS \"Copying \${SO_FILE} to ${CMAKE_CURRENT_LIST_DIR}/pyossia/\")
+            file(COPY \${SO_FILE} DESTINATION \"${CMAKE_CURRENT_LIST_DIR}/pyossia/\")
+        endif()
+    ")
+
     install(CODE "execute_process(COMMAND ${PYTHON_EXECUTABLE} setup.py bdist_wheel --plat-name linux-armv7l
                                  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/src/ossia-python)"
     )
@@ -62,6 +71,15 @@ else()
     message(STATUS "PYTHON_LIBRARY - ${PYTHON_LIBRARY}")
 
     target_link_libraries(${PROJECT_NAME} PRIVATE ossia)
+
+    # Copy the built .so file to the source pyossia directory for debuild
+    install(CODE "
+        file(GLOB SO_FILE \"${CMAKE_BINARY_DIR}/src/ossia-python/pyossia/ossia_python*.so\")
+        if(SO_FILE)
+            message(STATUS \"Copying \${SO_FILE} to ${CMAKE_CURRENT_LIST_DIR}/pyossia/\")
+            file(COPY \${SO_FILE} DESTINATION \"${CMAKE_CURRENT_LIST_DIR}/pyossia/\")
+        endif()
+    ")
 
     install(CODE "execute_process(COMMAND ${PYTHON_EXECUTABLE} setup.py bdist_wheel
                                  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/src/ossia-python)"
