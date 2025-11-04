@@ -40,11 +40,6 @@ if(CMAKE_CROSSCOMPILING)
     add_library(${PROJECT_NAME} SHARED ${PROJECT_NAME}.cpp)
     target_compile_options(${PROJECT_NAME} PRIVATE ${OSSIA_COMPILE_OPTIONS})
     target_link_libraries(${PROJECT_NAME} PRIVATE ossia)
-    
-    # Ensure MIDI symbols are linked when building Python module
-    if(TARGET libremidi)
-      target_link_libraries(${PROJECT_NAME} PRIVATE libremidi)
-    endif()
 
     add_linker_warnings_external(${PROJECT_NAME})
 
@@ -67,11 +62,6 @@ else()
     message(STATUS "PYTHON_LIBRARY - ${PYTHON_LIBRARY}")
 
     target_link_libraries(${PROJECT_NAME} PRIVATE ossia)
-    
-    # Ensure MIDI symbols are linked when building Python module
-    if(TARGET libremidi)
-      target_link_libraries(${PROJECT_NAME} PRIVATE libremidi)
-    endif()
 
     install(CODE "execute_process(COMMAND ${PYTHON_EXECUTABLE} setup.py bdist_wheel
                                  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/src/ossia-python)"

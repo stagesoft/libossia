@@ -99,5 +99,6 @@
         "valarray": "cpp",
         "pointers": "cpp",
         "format": "cpp"
-    }
+    },
+    "idf.pythonInstallPath": "/home/ion/.pyenv/shims/python"
 }
