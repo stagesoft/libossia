@@ -217,7 +217,6 @@ try:
                        'vec2f':ossia.ValueType.Vec2f,
                        'vec3f':ossia.ValueType.Vec3f,
                        'vec4f':ossia.ValueType.Vec4f,
-                       'char':ossia.ValueType.Char,
                       }
     # customize a bit LocalDevice
     # add a new_param /message / return method
@@ -259,4 +258,4 @@ except ImportError as error:
     # Include the name and path attributes in output.
 except Exception as exception:
     # Output unexpected Exceptions.
-    logging.log_exception(exception, False)
+    logging.exception("Unexpected error importing ossia_python")
