@@ -34,6 +34,47 @@ midi_protocol::midi_protocol(
   m_output = std::make_unique<libremidi::midi_out>(conf, api);
 }
 
+midi_protocol::midi_protocol(
+    ossia::net::network_context_ptr ctx, midi_info info, libremidi::API api)
+    : protocol_base{flags{}}
+    , m_context{ctx}
+    , m_info{info}
+{
+  const auto resolved_api = midi_api(api);
+  
+  if(info.type == midi_info::Type::Input)
+  {
+    libremidi::input_configuration conf;
+    conf.on_message = [this](const libremidi::message& m) { midi_callback(m); };
+    
+    auto api_conf = libremidi::midi_in_configuration_for(resolved_api);
+    m_input = std::make_unique<libremidi::midi_in>(conf, api_conf);
+    
+    // Open the port
+    if(info.is_virtual)
+      m_input->open_virtual_port(get_midi_port_name(nullptr, info));
+    else
+      m_input->open_port(
+          static_cast<const libremidi::input_port&>(info.handle),
+          get_midi_port_name(nullptr, info));
+  }
+  else if(info.type == midi_info::Type::Output)
+  {
+    libremidi::output_configuration conf;
+    
+    auto api_conf = libremidi::midi_out_configuration_for(resolved_api);
+    m_output = std::make_unique<libremidi::midi_out>(conf, api_conf);
+    
+    // Open the port
+    if(info.is_virtual)
+      m_output->open_virtual_port(get_midi_port_name(nullptr, info));
+    else
+      m_output->open_port(
+          static_cast<const libremidi::output_port&>(info.handle),
+          get_midi_port_name(nullptr, info));
+  }
+}
+
 midi_protocol::~midi_protocol()
 {
   if(m_input)
