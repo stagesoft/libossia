@@ -1181,6 +1181,25 @@ PYBIND11_MODULE(ossia_python, m)
           },
           py::return_value_policy::reference)
       .def(
+          "remove_child",
+          [](ossia::net::node_base& node, const std::string& addr) {
+            ExceptionContext ctx;
+            ctx.operation = "remove_child";
+            ctx.object_type = "Node";
+            ctx.object_name = ossia::net::osc_parameter_string(node);
+            ctx.parameters["address"] = addr;
+
+            try {
+              if (auto cld = ossia::net::find_node(node, addr)) {
+                cld->get_parent()->remove_child(*cld);
+              }
+            } catch (const std::exception& e) {
+              throw OssiaParameterError(ctx.format_message(e.what()));
+            } catch (...) {
+              throw OssiaParameterError(ctx.format_message("Unknown error occurred"));
+            }
+          })
+      .def(
           "create_parameter",
           [](ossia::net::node_base& node, int type) {
             ExceptionContext ctx;
