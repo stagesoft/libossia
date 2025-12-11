@@ -8,5 +8,9 @@ thanks to pybind11
 
 Change Log
 -------------
-* ``1.0.0`` - First alpha version
+* ``2.0.0`` - First release candidate
+    * Add `Exception` raising for error handling
+    * Add `bundle` methods
+    * Add `remove_child` method to Node class
 
+* ``1.0.0`` - First alpha version
