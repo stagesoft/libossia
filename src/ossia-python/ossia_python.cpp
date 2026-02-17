@@ -574,13 +574,18 @@ public:
     ctx.object_name = m_device.get_name();
 
     try {
-      // Push each element with its value
-      for (const auto& elem : bundle.elements()) {
+      const auto& elems = bundle.elements();
+      if (elems.empty())
+        return false;
+      std::vector<const ossia::net::parameter_base*> params;
+      params.reserve(elems.size());
+      for (const auto& elem : elems) {
         if (elem.parameter) {
-          elem.parameter->push_value(elem.values);
+          elem.parameter->set_value(elem.values);
+          params.push_back(elem.parameter);
         }
       }
-      return !bundle.elements().empty();
+      return m_oscquery_protocol.push_bundle(params);
     } catch (const std::exception& e) {
       throw OssiaNetworkError(ctx.format_message(e.what()));
     } catch (...) {
@@ -807,13 +812,11 @@ public:
     ctx.object_name = m_device.get_name();
 
     try {
-      // Push each element with its value
-      for (const auto& elem : bundle.elements()) {
-        if (elem.parameter) {
-          elem.parameter->push_value(elem.values);
-        }
-      }
-      return !bundle.elements().empty();
+      const auto& elems = bundle.elements();
+      if (elems.empty())
+        return false;
+      return m_osc_protocol.push_bundle(
+          std::span<const ossia::bundle_element>(elems.data(), elems.size()));
     } catch (const std::exception& e) {
       throw OssiaNetworkError(ctx.format_message(e.what()));
     } catch (...) {

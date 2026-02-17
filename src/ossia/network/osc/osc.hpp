@@ -1,5 +1,6 @@
 #pragma once
 #include <ossia/detail/mutex.hpp>
+#include <ossia/network/base/bundle.hpp>
 #include <ossia/network/base/listening.hpp>
 #include <ossia/network/base/protocol.hpp>
 #include <ossia/network/zeroconf/zeroconf.hpp>
@@ -7,6 +8,7 @@
 #include <ossia/detail/hash_map.hpp>
 
 #include <atomic>
+#include <span>
 #include <string>
 
 namespace oscpack
@@ -59,6 +61,7 @@ public:
   push(const ossia::net::parameter_base& parameter_base, const ossia::value& v) override;
   bool push_raw(const ossia::net::full_parameter_data& parameter_base) override;
   bool push_bundle(const std::vector<const ossia::net::parameter_base*>&) override;
+  bool push_bundle(std::span<const ossia::bundle_element> addresses);
   bool push_raw_bundle(const std::vector<full_parameter_data>&) override;
 
   bool observe(ossia::net::parameter_base& parameter_base, bool enable) override;
