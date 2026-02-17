@@ -1,3 +1,14 @@
+pyossia (2.0.0-rc6+124+cuems3) bookworm; urgency=medium
+
+  * Add native C++ OSC bundle support to osc_protocol
+  * OSCDevice now sends true atomic OSC bundles (not separate messages)
+  * OSCQueryDevice push_bundle() uses native protocol bundle support
+  * Add push_bundle(std::span<const ossia::bundle_element>) to osc_protocol
+  * DMX cues now sent as single OSC bundle with #bundle framing
+  * Performance improvement: atomic network transmission for bundles
+
+ -- ion <ion@stagelab.coop>  Mon, 16 Feb 2026 20:20:00 +0200
+
 pyossia (2.0.0-rc6+124+cuems2) bookworm; urgency=medium
 
   * Add bundle support for OSC/OSCQuery protocols
