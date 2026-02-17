@@ -266,6 +266,47 @@ catch(...)
 }
 
 template <typename NetworkPolicy>
+std::optional<bundle> make_bundle(
+    NetworkPolicy add_element_to_bundle,
+    const std::span<const ossia::bundle_element>& addresses)
+try
+{
+  bundle ret{ossia::buffer_pool::instance().acquire(max_osc_message_size), false};
+  {
+    oscpack::OutboundPacketStream str(ret.data.data(), max_osc_message_size);
+    str << oscpack::BeginBundleImmediate();
+
+    ossia::value val;
+    for(const auto& a : addresses)
+    {
+      auto& param = *a.parameter;
+      ret.critical |= param.get_critical();
+      val = a.values;
+      add_element_to_bundle(str, val, param);
+    }
+    str << oscpack::EndBundle();
+    ret.data.resize(str.Size());
+  }
+  return ret;
+}
+catch(const oscpack::OutOfBufferMemoryException&)
+{
+  ossia::logger().error(
+      "make_bundle_client: message too large (limit is {} bytes)", max_osc_message_size);
+  return {};
+}
+catch(const std::runtime_error& e)
+{
+  ossia::logger().error("make_bundle_client: {}", e.what());
+  return {};
+}
+catch(...)
+{
+  ossia::logger().error("make_bundle_client: unknown error");
+  return {};
+}
+
+template <typename NetworkPolicy>
 bool make_bundle_bounded(
     NetworkPolicy add_element_to_bundle,
     const std::span<ossia::bundle_element>& addresses, auto callback)
