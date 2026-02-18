@@ -1196,7 +1196,9 @@ PYBIND11_MODULE(ossia_python, m)
 
             try {
               if (auto cld = ossia::net::find_node(node, addr)) {
-                cld->get_parent()->remove_child(*cld);
+                if (auto parent = cld->get_parent()) {
+                  parent->remove_child(*cld);
+                }
               }
             } catch (const std::exception& e) {
               throw OssiaParameterError(ctx.format_message(e.what()));
