@@ -11,6 +11,10 @@ install(FILES ${CMAKE_CURRENT_LIST_DIR}/setup.py
   ${CMAKE_CURRENT_LIST_DIR}/README.rst
 DESTINATION ${CMAKE_BINARY_DIR}/src/ossia-python)
 
+# setup.py reads the package version from debian/changelog
+install(FILES ${CMAKE_CURRENT_LIST_DIR}/debian/changelog
+DESTINATION ${CMAKE_BINARY_DIR}/src/ossia-python/debian)
+
 install(FILES ${CMAKE_CURRENT_LIST_DIR}/../../LICENSE
 DESTINATION ${CMAKE_BINARY_DIR}/src/ossia-python
 RENAME LICENSE.txt)
