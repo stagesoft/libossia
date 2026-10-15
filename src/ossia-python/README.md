@@ -59,7 +59,10 @@ GitHub releases only.
 3. Build the `.deb` and the wheel from the tagged commit **on Debian 12
    (bookworm)**, the production OS, e.g. in a `debian:bookworm` container.
    A build on a newer system links against a newer glibc/libstdc++ and fails
-   to import on bookworm. Both artifacts come out of one build:
+   to import on bookworm. Both artifacts come out of one build, which
+   [`tools/build-pyossia-release.sh`](../../tools/build-pyossia-release.sh)
+   runs in a `debian:bookworm` container (output in `build/pyossia-release/`);
+   it refuses a checkout with uncommitted changes. The steps it performs:
    ```bash
    cmake -B build -S . -DOSSIA_PYTHON_ONLY=1 -DOSSIA_CI=1 \
        -DCMAKE_BUILD_TYPE=Release -DPYTHON_EXECUTABLE=/usr/bin/python3
